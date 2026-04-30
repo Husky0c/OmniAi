@@ -54,13 +54,8 @@ struct OpenAIModelItem: Codable {
 class LLMService {
     static let shared = LLMService()
     
-    @AppStorage("defaultProvider") private var defaultProvider: String = "openai"
-    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
-    @AppStorage("openAIApiKey") private var openAIApiKey: String = ""
-    @AppStorage("customBaseURL") private var customBaseURL: String = ""
-    
-    func getBaseURL() -> String {
-        var base = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    func getBaseURL(customURL: String?) -> String {
+        var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !base.isEmpty {
             if base.hasSuffix("/") {
                 base.removeLast()
@@ -73,9 +68,8 @@ class LLMService {
         return "https://api.openai.com/v1"
     }
     
-    func fetchAvailableModels() async throws -> [String] {
-        let baseURL = getBaseURL()
-        let urlString = "\(baseURL)/models"
+    func fetchAvailableModels(apiKey: String, baseURL: String?) async throws -> [String] {
+        let urlString = "\(getBaseURL(customURL: baseURL))/models"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
@@ -83,7 +77,7 @@ class LLMService {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.addValue("application/json", forHTTPHeaderField: "Accept")
-        request.addValue("Bearer \(openAIApiKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
         print("[LLMService] 🚀 尝试获取模型列表: \(urlString)")
         
@@ -108,9 +102,8 @@ class LLMService {
         return models
     }
     
-    func sendMessageStream(messages: [(role: String, content: String)]) -> AsyncThrowingStream<String, Error> {
-        let baseURL = getBaseURL()
-        let urlString = "\(baseURL)/chat/completions"
+    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String) -> AsyncThrowingStream<String, Error> {
+        let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
                 continuation.finish(throwing: URLError(.badURL))
@@ -120,15 +113,15 @@ class LLMService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(openAIApiKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
         let openAIMessages = messages.map { OpenAIMessage(role: $0.role, content: $0.content) }
-        let chatRequest = OpenAIChatRequest(model: defaultModelId, messages: openAIMessages, stream: true)
+        let chatRequest = OpenAIChatRequest(model: modelId, messages: openAIMessages, stream: true)
         
         request.httpBody = try? JSONEncoder().encode(chatRequest)
         
         print("[LLMService] 🚀 发送请求至: \(urlString)")
-        print("[LLMService] 📝 模型: \(defaultModelId)")
+        print("[LLMService] 📝 模型: \(modelId)")
         
         return AsyncThrowingStream { continuation in
             Task {

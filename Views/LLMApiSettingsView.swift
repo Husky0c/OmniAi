@@ -1,10 +1,12 @@
 import SwiftUI
+import SwiftData
 
 struct LLMApiSettingsView: View {
-    @AppStorage("defaultProvider") private var defaultProvider: String = "openai"
+    @Environment(\.modelContext) private var modelContext
+    @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
+    
+    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
     @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
-    @AppStorage("openAIApiKey") private var openAIApiKey: String = ""
-    @AppStorage("customBaseURL") private var customBaseURL: String = ""
     
     @State private var availableModels: [String] = []
     @State private var isFetchingModels: Bool = false
@@ -12,17 +14,23 @@ struct LLMApiSettingsView: View {
     @State private var showErrorAlert: Bool = false
     @State private var showModelSheet: Bool = false
     
-    let providers = ["openai", "anthropic", "gemini", "custom"]
+    @State private var showingAddKeySheet = false
+    
     let commonModels = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-5-sonnet-20240620", "gemini-1.5-pro"]
     
     var body: some View {
         Form {
-            Section(header: Text("全局默认配置")) {
-                Picker("服务商", selection: $defaultProvider) {
-                    Text("OpenAI").tag("openai")
-                    Text("Anthropic (Claude)").tag("anthropic")
-                    Text("Google (Gemini)").tag("gemini")
-                    Text("自定义 / 第三方中转").tag("custom")
+            Section(header: Text("全局默认配置"), footer: Text("请先在下方添加渠道，然后在此处选择激活。")) {
+                if apiKeys.isEmpty {
+                    Text("暂无可用渠道，请先添加")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("当前激活渠道", selection: $activeAPIKeyID) {
+                        Text("未选择").tag("")
+                        ForEach(apiKeys) { apiKey in
+                            Text(apiKey.name).tag(apiKey.id.uuidString)
+                        }
+                    }
                 }
                 
 #if os(iOS)
@@ -41,6 +49,7 @@ struct LLMApiSettingsView: View {
                                 .padding(.horizontal, 4)
                         }
                         .buttonStyle(.borderless)
+                        .disabled(activeAPIKeyID.isEmpty)
                     }
                 }
 #else
@@ -58,29 +67,26 @@ struct LLMApiSettingsView: View {
                                 .padding(.horizontal, 4)
                         }
                         .buttonStyle(.borderless)
+                        .disabled(activeAPIKeyID.isEmpty)
                     }
                 }
 #endif
-                
-                // 仅当选择自定义或第三方时，显示自定义 URL 配置
-                if defaultProvider == "custom" || defaultProvider == "openai" {
-#if os(iOS)
-                    TextField("Base URL (如留空则使用官方默认)", text: $customBaseURL)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-#else
-                    TextField("Base URL (如留空则使用官方默认)", text: $customBaseURL)
-                        .disableAutocorrection(true)
-#endif
-                }
-                
-                SecureField("API Key", text: $openAIApiKey)
             }
             
-            Section(header: Text("已保存的 API 渠道"), footer: Text("此区域预留用于多渠道和第三方厂商配置管理。")) {
-                // TODO: 结合 APIKeys 数据模型，展示列表和添加功能
+            Section(header: Text("已保存的 API 渠道")) {
+                ForEach(apiKeys) { apiKey in
+                    VStack(alignment: .leading) {
+                        Text(apiKey.name)
+                            .font(.headline)
+                        Text(apiKey.apiType.rawValue)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onDelete(perform: deleteAPIKeys)
+                
                 Button(action: {
-                    // 添加新渠道的逻辑
+                    showingAddKeySheet = true
                 }) {
                     Label("添加新渠道", systemImage: "plus.circle")
                 }
@@ -101,11 +107,25 @@ struct LLMApiSettingsView: View {
                 selectedModel: $defaultModelId
             )
         }
+        .sheet(isPresented: $showingAddKeySheet) {
+            AddAPIKeyView()
+        }
+    }
+    
+    private func deleteAPIKeys(offsets: IndexSet) {
+        for index in offsets {
+            let keyToDelete = apiKeys[index]
+            if activeAPIKeyID == keyToDelete.id.uuidString {
+                activeAPIKeyID = "" // 清除已删除的激活状态
+            }
+            modelContext.delete(keyToDelete)
+        }
     }
     
     private func fetchAndShowModels() {
-        guard !openAIApiKey.isEmpty else {
-            // 如果没有 API Key，直接展示内置的常见模型列表
+        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID }),
+              let keyString = activeKey.key, !keyString.isEmpty else {
+            // 如果没有选中的 API Key，直接展示内置的常见模型列表
             showModelSheet = true
             return
         }
@@ -113,7 +133,7 @@ struct LLMApiSettingsView: View {
         isFetchingModels = true
         Task {
             do {
-                let models = try await LLMService.shared.fetchAvailableModels()
+                let models = try await LLMService.shared.fetchAvailableModels(apiKey: keyString, baseURL: activeKey.requestURL)
                 await MainActor.run {
                     self.availableModels = models
                     self.isFetchingModels = false
@@ -168,4 +188,5 @@ struct ModelSelectionSheet: View {
 
 #Preview {
     LLMApiSettingsView()
+        .modelContainer(for: APIKeys.self, inMemory: true)
 }
