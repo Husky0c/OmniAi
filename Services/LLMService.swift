@@ -42,8 +42,15 @@ class LLMService {
     @AppStorage("customBaseURL") private var customBaseURL: String = ""
     
     func getBaseURL() -> String {
-        if !customBaseURL.isEmpty {
-            return customBaseURL
+        var base = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !base.isEmpty {
+            if base.hasSuffix("/") {
+                base.removeLast()
+            }
+            if base.hasSuffix("/chat/completions") {
+                base = String(base.dropLast("/chat/completions".count))
+            }
+            return base
         }
         return "https://api.openai.com/v1"
     }
