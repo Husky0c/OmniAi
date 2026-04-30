@@ -11,6 +11,8 @@ struct ChatDetailView: View {
         session.messages.sorted { $0.createdAt < $1.createdAt }
     }
     
+    @State private var isGenerating: Bool = false
+    
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -23,6 +25,7 @@ struct ChatDetailView: View {
             }
             
             ChatInputBar(onSend: sendMessage)
+                .disabled(isGenerating)
         }
         .navigationTitle(session.title)
 #if os(iOS)
@@ -53,11 +56,37 @@ struct ChatDetailView: View {
         session.messages.append(userMessage)
         session.lastModified = Date()
         
-        // 模拟回复
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            let assistantMessage = ChatMessage(content: "收到: \(text)", role: .assistant, session: session)
-            session.messages.append(assistantMessage)
-            session.lastModified = Date()
+        let assistantMessage = ChatMessage(content: "", role: .assistant, session: session)
+        session.messages.append(assistantMessage)
+        
+        isGenerating = true
+        
+        Task {
+            // Prepare history for API
+            let history = session.messages
+                .sorted { $0.createdAt < $1.createdAt }
+                .filter { $0.id != assistantMessage.id }
+                .map { (role: $0.role.rawValue, content: $0.content) }
+            
+            do {
+                let stream = LLMService.shared.sendMessageStream(messages: history)
+                
+                for try await chunk in stream {
+                    await MainActor.run {
+                        assistantMessage.content += chunk
+                        session.lastModified = Date()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    assistantMessage.content += "\n[Error: \(error.localizedDescription)]"
+                }
+            }
+            
+            await MainActor.run {
+                isGenerating = false
+                session.lastModified = Date()
+            }
         }
     }
 }
