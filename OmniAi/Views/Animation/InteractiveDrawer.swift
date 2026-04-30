@@ -33,7 +33,11 @@ struct InteractiveDrawer<SidebarContent: View, MainContent: View>: View {
                             }
                     }
                     // 必须给主舞台垫一层不透明的底色，否则 SwiftUI 的阴影会“穿透”视图的所有子元素！
+#if canImport(UIKit)
                     .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+#else
+                    .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
+#endif
                     // 阴影加在主舞台左侧实心板边缘，会自然投射到侧边栏上
                     .shadow(color: .black.opacity(0.05), radius: 10, x: -5, y: 0)
             }
