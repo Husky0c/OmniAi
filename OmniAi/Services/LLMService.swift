@@ -54,6 +54,14 @@ struct OpenAIModelItem: Codable {
 class LLMService {
     static let shared = LLMService()
     
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+    
     func getBaseURL(customURL: String?) -> String {
         var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !base.isEmpty {
@@ -81,7 +89,7 @@ class LLMService {
         
         print("[LLMService] 🚀 尝试获取模型列表: \(urlString)")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
@@ -126,7 +134,7 @@ class LLMService {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let (result, response) = try await URLSession.shared.bytes(for: request)
+                    let (result, response) = try await session.bytes(for: request)
                     
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw URLError(.badServerResponse)
