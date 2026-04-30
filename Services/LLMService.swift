@@ -169,6 +169,8 @@ class LLMService {
                         }
                     }
                     
+                    var hasReceivedContent = false
+                    
                     for try await line in result.lines {
                         let prefix = "data: "
                         guard line.hasPrefix(prefix) else { continue }
@@ -182,7 +184,12 @@ class LLMService {
                         if let data = jsonStr.data(using: .utf8),
                            let streamResponse = try? JSONDecoder().decode(OpenAIStreamResponse.self, from: data) {
                             if let content = streamResponse.choices.first?.delta.content {
-                                continuation.yield(content)
+                                if !hasReceivedContent {
+                                    hasReceivedContent = true
+                                    continuation.yield(content.trimmingCharacters(in: CharacterSet.newlines.union(.whitespaces)))
+                                } else {
+                                    continuation.yield(content)
+                                }
                             }
                         }
                     }
