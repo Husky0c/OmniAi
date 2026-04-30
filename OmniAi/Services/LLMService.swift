@@ -74,6 +74,9 @@ class LLMService {
         
         request.httpBody = try? JSONEncoder().encode(chatRequest)
         
+        print("[LLMService] 🚀 发送请求至: \(urlString)")
+        print("[LLMService] 📝 模型: \(defaultModelId)")
+        
         return AsyncThrowingStream { continuation in
             Task {
                 do {
@@ -83,9 +86,10 @@ class LLMService {
                         throw URLError(.badServerResponse)
                     }
                     
+                    print("[LLMService] 📡 收到响应状态码: \(httpResponse.statusCode)")
+                    
                     guard httpResponse.statusCode == 200 else {
-                        // try to read some error body
-                        throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP Error: \(httpResponse.statusCode)"])
+                        throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "服务器返回 HTTP 错误码: \(httpResponse.statusCode) (503通常代表中转服务器宕机或配置错误)"])
                     }
                     
                     for try await line in result.lines {
