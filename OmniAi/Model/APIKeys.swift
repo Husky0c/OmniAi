@@ -20,7 +20,9 @@ enum APISource: String, CaseIterable, Codable{
     case custom = "custom"
 }
 
+@Model
 class APIKeys{
+    @Attribute(.unique) var id: UUID = UUID()
     var name: String = ""
     var company: String? = ""
     var key: String? = ""
@@ -43,17 +45,19 @@ class APIKeys{
     }
     
     public init(
+        id: UUID = UUID(),
         name: String,
         company: String? = nil,
         key: String? = nil,
         requestURL: String? = nil,
-        invisible: Bool,
+        invisible: Bool = false,
         helpInfo: String? = nil,
-        timestamp: Date,
-        autoCapabilityProbe: Bool,
-        apiType: APIType,
-        apiSource: APISource
+        timestamp: Date = Date(),
+        autoCapabilityProbe: Bool = true,
+        apiType: APIType = .openAI,
+        apiSource: APISource = .custom
     ) {
+        self.id = id
         self.name = name
         self.company = company
         self.key = key

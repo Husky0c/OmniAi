@@ -7,6 +7,10 @@ struct ChatDetailView: View {
     var onToggleSidebar: (() -> Void)? = nil
     var onOpenSettings: (() -> Void)? = nil
     
+    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
+    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
+    @Query private var apiKeys: [APIKeys]
+    
     var sortedMessages: [ChatMessage] {
         session.messages.sorted { $0.createdAt < $1.createdAt }
     }
@@ -61,6 +65,13 @@ struct ChatDetailView: View {
         
         isGenerating = true
         
+        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID }),
+              let apiKeyString = activeKey.key, !apiKeyString.isEmpty else {
+            assistantMessage.content = "⚠️ 错误：未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。"
+            isGenerating = false
+            return
+        }
+        
         Task {
             // Prepare history for API
             let history = session.messages
@@ -69,7 +80,12 @@ struct ChatDetailView: View {
                 .map { (role: $0.role.rawValue, content: $0.content) }
             
             do {
-                let stream = LLMService.shared.sendMessageStream(messages: history)
+                let stream = LLMService.shared.sendMessageStream(
+                    messages: history,
+                    apiKey: apiKeyString,
+                    baseURL: activeKey.requestURL,
+                    modelId: defaultModelId
+                )
                 
                 for try await chunk in stream {
                     await MainActor.run {
