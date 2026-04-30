@@ -6,6 +6,7 @@ struct OpenAIChatRequest: Codable {
     let model: String
     let messages: [OpenAIMessage]
     let stream: Bool
+    let temperature: Double?
 }
 
 struct OpenAIMessage: Codable {
@@ -122,7 +123,7 @@ class LLMService {
         }
     }
     
-    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String) -> AsyncThrowingStream<String, Error> {
+    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil) -> AsyncThrowingStream<String, Error> {
         let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
@@ -136,7 +137,7 @@ class LLMService {
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
         let openAIMessages = messages.map { OpenAIMessage(role: $0.role, content: $0.content) }
-        let chatRequest = OpenAIChatRequest(model: modelId, messages: openAIMessages, stream: true)
+        let chatRequest = OpenAIChatRequest(model: modelId, messages: openAIMessages, stream: true, temperature: temperature)
         
         request.httpBody = try? JSONEncoder().encode(chatRequest)
         

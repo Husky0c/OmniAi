@@ -14,7 +14,8 @@ struct OmniAiApp: App {
         let schema = Schema([
             ChatSession.self,
             ChatMessage.self,
-            APIKeys.self
+            APIKeys.self,
+            Assistant.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

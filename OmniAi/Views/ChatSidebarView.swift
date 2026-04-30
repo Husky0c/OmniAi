@@ -3,121 +3,138 @@ import SwiftData
 
 struct ChatSidebarView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ChatSession.lastModified, order: .reverse) private var sessions: [ChatSession]
+    @Query(sort: \Assistant.createdAt) private var assistants: [Assistant]
     @Binding var selectedSession: ChatSession?
     var onSessionSelected: (() -> Void)? = nil
     
-    var body: some View {
-        // 使用条件编译区分 List 行为
-#if os(iOS)
-        List {
-            listContent
-        }
-        .onChange(of: selectedSession) { _, newValue in
-            print("ChatSidebarView: selectedSession changed to \(String(describing: newValue?.id))")
-            onSessionSelected?()
-        }
-        .navigationTitle("会话")
-#else
-        List(selection: $selectedSession) {
-            listContent
-        }
-        .onChange(of: selectedSession) { _, _ in
-            onSessionSelected?()
-        }
-        .navigationTitle("会话")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: addSession) {
-                    Label("新建对话", systemImage: "square.and.pencil")
-                }
-            }
-        }
-#endif
-    }
+    @State private var expandedIDs: Set<UUID> = []
+    @State private var showNewAssistant = false
+    @State private var editingAssistant: Assistant? = nil
+    @State private var showDeleteConfirmation: Bool = false
+    @State private var assistantToDelete: Assistant? = nil
     
-    @ViewBuilder
-    private var listContent: some View {
-        Button(action: {
-            print("ChatSidebarView: 新建对话按钮被点击了")
-            addSession()
-        }) {
-            HStack {
-                Image(systemName: "plus.circle.fill")
-                Text("新建对话")
-                    .fontWeight(.bold)
+    var body: some View {
+        List {
+            if assistants.isEmpty {
+                ContentUnavailableView(
+                    "还没有助手",
+                    systemImage: "person.2",
+                    description: Text("点击底部按钮创建第一个助手")
+                )
             }
-            .padding(.vertical, 8)
-            .foregroundStyle(.blue)
-            // 确保整个 HStack 区域可点击
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        
-        ForEach(sessions) { session in
-#if os(iOS)
-            // iOS 侧滑栏：使用 Button 防止 NavigationLink 的异常 Push 行为
-            Button(action: {
-                print("ChatSidebarView: 历史会话被点击了 - \(session.title)")
-                selectedSession = session
-            }) {
-                VStack(alignment: .leading) {
-                    Text(session.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .foregroundStyle(selectedSession == session ? Color.accentColor : Color.primary)
-                    Text(session.lastModified, style: .time)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            
+            ForEach(assistants) { assistant in
+                Section {
+                    Button(action: {
+                        withAnimation {
+                            if expandedIDs.contains(assistant.id) {
+                                expandedIDs.remove(assistant.id)
+                            } else {
+                                expandedIDs.insert(assistant.id)
+                            }
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: expandedIDs.contains(assistant.id) ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(assistant.name)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Button(action: { editingAssistant = assistant }) {
+                                Image(systemName: "gear")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .onTapGesture { editingAssistant = assistant }
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    if expandedIDs.contains(assistant.id) {
+                        let sortedSessions = assistant.sessions.sorted { $0.lastModified > $1.lastModified }
+                        
+                        ForEach(sortedSessions) { session in
+                            Button(action: {
+                                selectedSession = session
+                                onSessionSelected?()
+                            }) {
+                                VStack(alignment: .leading) {
+                                    Text(session.title)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                        .foregroundStyle(selectedSession == session ? Color.accentColor : Color.primary)
+                                    Text(session.lastModified, style: .time)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 2)
+                                .padding(.leading, 20)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .onDelete { offsets in
+                            deleteSessions(offsets, from: assistant)
+                        }
+                        
+                        Button(action: { addSession(to: assistant) }) {
+                            Label("新建对话", systemImage: "plus.circle")
+                                .font(.subheadline)
+                                .foregroundStyle(.blue)
+                                .padding(.leading, 20)
+                                .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
+            }
+        }
+        .navigationTitle("助手")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
+        .safeAreaInset(edge: .bottom) {
+            Button(action: { showNewAssistant = true }) {
+                Label("新增助手", systemImage: "plus.circle.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(.regularMaterial)
             }
             .buttonStyle(.plain)
-#else
-            // macOS: SplitView 配合 NavigationLink 工作最佳
-            NavigationLink(value: session) {
-                VStack(alignment: .leading) {
-                    Text(session.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text(session.lastModified, style: .time)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
-#endif
+            .padding(.horizontal)
+            .padding(.bottom, 8)
         }
-        .onDelete(perform: deleteSessions)
+        .sheet(isPresented: $showNewAssistant) {
+            NewAssistantView()
+        }
+        .sheet(item: $editingAssistant) { assistant in
+            AssistantSettingsView(assistant: assistant)
+        }
     }
     
-    private func addSession() {
-        print("ChatSidebarView: 正在执行 addSession()...")
+    private func addSession(to assistant: Assistant) {
         withAnimation {
-            let newSession = ChatSession(title: "新对话")
+            let newSession = ChatSession(title: "新对话", assistant: assistant)
             modelContext.insert(newSession)
-            do {
-                try modelContext.save()
-                print("ChatSidebarView: 会话保存成功")
-            } catch {
-                print("ChatSidebarView: 会话保存失败 - \(error)")
-            }
+            assistant.sessions.append(newSession)
             selectedSession = newSession
-            print("ChatSidebarView: 已更新 selectedSession = \(newSession.id)")
         }
     }
     
-    private func deleteSessions(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                let session = sessions[index]
-                if selectedSession == session {
-                    selectedSession = nil
-                }
-                modelContext.delete(session)
+    private func deleteSessions(_ offsets: IndexSet, from assistant: Assistant) {
+        let sorted = assistant.sessions.sorted { $0.lastModified > $1.lastModified }
+        for index in offsets {
+            let session = sorted[index]
+            if selectedSession == session {
+                selectedSession = nil
             }
-            try? modelContext.save()
+            modelContext.delete(session)
         }
     }
 }

@@ -16,7 +16,9 @@ final class ChatSession {
     @Relationship(deleteRule: .cascade)
     var messages: [ChatMessage] = []
     
-    init(title: String = "新对话", provider: String = "openai", modelId: String = "gpt-4o", customBaseURL: String? = nil) {
+    var assistant: Assistant?
+    
+    init(title: String = "新对话", provider: String = "openai", modelId: String = "gpt-4o", customBaseURL: String? = nil, assistant: Assistant? = nil) {
         self.id = UUID()
         self.title = title
         self.createdAt = Date()
@@ -24,5 +26,6 @@ final class ChatSession {
         self.provider = provider
         self.modelId = modelId
         self.customBaseURL = customBaseURL
+        self.assistant = assistant
     }
 }

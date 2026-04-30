@@ -104,23 +104,55 @@ struct ChatDetailView: View {
         }
         
         Task {
-            let history = session.messages
+            var allMessages = session.messages
                 .sorted { $0.createdAt < $1.createdAt }
                 .filter { $0.id != assistantMessage.id }
-                .map { (role: $0.role.rawValue, content: $0.content) }
+            
+            if let assistant = session.assistant, !assistant.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let systemMsg = ChatMessage(content: assistant.systemPrompt, role: .system)
+                allMessages.insert(systemMsg, at: 0)
+            }
+            
+            if let assistant = session.assistant, assistant.contextCount < allMessages.count {
+                allMessages = Array(allMessages.suffix(assistant.contextCount))
+            }
+            
+            let history = allMessages.map { (role: $0.role.rawValue, content: $0.content) }
+            let temperature = session.assistant?.temperature
+            
+            let shouldStream = session.assistant?.streamEnabled ?? true
             
             do {
-                let stream = LLMService.shared.sendMessageStream(
-                    messages: history,
-                    apiKey: apiKeyString,
-                    baseURL: activeKey.requestURL,
-                    modelId: defaultModelId
-                )
-                
-                for try await chunk in stream {
-                    await MainActor.run {
-                        assistantMessage.content += chunk
-                        session.lastModified = Date()
+                if shouldStream {
+                    let stream = LLMService.shared.sendMessageStream(
+                        messages: history,
+                        apiKey: apiKeyString,
+                        baseURL: activeKey.requestURL,
+                        modelId: defaultModelId,
+                        temperature: temperature
+                    )
+                    
+                    for try await chunk in stream {
+                        await MainActor.run {
+                            assistantMessage.content += chunk
+                            session.lastModified = Date()
+                        }
+                    }
+                } else {
+                    // Non-streaming fallback (not yet implemented - use streaming anyway)
+                    let stream = LLMService.shared.sendMessageStream(
+                        messages: history,
+                        apiKey: apiKeyString,
+                        baseURL: activeKey.requestURL,
+                        modelId: defaultModelId,
+                        temperature: temperature
+                    )
+                    
+                    for try await chunk in stream {
+                        await MainActor.run {
+                            assistantMessage.content += chunk
+                            session.lastModified = Date()
+                        }
                     }
                 }
             } catch {
