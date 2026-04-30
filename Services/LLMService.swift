@@ -43,6 +43,14 @@ struct OpenAIErrorResponse: Codable {
     }
 }
 
+struct OpenAIModelListResponse: Codable {
+    let data: [OpenAIModelItem]
+}
+
+struct OpenAIModelItem: Codable {
+    let id: String
+}
+
 class LLMService {
     static let shared = LLMService()
     
@@ -63,6 +71,41 @@ class LLMService {
             return base
         }
         return "https://api.openai.com/v1"
+    }
+    
+    func fetchAvailableModels() async throws -> [String] {
+        let baseURL = getBaseURL()
+        let urlString = "\(baseURL)/models"
+        guard let url = URL(string: urlString) else {
+            throw URLError(.badURL)
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("Bearer \(openAIApiKey)", forHTTPHeaderField: "Authorization")
+        
+        print("[LLMService] 🚀 尝试获取模型列表: \(urlString)")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
+                throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
+            } else {
+                let fallback = String(data: data, encoding: .utf8) ?? "服务器返回错误码 \(httpResponse.statusCode)"
+                throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: fallback])
+            }
+        }
+        
+        let listResponse = try JSONDecoder().decode(OpenAIModelListResponse.self, from: data)
+        let models = listResponse.data.map { $0.id }.sorted()
+        print("[LLMService] ✅ 成功获取 \(models.count) 个模型")
+        return models
     }
     
     func sendMessageStream(messages: [(role: String, content: String)]) -> AsyncThrowingStream<String, Error> {

@@ -6,6 +6,11 @@ struct LLMApiSettingsView: View {
     @AppStorage("openAIApiKey") private var openAIApiKey: String = ""
     @AppStorage("customBaseURL") private var customBaseURL: String = ""
     
+    @State private var availableModels: [String] = []
+    @State private var isFetchingModels: Bool = false
+    @State private var errorMessage: String? = nil
+    @State private var showErrorAlert: Bool = false
+    
     let providers = ["openai", "anthropic", "gemini", "custom"]
     let commonModels = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-5-sonnet-20240620", "gemini-1.5-pro"]
     
@@ -20,12 +25,60 @@ struct LLMApiSettingsView: View {
                 }
                 
 #if os(iOS)
-                TextField("模型名称 (Model ID)", text: $defaultModelId)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
+                HStack {
+                    TextField("模型名称 (Model ID)", text: $defaultModelId)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    
+                    if isFetchingModels {
+                        ProgressView()
+                            .padding(.leading, 8)
+                    } else {
+                        Menu {
+                            ForEach(availableModels.isEmpty ? commonModels : availableModels, id: \.self) { model in
+                                Button(model) {
+                                    defaultModelId = model
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.up.chevron.down")
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Button(action: fetchModels) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(.leading, 8)
+                    }
+                }
 #else
-                TextField("模型名称 (Model ID)", text: $defaultModelId)
-                    .disableAutocorrection(true)
+                HStack {
+                    TextField("模型名称 (Model ID)", text: $defaultModelId)
+                        .disableAutocorrection(true)
+                    
+                    if isFetchingModels {
+                        ProgressView()
+                            .padding(.leading, 8)
+                    } else {
+                        Menu {
+                            ForEach(availableModels.isEmpty ? commonModels : availableModels, id: \.self) { model in
+                                Button(model) {
+                                    defaultModelId = model
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.up.chevron.down")
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Button(action: fetchModels) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(.leading, 8)
+                    }
+                }
 #endif
                 
                 // 仅当选择自定义或第三方时，显示自定义 URL 配置
@@ -56,6 +109,36 @@ struct LLMApiSettingsView: View {
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
+        .alert("获取失败", isPresented: $showErrorAlert) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "未知错误")
+        }
+    }
+    
+    private func fetchModels() {
+        guard !openAIApiKey.isEmpty else {
+            errorMessage = "请先输入 API Key"
+            showErrorAlert = true
+            return
+        }
+        
+        isFetchingModels = true
+        Task {
+            do {
+                let models = try await LLMService.shared.fetchAvailableModels()
+                await MainActor.run {
+                    self.availableModels = models
+                    self.isFetchingModels = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    self.showErrorAlert = true
+                    self.isFetchingModels = false
+                }
+            }
+        }
     }
 }
 
