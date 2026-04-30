@@ -35,6 +35,12 @@ struct LLMApiSettingsView: View {
                             .padding(.leading, 8)
                     } else {
                         Menu {
+                            Button(action: fetchModels) {
+                                Label("刷新获取模型列表", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            
+                            Divider()
+                            
                             ForEach(availableModels.isEmpty ? commonModels : availableModels, id: \.self) { model in
                                 Button(model) {
                                     defaultModelId = model
@@ -43,13 +49,13 @@ struct LLMApiSettingsView: View {
                         } label: {
                             Image(systemName: "chevron.up.chevron.down")
                                 .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
                         }
-                        
-                        Button(action: fetchModels) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        .buttonStyle(.borderless)
-                        .padding(.leading, 8)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            if availableModels.isEmpty && !openAIApiKey.isEmpty {
+                                fetchModels()
+                            }
+                        })
                     }
                 }
 #else
@@ -62,6 +68,12 @@ struct LLMApiSettingsView: View {
                             .padding(.leading, 8)
                     } else {
                         Menu {
+                            Button(action: fetchModels) {
+                                Label("刷新获取模型列表", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            
+                            Divider()
+                            
                             ForEach(availableModels.isEmpty ? commonModels : availableModels, id: \.self) { model in
                                 Button(model) {
                                     defaultModelId = model
@@ -70,13 +82,13 @@ struct LLMApiSettingsView: View {
                         } label: {
                             Image(systemName: "chevron.up.chevron.down")
                                 .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
                         }
-                        
-                        Button(action: fetchModels) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        .buttonStyle(.borderless)
-                        .padding(.leading, 8)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            if availableModels.isEmpty && !openAIApiKey.isEmpty {
+                                fetchModels()
+                            }
+                        })
                     }
                 }
 #endif
