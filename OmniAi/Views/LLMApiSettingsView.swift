@@ -15,6 +15,7 @@ struct LLMApiSettingsView: View {
     @State private var showModelSheet: Bool = false
     
     @State private var showingAddKeySheet = false
+    @State private var editingKey: APIKeys? = nil
     
     let commonModels = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-5-sonnet-20240620", "gemini-1.5-pro"]
     
@@ -75,12 +76,17 @@ struct LLMApiSettingsView: View {
             
             Section(header: Text("已保存的 API 渠道")) {
                 ForEach(apiKeys) { apiKey in
-                    VStack(alignment: .leading) {
-                        Text(apiKey.name)
-                            .font(.headline)
-                        Text(apiKey.apiType.rawValue)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Button(action: {
+                        editingKey = apiKey
+                    }) {
+                        VStack(alignment: .leading) {
+                            Text(apiKey.name)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Text(apiKey.apiType.rawValue)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .onDelete(perform: deleteAPIKeys)
@@ -109,6 +115,9 @@ struct LLMApiSettingsView: View {
         }
         .sheet(isPresented: $showingAddKeySheet) {
             AddAPIKeyView()
+        }
+        .sheet(item: $editingKey) { key in
+            AddAPIKeyView(editingKey: key)
         }
     }
     
