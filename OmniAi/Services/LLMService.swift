@@ -33,6 +33,16 @@ struct OpenAIStreamResponse: Codable {
     }
 }
 
+struct OpenAIErrorResponse: Codable {
+    let error: ErrorDetail
+    
+    struct ErrorDetail: Codable {
+        let message: String
+        let type: String?
+        let code: String?
+    }
+}
+
 class LLMService {
     static let shared = LLMService()
     
@@ -89,7 +99,18 @@ class LLMService {
                     print("[LLMService] 📡 收到响应状态码: \(httpResponse.statusCode)")
                     
                     guard httpResponse.statusCode == 200 else {
-                        throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "服务器返回 HTTP 错误码: \(httpResponse.statusCode) (503通常代表中转服务器宕机或配置错误)"])
+                        var errorBody = ""
+                        for try await line in result.lines {
+                            errorBody += line + "\n"
+                        }
+                        
+                        if let data = errorBody.data(using: .utf8),
+                           let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
+                            throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
+                        } else {
+                            let fallbackMessage = errorBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "服务器返回 HTTP 错误码: \(httpResponse.statusCode) (503通常代表中转服务器宕机或配置错误)" : errorBody
+                            throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: fallbackMessage])
+                        }
                     }
                     
                     for try await line in result.lines {
