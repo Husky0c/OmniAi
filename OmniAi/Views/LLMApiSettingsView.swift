@@ -10,6 +10,7 @@ struct LLMApiSettingsView: View {
     @State private var isFetchingModels: Bool = false
     @State private var errorMessage: String? = nil
     @State private var showErrorAlert: Bool = false
+    @State private var showModelSheet: Bool = false
     
     let providers = ["openai", "anthropic", "gemini", "custom"]
     let commonModels = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-5-sonnet-20240620", "gemini-1.5-pro"]
@@ -34,28 +35,12 @@ struct LLMApiSettingsView: View {
                         ProgressView()
                             .padding(.leading, 8)
                     } else {
-                        Menu {
-                            Button(action: fetchModels) {
-                                Label("刷新获取模型列表", systemImage: "arrow.triangle.2.circlepath")
-                            }
-                            
-                            Divider()
-                            
-                            ForEach(availableModels.isEmpty ? commonModels : availableModels, id: \.self) { model in
-                                Button(model) {
-                                    defaultModelId = model
-                                }
-                            }
-                        } label: {
+                        Button(action: fetchAndShowModels) {
                             Image(systemName: "chevron.up.chevron.down")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.blue)
                                 .padding(.horizontal, 4)
                         }
-                        .simultaneousGesture(TapGesture().onEnded {
-                            if availableModels.isEmpty && !openAIApiKey.isEmpty {
-                                fetchModels()
-                            }
-                        })
+                        .buttonStyle(.borderless)
                     }
                 }
 #else
@@ -67,28 +52,12 @@ struct LLMApiSettingsView: View {
                         ProgressView()
                             .padding(.leading, 8)
                     } else {
-                        Menu {
-                            Button(action: fetchModels) {
-                                Label("刷新获取模型列表", systemImage: "arrow.triangle.2.circlepath")
-                            }
-                            
-                            Divider()
-                            
-                            ForEach(availableModels.isEmpty ? commonModels : availableModels, id: \.self) { model in
-                                Button(model) {
-                                    defaultModelId = model
-                                }
-                            }
-                        } label: {
+                        Button(action: fetchAndShowModels) {
                             Image(systemName: "chevron.up.chevron.down")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.blue)
                                 .padding(.horizontal, 4)
                         }
-                        .simultaneousGesture(TapGesture().onEnded {
-                            if availableModels.isEmpty && !openAIApiKey.isEmpty {
-                                fetchModels()
-                            }
-                        })
+                        .buttonStyle(.borderless)
                     }
                 }
 #endif
@@ -126,12 +95,18 @@ struct LLMApiSettingsView: View {
         } message: {
             Text(errorMessage ?? "未知错误")
         }
+        .sheet(isPresented: $showModelSheet) {
+            ModelSelectionSheet(
+                models: availableModels.isEmpty ? commonModels : availableModels,
+                selectedModel: $defaultModelId
+            )
+        }
     }
     
-    private func fetchModels() {
+    private func fetchAndShowModels() {
         guard !openAIApiKey.isEmpty else {
-            errorMessage = "请先输入 API Key"
-            showErrorAlert = true
+            // 如果没有 API Key，直接展示内置的常见模型列表
+            showModelSheet = true
             return
         }
         
@@ -142,12 +117,49 @@ struct LLMApiSettingsView: View {
                 await MainActor.run {
                     self.availableModels = models
                     self.isFetchingModels = false
+                    self.showModelSheet = true // 获取成功后展示
                 }
             } catch {
                 await MainActor.run {
                     self.errorMessage = error.localizedDescription
                     self.showErrorAlert = true
                     self.isFetchingModels = false
+                }
+            }
+        }
+    }
+}
+
+struct ModelSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let models: [String]
+    @Binding var selectedModel: String
+    
+    var body: some View {
+        NavigationStack {
+            List(models, id: \.self) { model in
+                Button(action: {
+                    selectedModel = model
+                    dismiss()
+                }) {
+                    HStack {
+                        Text(model)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if model == selectedModel {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("选择模型")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
                 }
             }
         }
