@@ -99,15 +99,21 @@ class LLMService {
             if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
                 throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
             } else {
-                let fallback = String(data: data, encoding: .utf8) ?? "服务器返回错误码 \(httpResponse.statusCode)"
-                throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: fallback])
+                let raw = String(data: data, encoding: .utf8) ?? "无法读取响应体"
+                throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: raw])
             }
         }
         
-        let listResponse = try JSONDecoder().decode(OpenAIModelListResponse.self, from: data)
-        let models = listResponse.data.map { $0.id }.sorted()
-        print("[LLMService] ✅ 成功获取 \(models.count) 个模型")
-        return models
+        do {
+            let listResponse = try JSONDecoder().decode(OpenAIModelListResponse.self, from: data)
+            let models = listResponse.data.map { $0.id }.sorted()
+            print("[LLMService] ✅ 成功获取 \(models.count) 个模型")
+            return models
+        } catch {
+            let raw = String(data: data, encoding: .utf8) ?? "无法解析响应体"
+            print("[LLMService] ❌ 模型列表解析失败，原始返回: \(raw.prefix(500))")
+            throw NSError(domain: "LLMService", code: 0, userInfo: [NSLocalizedDescriptionKey: "模型列表格式异常: \(raw.prefix(200))"])
+        }
     }
     
     func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String) -> AsyncThrowingStream<String, Error> {
