@@ -5,6 +5,8 @@ struct AddAPIKeyView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
+    var editingKey: APIKeys? = nil
+    
     @State private var name: String = ""
     @State private var company: String = ""
     @State private var key: String = ""
@@ -39,7 +41,7 @@ struct AddAPIKeyView: View {
                     SecureField("API Key", text: $key)
                 }
             }
-            .navigationTitle("添加新渠道")
+            .navigationTitle(editingKey == nil ? "添加新渠道" : "编辑渠道")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -57,19 +59,37 @@ struct AddAPIKeyView: View {
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .onAppear {
+                if let existing = editingKey {
+                    name = existing.name
+                    company = existing.company ?? ""
+                    key = existing.key ?? ""
+                    requestURL = existing.requestURL ?? ""
+                    apiType = existing.apiType
+                }
+            }
         }
     }
     
     private func saveAPIKey() {
-        let newKey = APIKeys(
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            company: company.isEmpty ? nil : company,
-            key: key.isEmpty ? nil : key,
-            requestURL: requestURL.isEmpty ? nil : requestURL,
-            invisible: false,
-            apiType: apiType
-        )
-        modelContext.insert(newKey)
+        if let existing = editingKey {
+            existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            existing.company = company.isEmpty ? nil : company
+            existing.key = key.isEmpty ? nil : key
+            existing.requestURL = requestURL.isEmpty ? nil : requestURL
+            existing.apiType = apiType
+            existing.timestamp = Date()
+        } else {
+            let newKey = APIKeys(
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                company: company.isEmpty ? nil : company,
+                key: key.isEmpty ? nil : key,
+                requestURL: requestURL.isEmpty ? nil : requestURL,
+                invisible: false,
+                apiType: apiType
+            )
+            modelContext.insert(newKey)
+        }
         dismiss()
     }
 }
