@@ -64,16 +64,22 @@ class LLMService {
     
     func getBaseURL(customURL: String?) -> String {
         var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !base.isEmpty {
-            if base.hasSuffix("/") {
+        if base.isEmpty {
+            return "https://api.openai.com/v1"
+        }
+        while base.hasSuffix("/") {
+            base.removeLast()
+        }
+        if base.hasSuffix("/chat/completions") {
+            base = String(base.dropLast("/chat/completions".count))
+            while base.hasSuffix("/") {
                 base.removeLast()
             }
-            if base.hasSuffix("/chat/completions") {
-                base = String(base.dropLast("/chat/completions".count))
-            }
-            return base
         }
-        return "https://api.openai.com/v1"
+        if !base.hasSuffix("/v1") {
+            base.append("/v1")
+        }
+        return base
     }
     
     func fetchAvailableModels(apiKey: String, baseURL: String?) async throws -> [String] {
