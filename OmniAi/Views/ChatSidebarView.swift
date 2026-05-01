@@ -44,7 +44,7 @@ struct ChatSidebarView: View {
                             Spacer()
                             Button(action: { editingAssistant = assistant }) {
                                 Image(systemName: "square.and.pencil")
-                                    .font(.caption)
+                                    .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
@@ -113,7 +113,7 @@ struct ChatSidebarView: View {
                 .background(.regularMaterial, in: Capsule())
             }
             .buttonStyle(.plain)
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
             .padding(.bottom, 8)
         }
         .sheet(isPresented: $showNewAssistant) {

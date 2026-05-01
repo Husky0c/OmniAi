@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import MarkdownUI
+import Combine
 
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -32,6 +34,13 @@ struct ChatDetailView: View {
                 }
                 .padding()
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+#if canImport(UIKit)
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+#endif
+            }
+            .scrollDismissesKeyboard(.interactively)
             
             ChatInputBar(onSend: sendMessage)
                 .disabled(isGenerating)
@@ -300,13 +309,53 @@ struct MessageBubbleView: View {
         HStack {
             if isUser { Spacer() }
             
-            Text(message.content)
-                .padding(12)
-                .background(isUser ? Color.blue : Color.gray.opacity(0.2))
-                .foregroundStyle(isUser ? .white : .primary)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+            Group {
+                if !isUser && message.content.isEmpty {
+                    TypingIndicatorView()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 14)
+                } else {
+                    Markdown(message.content)
+                        .textSelection(.enabled)
+                        .padding(12)
+                        .markdownTextStyle {
+                            ForegroundColor(isUser ? .white : .primary)
+                        }
+                        .markdownTheme(
+                            Theme.basic.bulletedListMarker { configuration in
+                                let markers = ["•", "◦", "▪"]
+                                let marker = markers[min(configuration.listLevel, markers.count) - 1]
+                                Text(marker)
+                                    .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+                            }
+                        )
+                }
+            }
+            .background(isUser ? Color.blue : Color.gray.opacity(0.2))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             
             if !isUser { Spacer() }
+        }
+    }
+}
+
+struct TypingIndicatorView: View {
+    @State private var activeIndex = 0
+    let timer = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(Color.secondary)
+                    .frame(width: 8, height: 8)
+                    .opacity(index == activeIndex ? 1 : 0.25)
+                    .scaleEffect(index == activeIndex ? 1 : 0.7)
+                    .animation(.easeInOut(duration: 0.2), value: activeIndex)
+            }
+        }
+        .onReceive(timer) { _ in
+            activeIndex = (activeIndex + 1) % 3
         }
     }
 }

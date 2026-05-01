@@ -31,7 +31,8 @@ struct ChatInputBar: View{
                 // 输入框
                 TextField("聊你所想", text: $messageText, axis: .vertical)
                     .focused($isFocused)
-                    .padding(.vertical, 10)
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
                     .padding(.horizontal, 14)
                     .lineLimit(1...5)
                 
