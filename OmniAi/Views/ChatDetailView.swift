@@ -19,6 +19,8 @@ struct ChatDetailView: View {
     
     @State private var isGenerating: Bool = false
     @State private var showModelProviderSheet: Bool = false
+    @State private var editingMessage: ChatMessage?
+    @State private var editingText: String = ""
     
     private var activeChannel: APIKeys? {
         apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
@@ -29,7 +31,52 @@ struct ChatDetailView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(sortedMessages) { message in
-                        MessageBubbleView(message: message, isGenerating: isGenerating && message.id == sortedMessages.last?.id)
+                        MessageBubbleView(
+                            message: message,
+                            isGenerating: isGenerating && message.id == sortedMessages.last?.id,
+                            onCopy: {
+                                #if os(macOS)
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(message.content, forType: .string)
+                                #else
+                                UIPasteboard.general.string = message.content
+                                #endif
+                            },
+                            onEdit: {
+                                editingText = message.content
+                                editingMessage = message
+                            },
+                            onDelete: {
+                                modelContext.delete(message)
+                                session.messages.removeAll { $0.id == message.id }
+                            },
+                            onRegenerate: {
+                                if message.role == .user {
+                                    let messages = sortedMessages
+                                    if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+                                        let toDelete = messages[idx...]
+                                        for m in toDelete {
+                                            modelContext.delete(m)
+                                        }
+                                        session.messages.removeAll { m in
+                                            toDelete.contains { $0.id == m.id }
+                                        }
+                                    }
+                                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session)
+                                    session.messages.append(newUserMsg)
+                                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session)
+                                    session.messages.append(newAssistantMsg)
+                                    fetchAIResponse(for: newAssistantMsg)
+                                } else {
+                                    message.content = ""
+                                    message.firstTokenLatency = nil
+                                    message.promptTokens = nil
+                                    message.completionTokens = nil
+                                    message.totalTokens = nil
+                                    fetchAIResponse(for: message)
+                                }
+                            }
+                        )
                     }
                 }
                 .padding()
@@ -91,6 +138,31 @@ struct ChatDetailView: View {
                 defaultModelId: $defaultModelId
             )
         }
+        .sheet(item: $editingMessage) { message in
+            NavigationStack {
+                Form {
+                    Section(header: Text("编辑消息")) {
+                        TextEditor(text: $editingText)
+                            .frame(minHeight: 150)
+                    }
+                }
+                .navigationTitle("编辑消息")
+#if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+#endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { editingMessage = nil }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存") {
+                            message.content = editingText
+                            editingMessage = nil
+                        }
+                    }
+                }
+            }
+        }
     }
     
     private func sendMessage(_ text: String) {
@@ -103,6 +175,10 @@ struct ChatDetailView: View {
         let assistantMessage = ChatMessage(content: "", role: .assistant, session: session)
         session.messages.append(assistantMessage)
         
+        fetchAIResponse(for: assistantMessage)
+    }
+    
+    private func fetchAIResponse(for assistantMessage: ChatMessage) {
         isGenerating = true
         
         guard let activeKey = apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID }),
@@ -150,6 +226,9 @@ struct ChatDetailView: View {
                                 assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
                             }
                             assistantMessage.content += text
+                            session.lastModified = Date()
+                        case .thinking(let text):
+                            assistantMessage.thinkingContent = (assistantMessage.thinkingContent ?? "") + text
                             session.lastModified = Date()
                         case .usage(let promptTokens, let completionTokens, let totalTokens):
                             assistantMessage.promptTokens = promptTokens
@@ -295,7 +374,12 @@ struct ModelProviderSheet: View {
 struct MessageBubbleView: View {
     let message: ChatMessage
     let isGenerating: Bool
+    var onCopy: (() -> Void)? = nil
+    var onEdit: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
+    var onRegenerate: (() -> Void)? = nil
     @State private var showStats = false
+    @State private var showActionMenu = false
     
     var isUser: Bool {
         message.role == .user
@@ -308,7 +392,7 @@ struct MessageBubbleView: View {
                 
                 Group {
                     if !isUser && message.content.isEmpty {
-                        TypingIndicatorView()
+                        TypingIndicatorView(thinkingText: message.thinkingContent ?? "")
                             .padding(.horizontal, 12)
                             .padding(.vertical, 14)
                     } else {
@@ -333,6 +417,12 @@ struct MessageBubbleView: View {
                 
                 if !isUser { Spacer() }
             }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .onEnded { _ in
+                        showActionMenu = true
+                    }
+            )
             
             if !isUser && !message.content.isEmpty, !isGenerating, let latency = message.firstTokenLatency {
                 HStack(spacing: 4) {
@@ -356,28 +446,89 @@ struct MessageBubbleView: View {
                 .animation(.easeInOut(duration: 0.2), value: showStats)
             }
         }
+        .overlay(alignment: isUser ? .bottomTrailing : .bottomLeading) {
+            if showActionMenu {
+                ZStack {
+                    Color.black.opacity(0.001)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture { showActionMenu = false }
+                    
+                    VStack(spacing: 0) {
+                        Button(action: { onCopy?(); showActionMenu = false }) {
+                            Label("复制", systemImage: "doc.on.doc")
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Divider()
+                        Button(action: { onEdit?(); showActionMenu = false }) {
+                            Label("修改", systemImage: "pencil")
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Divider()
+                        Button(action: { onDelete?(); showActionMenu = false }) {
+                            Label("删除", systemImage: "trash")
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .disabled(isGenerating)
+                        Divider()
+                        Button(action: { onRegenerate?(); showActionMenu = false }) {
+                            Label("重新生成", systemImage: "arrow.clockwise")
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .disabled(isGenerating)
+                    }
+                    .frame(width: 200)
+                    .background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+                    .offset(y: -8)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showActionMenu)
     }
 }
 
 struct TypingIndicatorView: View {
+    let thinkingText: String
     @State private var startTime = Date()
     @State private var elapsedTime: TimeInterval = 0
     
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<3) { index in
-                Circle()
-                    .fill(Color.secondary)
-                    .frame(width: 8, height: 8)
-                    .opacity(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.25)
-                    .scaleEffect(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.7)
-                    .animation(.easeInOut(duration: 0.2), value: elapsedTime)
+        VStack(alignment: .leading, spacing: 4) {
+            if !thinkingText.isEmpty {
+                let display = thinkingText.count > 300
+                    ? String(thinkingText.suffix(300))
+                    : thinkingText
+                Text(display)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
-            
-            Text(String(format: "%.1f S", elapsedTime))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+            HStack(spacing: 8) {
+                ForEach(0..<3) { index in
+                    Circle()
+                        .fill(Color.secondary)
+                        .frame(width: 8, height: 8)
+                        .opacity(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.25)
+                        .scaleEffect(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.7)
+                        .animation(.easeInOut(duration: 0.2), value: elapsedTime)
+                }
+                
+                Text(String(format: "%.1f S", elapsedTime))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             elapsedTime = Date().timeIntervalSince(startTime)

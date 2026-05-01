@@ -3,6 +3,7 @@ import SwiftUI
 
 enum LLMStreamEvent {
     case chunk(String)
+    case thinking(String)
     case usage(promptTokens: Int, completionTokens: Int, totalTokens: Int)
 }
 
@@ -41,6 +42,8 @@ struct OpenAIStreamResponse: Codable {
     struct Delta: Codable {
         let content: String?
         let role: String?
+        let reasoning_content: String?
+        let thinking: String?
     }
     
     struct Usage: Codable {
@@ -217,6 +220,11 @@ class LLMService {
                                let completion = usage.completionTokens,
                                let total = usage.totalTokens {
                                 continuation.yield(.usage(promptTokens: prompt, completionTokens: completion, totalTokens: total))
+                            } else if let thinking = streamResponse.choices?.first?.delta.reasoning_content
+                                       ?? streamResponse.choices?.first?.delta.thinking {
+                                if !thinking.isEmpty {
+                                    continuation.yield(.thinking(thinking))
+                                }
                             } else if let content = streamResponse.choices?.first?.delta.content {
                                 if !hasReceivedContent {
                                     hasReceivedContent = true

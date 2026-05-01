@@ -12,6 +12,7 @@ final class ChatMessage {
     var promptTokens: Int?
     var completionTokens: Int?
     var totalTokens: Int?
+    var thinkingContent: String?
     
     @Relationship(inverse: \ChatSession.messages)
     var session: ChatSession?
