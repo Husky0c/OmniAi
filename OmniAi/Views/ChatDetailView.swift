@@ -386,13 +386,21 @@ struct MessageBubbleView: View {
     }
     
     var body: some View {
-        VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
+        VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+            if !isUser, let thinking = message.thinkingContent, !thinking.isEmpty {
+                ThinkingBlockView(
+                    thinkingText: thinking,
+                    isStreaming: message.content.isEmpty
+                )
+                .frame(maxWidth: 400, alignment: .leading)
+            }
+            
             HStack {
                 if isUser { Spacer() }
                 
                 Group {
                     if !isUser && message.content.isEmpty {
-                        TypingIndicatorView(thinkingText: message.thinkingContent ?? "")
+                        TypingIndicatorView()
                             .padding(.horizontal, 12)
                             .padding(.vertical, 14)
                     } else {
@@ -499,39 +507,90 @@ struct MessageBubbleView: View {
 }
 
 struct TypingIndicatorView: View {
-    let thinkingText: String
     @State private var startTime = Date()
     @State private var elapsedTime: TimeInterval = 0
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if !thinkingText.isEmpty {
-                let display = thinkingText.count > 300
-                    ? String(thinkingText.suffix(300))
-                    : thinkingText
-                Text(display)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+        HStack(spacing: 8) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(Color.secondary)
+                    .frame(width: 8, height: 8)
+                    .opacity(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.25)
+                    .scaleEffect(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.7)
+                    .animation(.easeInOut(duration: 0.2), value: elapsedTime)
             }
-            HStack(spacing: 8) {
-                ForEach(0..<3) { index in
-                    Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 8, height: 8)
-                        .opacity(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.25)
-                        .scaleEffect(Int(elapsedTime / 0.35) % 3 == index ? 1 : 0.7)
-                        .animation(.easeInOut(duration: 0.2), value: elapsedTime)
-                }
-                
-                Text(String(format: "%.1f S", elapsedTime))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
+            
+            Text(String(format: "%.1f S", elapsedTime))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             elapsedTime = Date().timeIntervalSince(startTime)
+        }
+    }
+}
+
+struct ThinkingBlockView: View {
+    let thinkingText: String
+    let isStreaming: Bool
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: { isExpanded.toggle() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain")
+                        .font(.caption2)
+                    Text("深度思考")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if isExpanded {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if isStreaming {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                    } else {
+                        Image(systemName: "chevron.forward")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            
+            if isExpanded {
+                Divider()
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        Text(thinkingText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .id("thinkingBottom")
+                    }
+                    .frame(height: 80)
+                    .onChange(of: thinkingText) { _ in
+                        withAnimation {
+                            proxy.scrollTo("thinkingBottom", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onAppear { if isStreaming { isExpanded = true } }
+        .onChange(of: isStreaming) { new in
+            if !new { isExpanded = false }
         }
     }
 }
