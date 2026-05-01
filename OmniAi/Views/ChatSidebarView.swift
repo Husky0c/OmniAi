@@ -14,16 +14,16 @@ struct ChatSidebarView: View {
     @State private var assistantToDelete: Assistant? = nil
     
     var body: some View {
-        List {
+        ZStack {
             if assistants.isEmpty {
                 ContentUnavailableView(
                     "还没有助手",
                     systemImage: "person.2",
                     description: Text("点击底部按钮创建第一个助手")
                 )
-            }
-            
-            ForEach(assistants) { assistant in
+            } else {
+                List {
+                    ForEach(assistants) { assistant in
                 Section {
                     Button(action: {
                         withAnimation {
@@ -43,7 +43,7 @@ struct ChatSidebarView: View {
                                 .foregroundStyle(.primary)
                             Spacer()
                             Button(action: { editingAssistant = assistant }) {
-                                Image(systemName: "gear")
+                                Image(systemName: "square.and.pencil")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -93,6 +93,8 @@ struct ChatSidebarView: View {
                     }
                 }
             }
+            }
+        }
         }
         .navigationTitle("助手")
 #if os(iOS)
@@ -100,11 +102,15 @@ struct ChatSidebarView: View {
 #endif
         .safeAreaInset(edge: .bottom) {
             Button(action: { showNewAssistant = true }) {
-                Label("新增助手", systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(.regularMaterial)
+                HStack {
+                    Label("新增助手", systemImage: "plus.circle.fill")
+                        .font(.headline)
+                        .foregroundStyle(.blue)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.regularMaterial, in: Capsule())
             }
             .buttonStyle(.plain)
             .padding(.horizontal)

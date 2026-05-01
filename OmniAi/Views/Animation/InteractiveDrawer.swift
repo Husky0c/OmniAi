@@ -17,6 +17,8 @@ struct InteractiveDrawer<SidebarContent: View, MainContent: View>: View {
                 // 左侧：侧边栏
                 sidebar
                     .frame(width: drawerWidth)
+                    .zIndex(1)
+                    .shadow(color: .black.opacity(0.08), radius: 8, x: 5, y: 0)
                 
                 // 右侧：主舞台
                 mainContent
@@ -38,8 +40,6 @@ struct InteractiveDrawer<SidebarContent: View, MainContent: View>: View {
 #else
                     .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
 #endif
-                    // 阴影加在主舞台左侧实心板边缘，会自然投射到侧边栏上
-                    .shadow(color: .black.opacity(0.05), radius: 10, x: -5, y: 0)
             }
             // 【核心优化】：死死锁住父容器的总宽度，避免动画每一帧重新计算导致卡顿！
             .frame(width: geometry.size.width + drawerWidth, alignment: .leading)
