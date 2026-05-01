@@ -24,7 +24,7 @@ final class Assistant {
         self.id = UUID()
         self.name = name
         self.systemPrompt = systemPrompt
-        self.contextCount = max(1, min(50, contextCount))
+        self.contextCount = max(2, contextCount)
         self.streamEnabled = streamEnabled
         self.temperature = min(2.0, max(0.0, temperature))
         self.createdAt = Date()

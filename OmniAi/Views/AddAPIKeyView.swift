@@ -8,35 +8,56 @@ struct AddAPIKeyView: View {
     var editingKey: APIKeys? = nil
     
     @State private var name: String = ""
-    @State private var company: String = ""
     @State private var key: String = ""
     @State private var requestURL: String = ""
     @State private var apiType: APIType = .openAI
+    @State private var selectedProviderID: String = "openai"
+    
+    private var selectedPreset: ProviderPreset {
+        ProviderPreset.all.first { $0.id == selectedProviderID } ?? ProviderPreset.all[0]
+    }
     
     var body: some View {
         NavigationStack {
             Form {
                 Section(header: Text("基本信息")) {
                     TextField("渠道名称 (如: 我的 OpenAI)", text: $name)
-                    TextField("厂商/服务商 (如: OpenAI, 自定义)", text: $company)
                     
-                    Picker("API 类型", selection: $apiType) {
-                        ForEach(APIType.allCases, id: \.self) { type in
-                            Text(type.rawValue).tag(type)
+                    Picker("提供商", selection: $selectedProviderID) {
+                        ForEach(ProviderPreset.all) { preset in
+                            Text(preset.name).tag(preset.id)
+                        }
+                    }
+                    .onChange(of: selectedProviderID) { newID in
+                        if let preset = ProviderPreset.all.first(where: { $0.id == newID }) {
+                            apiType = preset.apiType
+                            if !preset.isCustom {
+                                requestURL = preset.defaultBaseURL
+                            }
                         }
                     }
                 }
                 
                 Section(header: Text("API 配置")) {
+                    if selectedPreset.isCustom {
 #if os(iOS)
-                    TextField("Base URL (如果使用官方可留空)", text: $requestURL)
-                        .keyboardType(.URL)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
+                        TextField("Base URL", text: $requestURL)
+                            .keyboardType(.URL)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
 #else
-                    TextField("Base URL (如果使用官方可留空)", text: $requestURL)
-                        .disableAutocorrection(true)
+                        TextField("Base URL", text: $requestURL)
+                            .disableAutocorrection(true)
 #endif
+                    } else {
+                        HStack {
+                            Text("Base URL")
+                            Spacer()
+                            Text(selectedPreset.defaultBaseURL)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                     
                     SecureField("API Key", text: $key)
                 }
@@ -62,10 +83,16 @@ struct AddAPIKeyView: View {
             .onAppear {
                 if let existing = editingKey {
                     name = existing.name
-                    company = existing.company ?? ""
                     key = existing.key ?? ""
                     requestURL = existing.requestURL ?? ""
                     apiType = existing.apiType
+                    
+                    let matched = ProviderPreset.matching(existing.apiType,
+                        requestURL: existing.requestURL ?? "")
+                    selectedProviderID = matched?.id ?? "newapi"
+                    if let matched {
+                        requestURL = matched.defaultBaseURL
+                    }
                 }
             }
         }
@@ -74,7 +101,7 @@ struct AddAPIKeyView: View {
     private func saveAPIKey() {
         if let existing = editingKey {
             existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            existing.company = company.isEmpty ? nil : company
+            existing.company = selectedPreset.name
             existing.key = key.isEmpty ? nil : key
             existing.requestURL = requestURL.isEmpty ? nil : requestURL
             existing.apiType = apiType
@@ -82,7 +109,7 @@ struct AddAPIKeyView: View {
         } else {
             let newKey = APIKeys(
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                company: company.isEmpty ? nil : company,
+                company: selectedPreset.name,
                 key: key.isEmpty ? nil : key,
                 requestURL: requestURL.isEmpty ? nil : requestURL,
                 invisible: false,
