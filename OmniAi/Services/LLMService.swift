@@ -1,12 +1,21 @@
 import Foundation
 import SwiftUI
 
-// OpenAI API Models
+enum LLMStreamEvent {
+    case chunk(String)
+    case usage(promptTokens: Int, completionTokens: Int, totalTokens: Int)
+}
+
 struct OpenAIChatRequest: Codable {
     let model: String
     let messages: [OpenAIMessage]
     let stream: Bool
     let temperature: Double?
+    let stream_options: StreamOptions?
+    
+    struct StreamOptions: Codable {
+        let include_usage: Bool
+    }
 }
 
 struct OpenAIMessage: Codable {
@@ -16,7 +25,8 @@ struct OpenAIMessage: Codable {
 
 struct OpenAIStreamResponse: Codable {
     let id: String?
-    let choices: [Choice]
+    let choices: [Choice]?
+    let usage: Usage?
     
     struct Choice: Codable {
         let delta: Delta
@@ -31,6 +41,18 @@ struct OpenAIStreamResponse: Codable {
     struct Delta: Codable {
         let content: String?
         let role: String?
+    }
+    
+    struct Usage: Codable {
+        let promptTokens: Int?
+        let completionTokens: Int?
+        let totalTokens: Int?
+        
+        enum CodingKeys: String, CodingKey {
+            case promptTokens = "prompt_tokens"
+            case completionTokens = "completion_tokens"
+            case totalTokens = "total_tokens"
+        }
     }
 }
 
@@ -57,8 +79,8 @@ class LLMService {
     
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 60
+        config.timeoutIntervalForRequest = 300
+        config.timeoutIntervalForResource = 3600
         config.waitsForConnectivity = false
         return URLSession(configuration: config)
     }()
@@ -123,7 +145,7 @@ class LLMService {
         }
     }
     
-    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil) -> AsyncThrowingStream<String, Error> {
+    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
@@ -137,7 +159,13 @@ class LLMService {
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
         let openAIMessages = messages.map { OpenAIMessage(role: $0.role, content: $0.content) }
-        let chatRequest = OpenAIChatRequest(model: modelId, messages: openAIMessages, stream: true, temperature: temperature)
+        let chatRequest = OpenAIChatRequest(
+            model: modelId,
+            messages: openAIMessages,
+            stream: true,
+            temperature: temperature,
+            stream_options: OpenAIChatRequest.StreamOptions(include_usage: true)
+        )
         
         request.httpBody = try? JSONEncoder().encode(chatRequest)
         
@@ -184,12 +212,20 @@ class LLMService {
                         
                         if let data = jsonStr.data(using: .utf8),
                            let streamResponse = try? JSONDecoder().decode(OpenAIStreamResponse.self, from: data) {
-                            if let content = streamResponse.choices.first?.delta.content {
+                            if let usage = streamResponse.usage,
+                               let prompt = usage.promptTokens,
+                               let completion = usage.completionTokens,
+                               let total = usage.totalTokens {
+                                continuation.yield(.usage(promptTokens: prompt, completionTokens: completion, totalTokens: total))
+                            } else if let content = streamResponse.choices?.first?.delta.content {
                                 if !hasReceivedContent {
                                     hasReceivedContent = true
-                                    continuation.yield(content.trimmingCharacters(in: CharacterSet.newlines.union(.whitespaces)))
+                                    let trimmed = content.trimmingCharacters(in: CharacterSet.newlines.union(.whitespaces))
+                                    if !trimmed.isEmpty {
+                                        continuation.yield(.chunk(trimmed))
+                                    }
                                 } else {
-                                    continuation.yield(content)
+                                    continuation.yield(.chunk(content))
                                 }
                             }
                         }

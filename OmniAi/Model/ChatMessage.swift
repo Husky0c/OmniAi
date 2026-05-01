@@ -8,6 +8,11 @@ final class ChatMessage {
     var roleRawValue: String
     var createdAt: Date = Date()
     
+    var firstTokenLatency: Double?
+    var promptTokens: Int?
+    var completionTokens: Int?
+    var totalTokens: Int?
+    
     @Relationship(inverse: \ChatSession.messages)
     var session: ChatSession?
     
