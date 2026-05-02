@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct HomeView: View {
     @State private var selectedSession: ChatSession?
@@ -73,10 +76,24 @@ struct MainStageView: View {
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button(action: { onOpenSettings?() }) {
+#if canImport(UIKit)
+                                Group {
+                                    if let image = AvatarManager.load() {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFill()
+                                    } else {
+                                        Image(systemName: "person.crop.circle.fill")
+                                            .resizable()
+                                            .foregroundStyle(.blue)
+                                    }
+                                }
+                                .frame(width: 28, height: 28)
+                                .clipShape(Circle())
+#else
                                 Image(systemName: "person.crop.circle.fill")
-                                    .resizable()
-                                    .frame(width: 28, height: 28)
                                     .foregroundStyle(.blue)
+#endif
                             }
                         }
 #else

@@ -143,10 +143,19 @@ struct ChatDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { onOpenSettings?() }) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable()
-                        .frame(width: 28, height: 28)
-                        .foregroundStyle(.blue)
+                    Group {
+                        if let image = AvatarManager.load() {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .frame(width: 28, height: 28)
+                    .clipShape(Circle())
                 }
             }
 #endif
