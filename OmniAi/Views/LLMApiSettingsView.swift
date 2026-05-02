@@ -110,9 +110,14 @@ struct LLMApiSettingsView: View {
             Text(errorMessage ?? "未知错误")
         }
         .sheet(isPresented: $showModelSheet) {
+            let activeKey = apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
             ModelSelectionSheet(
                 models: availableModels.isEmpty ? commonModels : availableModels,
-                selectedModel: $defaultModelId
+                selectedModel: $defaultModelId,
+                cachedCapabilities: activeKey?.cachedCapabilities ?? [:],
+                onSaveCap: { modelId, newCap in
+                    activeKey?.cachedCapabilities[modelId] = newCap
+                }
             )
         }
         .sheet(isPresented: $showingAddKeySheet) {
@@ -148,11 +153,6 @@ struct LLMApiSettingsView: View {
                     self.availableModels = models
                     self.isFetchingModels = false
                     self.showModelSheet = true
-                    var dict = [String: ModelCapability]()
-                    for m in models {
-                        dict[m.id] = m.capabilities
-                    }
-                    activeKey.cachedCapabilities = dict
                 }
             } catch {
                 await MainActor.run {
@@ -169,6 +169,10 @@ struct ModelSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
     let models: [ModelInfo]
     @Binding var selectedModel: String
+    let cachedCapabilities: [String: ModelCapability]
+    var onSaveCap: ((String, ModelCapability) -> Void)? = nil
+    @State private var showCapEdit = false
+    @State private var capEditModelId: String = ""
     
     var body: some View {
         NavigationStack {
@@ -181,13 +185,19 @@ struct ModelSelectionSheet: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(model.id)
                                 .foregroundStyle(.primary)
-                            CapabilityRowView(capabilities: ModelCapability.infer(from: model.id))
+                            CapabilityRowView(capabilities: ModelCapability.effective(for: model.id, cached: cachedCapabilities))
                         }
                         Spacer()
                         if model.id == selectedModel {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.blue)
                         }
+                    }
+                }
+                .contextMenu {
+                    Button("编辑能力标识", systemImage: "slider.horizontal.3") {
+                        capEditModelId = model.id
+                        showCapEdit = true
                     }
                 }
             }
@@ -198,6 +208,14 @@ struct ModelSelectionSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showCapEdit) {
+                CapabilityEditSheet(
+                    modelId: capEditModelId,
+                    capabilities: ModelCapability.effective(for: capEditModelId, cached: cachedCapabilities)
+                ) { newCap in
+                    onSaveCap?(capEditModelId, newCap)
                 }
             }
         }

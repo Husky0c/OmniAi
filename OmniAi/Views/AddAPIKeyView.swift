@@ -17,6 +17,8 @@ struct AddAPIKeyView: View {
     @State private var selectedModelIDs: [String] = []
     @State private var availableModels: [ModelInfo] = []
     @State private var isFetchingModels = false
+    @State private var showCapEdit = false
+    @State private var capEditModelId = ""
     
     private var selectedPreset: ProviderPreset {
         ProviderPreset.all.first { $0.id == selectedProviderID } ?? ProviderPreset.all[0]
@@ -93,7 +95,13 @@ struct AddAPIKeyView: View {
                                         Text(model.id)
                                             .foregroundStyle(.primary)
                                         Spacer()
-                                        CapabilityRowView(capabilities: ModelCapability.infer(from: model.id))
+                                        CapabilityRowView(capabilities: ModelCapability.effective(for: model.id, cached: editingKey?.cachedCapabilities ?? [:]))
+                                    }
+                                }
+                                 .contextMenu {
+                                    Button("编辑能力标识", systemImage: "slider.horizontal.3") {
+                                        capEditModelId = model.id
+                                        showCapEdit = true
                                     }
                                 }
                             }
@@ -138,6 +146,14 @@ struct AddAPIKeyView: View {
                     fetchModels()
                 }
             }
+            .sheet(isPresented: $showCapEdit) {
+                CapabilityEditSheet(
+                    modelId: capEditModelId,
+                    capabilities: ModelCapability.effective(for: capEditModelId, cached: editingKey?.cachedCapabilities ?? [:])
+                ) { newCap in
+                    editingKey?.cachedCapabilities[capEditModelId] = newCap
+                }
+            }
         }
     }
     
@@ -151,11 +167,6 @@ struct AddAPIKeyView: View {
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
-                    var dict = [String: ModelCapability]()
-                    for m in models {
-                        dict[m.id] = m.capabilities
-                    }
-                    editingKey?.cachedCapabilities = dict
                 }
             } catch {
                 await MainActor.run {

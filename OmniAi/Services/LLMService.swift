@@ -90,13 +90,20 @@ struct ModelCapability: Codable, Hashable {
     var toolCalling: Bool = false
     var vision: Bool = false
     
-    init(capabilities: [String]? = nil, endpointTypes: [String]? = nil) {
+    static func parse(capabilities: [String]?, endpointTypes: [String]?) -> ModelCapability {
         let set = Set((capabilities ?? []).map { $0.lowercased() })
         let types = Set((endpointTypes ?? []).map { $0.lowercased() })
-        webSearch = set.contains("web_search") || set.contains("search") || types.contains("search") || types.contains("web_search")
-        reasoning = set.contains("reasoning") || types.contains("reasoning")
-        toolCalling = set.contains("tools") || types.contains("tool") || types.contains("tools")
-        vision = set.contains("vision") || types.contains("vision")
+        return ModelCapability(
+            webSearch: set.contains("web_search") || set.contains("search") || types.contains("search") || types.contains("web_search"),
+            reasoning: set.contains("reasoning") || types.contains("reasoning"),
+            toolCalling: set.contains("tools") || types.contains("tool") || types.contains("tools"),
+            vision: set.contains("vision") || types.contains("vision")
+        )
+    }
+    
+    static func effective(for modelId: String, cached: [String: ModelCapability]) -> ModelCapability {
+        if let override = cached[modelId] { return override }
+        return infer(from: modelId)
     }
     
     var symbols: [String] {
@@ -107,6 +114,8 @@ struct ModelCapability: Codable, Hashable {
         if vision { result.append("eye") }
         return result
     }
+    
+    var hasAny: Bool { webSearch || reasoning || toolCalling || vision }
     
     static let defaultRules: [CapabilityKey: [String]] = [
         .reasoning: ["o1|o3|o4|reasoning|thinks|thinking|r1|qwq|grok-3-mini|deep-think|deepseek-r1|claude-3\\.5-haiku"],
@@ -245,7 +254,9 @@ class LLMService {
         do {
             let listResponse = try JSONDecoder().decode(OpenAIModelListResponse.self, from: data)
             let models = listResponse.data.map { item in
-                ModelInfo(id: item.id, capabilities: ModelCapability(capabilities: item.capabilities, endpointTypes: item.supported_endpoint_types))
+                let parsed = ModelCapability.parse(capabilities: item.capabilities, endpointTypes: item.supported_endpoint_types)
+                let caps = parsed.hasAny ? parsed : ModelCapability.infer(from: item.id)
+                return ModelInfo(id: item.id, capabilities: caps)
             }.sorted { $0.id < $1.id }
             print("[LLMService] ✅ 成功获取 \(models.count) 个模型")
             return models

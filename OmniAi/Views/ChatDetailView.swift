@@ -123,11 +123,12 @@ struct ChatDetailView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         if let channel = activeChannel {
-                            HStack(spacing: 4) {
+                            VStack(alignment: .center, spacing: 1) {
                                 Text("\(channel.name) / \(defaultModelId)")
-                                    .font(.headline)
+                                    .font(.footnote)
+                                    .fontWeight(.medium)
                                     .lineLimit(1)
-                                CapabilityRowView(capabilities: ModelCapability.infer(from: defaultModelId))
+                                CapabilityRowView(capabilities: ModelCapability.effective(for: defaultModelId, cached: activeChannel?.cachedCapabilities ?? [:]))
                             }
                         } else {
                             Text("选择模型")
@@ -297,9 +298,15 @@ struct ModelProviderSheet: View {
     @State private var isFetchingModels: Bool = false
     @State private var errorMessage: String? = nil
     @State private var showError: Bool = false
+    @State private var editingCapModel: String? = nil
+    @State private var showCapEdit: Bool = false
     
     private var activeChannel: APIKeys? {
         apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
+    }
+    
+    private var cached: [String: ModelCapability] {
+        activeChannel?.cachedCapabilities ?? [:]
     }
     
     var body: some View {
@@ -354,13 +361,19 @@ struct ModelProviderSheet: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(model.id)
                                             .foregroundStyle(.primary)
-                                        CapabilityRowView(capabilities: ModelCapability.infer(from: model.id))
+                                        CapabilityRowView(capabilities: ModelCapability.effective(for: model.id, cached: cached))
                                     }
                                     Spacer()
                                     if model.id == defaultModelId {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.blue)
                                     }
+                                }
+                            }
+                            .contextMenu {
+                                Button("编辑能力标识", systemImage: "slider.horizontal.3") {
+                                    editingCapModel = model.id
+                                    showCapEdit = true
                                 }
                             }
                         }
@@ -380,6 +393,25 @@ struct ModelProviderSheet: View {
                 Button("确定", role: .cancel) { }
             } message: {
                 Text(errorMessage ?? "未知错误")
+            }
+            .sheet(isPresented: $showCapEdit) {
+                if let modelId = editingCapModel {
+                    CapabilityEditSheet(
+                        modelId: modelId,
+                        capabilities: ModelCapability.effective(for: modelId, cached: cached)
+                    ) { newCap in
+                        if let channel = activeChannel {
+                            var dict = channel.cachedCapabilities
+                            dict[modelId] = newCap
+                            channel.cachedCapabilities = dict
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                if let channel = activeChannel, availableModels.isEmpty {
+                    fetchModels(for: channel)
+                }
             }
         }
     }
@@ -407,11 +439,6 @@ struct ModelProviderSheet: View {
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
-                    var dict = [String: ModelCapability]()
-                    for m in models {
-                        dict[m.id] = m.capabilities
-                    }
-                    channel.cachedCapabilities = dict
                 }
             } catch {
                 await MainActor.run {
@@ -721,6 +748,57 @@ struct CapabilityRowView: View {
                 Image(systemName: "eye")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct CapabilityEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let modelId: String
+    let capabilities: ModelCapability
+    let onSave: (ModelCapability) -> Void
+    
+    @State private var webSearch: Bool
+    @State private var reasoning: Bool
+    @State private var toolCalling: Bool
+    @State private var vision: Bool
+    
+    init(modelId: String, capabilities: ModelCapability, onSave: @escaping (ModelCapability) -> Void) {
+        self.modelId = modelId
+        self.capabilities = capabilities
+        self.onSave = onSave
+        _webSearch = State(initialValue: capabilities.webSearch)
+        _reasoning = State(initialValue: capabilities.reasoning)
+        _toolCalling = State(initialValue: capabilities.toolCalling)
+        _vision = State(initialValue: capabilities.vision)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text(modelId)) {
+                    Toggle("联网搜索", isOn: $webSearch)
+                        .accessibilityLabel("联网搜索")
+                    Toggle("推理思考", isOn: $reasoning)
+                        .accessibilityLabel("推理思考")
+                    Toggle("工具调用", isOn: $toolCalling)
+                        .accessibilityLabel("工具调用")
+                    Toggle("视觉识别", isOn: $vision)
+                        .accessibilityLabel("视觉识别")
+                }
+            }
+            .navigationTitle("编辑能力标识")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        onSave(ModelCapability(webSearch: webSearch, reasoning: reasoning, toolCalling: toolCalling, vision: vision))
+                        dismiss()
+                    }
+                }
             }
         }
     }
