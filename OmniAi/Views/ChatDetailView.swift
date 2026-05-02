@@ -11,7 +11,7 @@ struct ChatDetailView: View {
     
     @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
     @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
-    @Query private var apiKeys: [APIKeys]
+    @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
     var sortedMessages: [ChatMessage] {
         session.messages.sorted { $0.createdAt < $1.createdAt }
@@ -21,73 +21,92 @@ struct ChatDetailView: View {
     @State private var showModelProviderSheet: Bool = false
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
+#if canImport(UIKit)
+    @StateObject private var keyboardObserver = KeyboardObserver()
+#endif
     
     private var activeChannel: APIKeys? {
         apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
     }
     
+    private func bubbleView(for message: ChatMessage) -> MessageBubbleView {
+        MessageBubbleView(
+            message: message,
+            isGenerating: isGenerating && message.id == sortedMessages.last?.id,
+            onCopy: {
+                #if os(macOS)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(message.content, forType: .string)
+                #else
+                UIPasteboard.general.string = message.content
+                #endif
+            },
+            onEdit: {
+                editingText = message.content
+                editingMessage = message
+            },
+            onDelete: {
+                modelContext.delete(message)
+                session.messages.removeAll { $0.id == message.id }
+            },
+            onRegenerate: {
+                if message.role == .user {
+                    let messages = sortedMessages
+                    if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+                        let toDelete = messages[idx...]
+                        for m in toDelete {
+                            modelContext.delete(m)
+                        }
+                        session.messages.removeAll { m in
+                            toDelete.contains { $0.id == m.id }
+                        }
+                    }
+                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session)
+                    session.messages.append(newUserMsg)
+                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session)
+                    session.messages.append(newAssistantMsg)
+                    fetchAIResponse(for: newAssistantMsg)
+                } else {
+                    message.content = ""
+                    message.firstTokenLatency = nil
+                    message.promptTokens = nil
+                    message.completionTokens = nil
+                    message.totalTokens = nil
+                    fetchAIResponse(for: message)
+                }
+            }
+        )
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(sortedMessages) { message in
-                        MessageBubbleView(
-                            message: message,
-                            isGenerating: isGenerating && message.id == sortedMessages.last?.id,
-                            onCopy: {
-                                #if os(macOS)
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(message.content, forType: .string)
-                                #else
-                                UIPasteboard.general.string = message.content
-                                #endif
-                            },
-                            onEdit: {
-                                editingText = message.content
-                                editingMessage = message
-                            },
-                            onDelete: {
-                                modelContext.delete(message)
-                                session.messages.removeAll { $0.id == message.id }
-                            },
-                            onRegenerate: {
-                                if message.role == .user {
-                                    let messages = sortedMessages
-                                    if let idx = messages.firstIndex(where: { $0.id == message.id }) {
-                                        let toDelete = messages[idx...]
-                                        for m in toDelete {
-                                            modelContext.delete(m)
-                                        }
-                                        session.messages.removeAll { m in
-                                            toDelete.contains { $0.id == m.id }
-                                        }
-                                    }
-                                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session)
-                                    session.messages.append(newUserMsg)
-                                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session)
-                                    session.messages.append(newAssistantMsg)
-                                    fetchAIResponse(for: newAssistantMsg)
-                                } else {
-                                    message.content = ""
-                                    message.firstTokenLatency = nil
-                                    message.promptTokens = nil
-                                    message.completionTokens = nil
-                                    message.totalTokens = nil
-                                    fetchAIResponse(for: message)
-                                }
-                            }
-                        )
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(sortedMessages) { message in
+                            bubbleView(for: message)
+                                .id(message.id)
+                        }
+                    }
+                    .padding()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+#if canImport(UIKit)
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+#endif
+                }
+                .scrollDismissesKeyboard(.interactively)
+#if canImport(UIKit)
+                .onChange(of: keyboardObserver.keyboardHeight) { _ in
+                    if let lastID = sortedMessages.last?.id {
+                        withAnimation(keyboardObserver.keyboardAnimation ?? .easeOut(duration: 0.25)) {
+                            scrollProxy.scrollTo(lastID, anchor: .bottom)
+                        }
                     }
                 }
-                .padding()
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-#if canImport(UIKit)
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 #endif
             }
-            .scrollDismissesKeyboard(.interactively)
             
             ChatInputBar(onSend: sendMessage)
                 .disabled(isGenerating)
@@ -594,3 +613,42 @@ struct ThinkingBlockView: View {
         }
     }
 }
+
+#if canImport(UIKit)
+import UIKit
+import Combine
+
+final class KeyboardObserver: ObservableObject {
+    @Published var keyboardHeight: CGFloat = 0
+    @Published var keyboardAnimation: Animation? = nil
+    private var cancellables = Set<AnyCancellable>()
+    
+    init() {
+        NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
+            .merge(with: NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      let userInfo = notification.userInfo,
+                      let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+                else { return }
+                let screenHeight = UIScreen.main.bounds.height
+                self.keyboardHeight = max(0, screenHeight - endFrame.origin.y)
+                
+                let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
+                let rawCurve = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int ?? UIView.AnimationCurve.easeInOut.rawValue
+                let curve = UIView.AnimationCurve(rawValue: rawCurve) ?? .easeInOut
+                let animation: Animation
+                switch curve {
+                case .easeInOut: animation = .easeInOut(duration: duration)
+                case .easeIn: animation = .easeIn(duration: duration)
+                case .easeOut: animation = .easeOut(duration: duration)
+                case .linear: animation = .linear(duration: duration)
+                @unknown default: animation = .easeInOut(duration: duration)
+                }
+                self.keyboardAnimation = animation
+            }
+            .store(in: &cancellables)
+    }
+}
+#endif

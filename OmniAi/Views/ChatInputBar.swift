@@ -76,26 +76,21 @@ struct ChatInputBar: View{
             }
 
         }
+        .containerRelativeFrame(.horizontal) { length, _ in
+            min(length * 0.92, 600)
+        }
         .background(
-            Group {
-                if #available(iOS 17.0, *) {
+            RoundedRectangle(cornerRadius: 24)
+                .fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+                .overlay(
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(.regularMaterial)
-                        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 24)
-                                .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
-                                .blendMode(.overlay)
-                        )
-                } else {
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(.background)
-                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 2)
-                }
-            }
+                        .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
+                        .blendMode(.overlay)
+                )
         )
-        .padding(.horizontal)
-        .padding(.bottom, 8) // 底部留出空隙
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 }
 
