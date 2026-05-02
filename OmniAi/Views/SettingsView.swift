@@ -1,25 +1,62 @@
 import SwiftUI
+import PhotosUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
     @AppStorage("userName") private var userName: String = "用户"
+    @State private var avatarImage: UIImage? = nil
+    @State private var photoItem: PhotosPickerItem? = nil
     
     var body: some View {
         NavigationStack {
             Form {
                 Section(header: Text("账户信息")) {
                     HStack {
-                        Image(systemName: "person.crop.circle.fill")
-                            .resizable()
-                            .frame(width: 50, height: 50)
-                            .foregroundStyle(.blue)
+                        PhotosPicker(selection: $photoItem, matching: .images) {
+                            Group {
+                                if let image = avatarImage {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .frame(width: 50, height: 50)
+                                        .clipShape(Circle())
+                                } else {
+                                    Image(systemName: "person.crop.circle.fill")
+                                        .resizable()
+                                        .frame(width: 50, height: 50)
+                                        .foregroundStyle(.blue)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
                         
-                        TextField("昵称", text: $userName)
-                            .font(.title3)
-                            .padding(.leading, 8)
+                        VStack(alignment: .leading, spacing: 4) {
+                            TextField("昵称", text: $userName)
+                                .font(.title3)
+                            if avatarImage != nil {
+                                Button("移除头像", role: .destructive) {
+                                    avatarImage = nil
+                                    photoItem = nil
+                                    AvatarManager.remove()
+                                }
+                                .font(.caption)
+                            }
+                        }
+                        .padding(.leading, 8)
                     }
                     .padding(.vertical, 4)
+                }
+                .onChange(of: photoItem) { _, newItem in
+                    Task {
+                        guard let data = try? await newItem?.loadTransferable(type: Data.self) else { return }
+                        AvatarManager.save(data)
+                        await MainActor.run {
+                            avatarImage = UIImage(data: data)
+                        }
+                    }
+                }
+                .onAppear {
+                    avatarImage = AvatarManager.load()
                 }
                 
                 Section {

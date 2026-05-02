@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import MarkdownUI
 import Combine
+import UIKit
 
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -61,9 +62,9 @@ struct ChatDetailView: View {
                             toDelete.contains { $0.id == m.id }
                         }
                     }
-                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session)
+                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session, modelId: defaultModelId)
                     session.messages.append(newUserMsg)
-                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session)
+                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session, modelId: defaultModelId)
                     session.messages.append(newAssistantMsg)
                     fetchAIResponse(for: newAssistantMsg)
                 } else {
@@ -187,11 +188,11 @@ struct ChatDetailView: View {
     private func sendMessage(_ text: String) {
         guard !text.isEmpty else { return }
         
-        let userMessage = ChatMessage(content: text, role: .user, session: session)
+        let userMessage = ChatMessage(content: text, role: .user, session: session, modelId: defaultModelId)
         session.messages.append(userMessage)
         session.lastModified = Date()
         
-        let assistantMessage = ChatMessage(content: "", role: .assistant, session: session)
+        let assistantMessage = ChatMessage(content: "", role: .assistant, session: session, modelId: defaultModelId)
         session.messages.append(assistantMessage)
         
         fetchAIResponse(for: assistantMessage)
@@ -399,13 +400,61 @@ struct MessageBubbleView: View {
     var onRegenerate: (() -> Void)? = nil
     @State private var showStats = false
     @State private var showActionMenu = false
+    @State private var userAvatar: UIImage? = nil
+    @AppStorage("userName") private var userName: String = "用户"
     
     var isUser: Bool {
         message.role == .user
     }
     
+    private var displayName: String {
+        isUser ? userName : (message.modelId ?? "Unknown")
+    }
+    
+    private var formattedTime: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy年M月d日 HH:mm:ss"
+        return formatter.string(from: message.createdAt)
+    }
+    
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
+                if !isUser {
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .frame(width: 22, height: 22)
+                        .foregroundStyle(.purple)
+                }
+                
+                VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
+                    Text(displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fontWeight(.medium)
+                    Text(formattedTime)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary.opacity(0.7))
+                }
+                
+                if isUser {
+                    Group {
+                        if let image = userAvatar {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .frame(width: 22, height: 22)
+                    .clipShape(Circle())
+                }
+            }
+            .padding(.horizontal, 2)
+            
             if !isUser, let thinking = message.thinkingContent, !thinking.isEmpty {
                 ThinkingBlockView(
                     thinkingText: thinking,
@@ -522,6 +571,7 @@ struct MessageBubbleView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showActionMenu)
+        .onAppear { userAvatar = AvatarManager.load() }
     }
 }
 

@@ -13,6 +13,7 @@ final class ChatMessage {
     var completionTokens: Int?
     var totalTokens: Int?
     var thinkingContent: String?
+    var modelId: String?
     
     @Relationship(inverse: \ChatSession.messages)
     var session: ChatSession?
@@ -22,12 +23,13 @@ final class ChatMessage {
         set { roleRawValue = newValue.rawValue }
     }
     
-    init(content: String, role: MessageRole, session: ChatSession? = nil) {
+    init(content: String, role: MessageRole, session: ChatSession? = nil, modelId: String? = nil) {
         self.id = UUID()
         self.content = content
         self.roleRawValue = role.rawValue
         self.createdAt = Date()
         self.session = session
+        self.modelId = modelId
     }
 }
 
