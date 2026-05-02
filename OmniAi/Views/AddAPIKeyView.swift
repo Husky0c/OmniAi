@@ -35,7 +35,7 @@ struct AddAPIKeyView: View {
                             Text(preset.name).tag(preset.id)
                         }
                     }
-                    .onChange(of: selectedProviderID) { newID in
+                    .onChange(of: selectedProviderID) { _, newID in
                         if let preset = ProviderPreset.all.first(where: { $0.id == newID }) {
                             apiType = preset.apiType
                             if !preset.isCustom {

@@ -4,6 +4,8 @@ import SwiftData
 struct AssistantSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
+    @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
     @Bindable var assistant: Assistant
     @State private var showDeleteConfirmation: Bool = false
@@ -11,6 +13,22 @@ struct AssistantSettingsView: View {
     @State private var showTempInput = false
     @State private var contextInputText = ""
     @State private var tempInputText = ""
+    @State private var showModelSheet = false
+    @State private var modelPickerModels: [ModelInfo] = []
+    @State private var isFetchingModels = false
+    
+    private var modelDisplayName: String {
+        let mid = assistant.modelId ?? defaultModelId
+        if mid.isEmpty { return defaultModelId }
+        return mid
+    }
+    
+    private var selectedModelBinding: Binding<String> {
+        Binding(
+            get: { assistant.modelId ?? defaultModelId },
+            set: { assistant.modelId = $0 }
+        )
+    }
     
     var body: some View {
         NavigationStack {
@@ -24,56 +42,75 @@ struct AssistantSettingsView: View {
                         .frame(minHeight: 120)
                 }
                 
-                Section(header: Text("模型参数")) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("上下文消息数量")
-                            Spacer()
-                            Button(action: {
-                                contextInputText = String(assistant.contextCount)
-                                showContextInput = true
-                            }) {
-                                Text("\(assistant.contextCount)")
-                                    .foregroundStyle(.secondary)
+                Section(header: Text("模型")) {
+                    HStack {
+                        Text(modelDisplayName)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if isFetchingModels {
+                            ProgressView()
+                        } else {
+                            Button(action: fetchAndShowModels) {
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .foregroundStyle(.blue)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.borderless)
                         }
-                        Slider(value: Binding<Double>(
-                            get: { Double(assistant.contextCount) },
-                            set: { assistant.contextCount = Int($0) }
-                        ), in: 2...200, step: 1)
-                        HStack(spacing: 0) {
-                            ForEach([2, 25, 50, 100, 200], id: \.self) { tick in
-                                Text("\(tick)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                                if tick != 200 { Spacer(minLength: 0) }
-                            }
-                        }
-                    }
-                    
-                    Toggle("流式输出", isOn: $assistant.streamEnabled)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("模型温度")
-                            Spacer()
-                            Button(action: {
-                                tempInputText = String(format: "%.1f", assistant.temperature)
-                                showTempInput = true
-                            }) {
-                                Text(String(format: "%.1f", assistant.temperature))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        Slider(value: $assistant.temperature, in: 0.0...2.0, step: 0.1)
                     }
                 }
                 
-                Section {
-                    Button(role: .destructive, action: { showDeleteConfirmation = true }) {
-                        Label("删除此助手", systemImage: "trash")
+                if !assistant.isBuiltIn {
+                    Section(header: Text("模型参数")) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("上下文消息数量")
+                                Spacer()
+                                Button(action: {
+                                    contextInputText = String(assistant.contextCount)
+                                    showContextInput = true
+                                }) {
+                                    Text("\(assistant.contextCount)")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Slider(value: Binding<Double>(
+                                get: { Double(assistant.contextCount) },
+                                set: { assistant.contextCount = Int($0) }
+                            ), in: 2...200, step: 1)
+                            HStack(spacing: 0) {
+                                ForEach([2, 25, 50, 100, 200], id: \.self) { tick in
+                                    Text("\(tick)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                    if tick != 200 { Spacer(minLength: 0) }
+                                }
+                            }
+                        }
+                        
+                        Toggle("流式输出", isOn: $assistant.streamEnabled)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("模型温度")
+                                Spacer()
+                                Button(action: {
+                                    tempInputText = String(format: "%.1f", assistant.temperature)
+                                    showTempInput = true
+                                }) {
+                                    Text(String(format: "%.1f", assistant.temperature))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Slider(value: $assistant.temperature, in: 0.0...2.0, step: 0.1)
+                        }
+                    }
+                    
+                    Section {
+                        Button(role: .destructive, action: { showDeleteConfirmation = true }) {
+                            Label("删除此助手", systemImage: "trash")
+                        }
                     }
                 }
             }
@@ -114,6 +151,37 @@ struct AssistantSettingsView: View {
                     if let v = Double(tempInputText), v >= 0.0, v <= 2.0 {
                         assistant.temperature = v
                     }
+                }
+            }
+            .sheet(isPresented: $showModelSheet) {
+                ModelSelectionSheet(
+                    models: modelPickerModels,
+                    selectedModel: selectedModelBinding,
+                    cachedCapabilities: [:]
+                )
+            }
+        }
+    }
+    
+    private func fetchAndShowModels() {
+        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == UserDefaults.standard.string(forKey: "activeAPIKeyID") ?? "" }),
+              let keyString = activeKey.key, !keyString.isEmpty else {
+            modelPickerModels = []
+            showModelSheet = true
+            return
+        }
+        isFetchingModels = true
+        Task {
+            do {
+                let models = try await LLMService.shared.fetchAvailableModels(apiKey: keyString, baseURL: activeKey.requestURL)
+                await MainActor.run {
+                    modelPickerModels = models
+                    isFetchingModels = false
+                    showModelSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    isFetchingModels = false
                 }
             }
         }

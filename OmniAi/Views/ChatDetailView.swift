@@ -101,7 +101,7 @@ struct ChatDetailView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
 #if canImport(UIKit)
-                .onChange(of: keyboardObserver.keyboardHeight) { newHeight in
+                .onChange(of: keyboardObserver.keyboardHeight) { _, newHeight in
                     withAnimation(keyboardObserver.keyboardAnimation ?? .easeOut(duration: 0.25)) {
                         bottomPadding = newHeight
                         if let lastID = sortedMessages.last?.id {
@@ -244,11 +244,13 @@ struct ChatDetailView: View {
             let startTime = Date()
             var hasReceivedFirstChunk = false
             
+            let effectiveModelId = session.assistant?.modelId ?? defaultModelId
+            
             let stream = LLMService.shared.sendMessageStream(
                 messages: history,
                 apiKey: apiKeyString,
                 baseURL: activeKey.requestURL,
-                modelId: defaultModelId,
+                modelId: effectiveModelId,
                 temperature: temperature
             )
             
@@ -707,7 +709,7 @@ struct ThinkingBlockView: View {
                             .id("thinkingBottom")
                     }
                     .frame(height: 80)
-                    .onChange(of: thinkingText) { _ in
+                    .onChange(of: thinkingText) { _, _ in
                         withAnimation {
                             proxy.scrollTo("thinkingBottom", anchor: .bottom)
                         }
@@ -718,7 +720,7 @@ struct ThinkingBlockView: View {
         .background(Color.secondary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onAppear { if isStreaming { isExpanded = true } }
-        .onChange(of: isStreaming) { new in
+        .onChange(of: isStreaming) { _, new in
             if !new { isExpanded = false }
         }
     }
