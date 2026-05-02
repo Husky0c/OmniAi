@@ -8,7 +8,7 @@ struct LLMApiSettingsView: View {
     @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
     @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
     
-    @State private var availableModels: [String] = []
+    @State private var availableModels: [ModelInfo] = []
     @State private var isFetchingModels: Bool = false
     @State private var errorMessage: String? = nil
     @State private var showErrorAlert: Bool = false
@@ -17,7 +17,9 @@ struct LLMApiSettingsView: View {
     @State private var showingAddKeySheet = false
     @State private var editingKey: APIKeys? = nil
     
-    let commonModels = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-5-sonnet-20240620", "gemini-1.5-pro"]
+    let commonModels: [ModelInfo] = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-5-sonnet-20240620", "gemini-1.5-pro"].map {
+        ModelInfo(id: $0, capabilities: ModelCapability())
+    }
     
     var body: some View {
         Form {
@@ -134,7 +136,6 @@ struct LLMApiSettingsView: View {
     private func fetchAndShowModels() {
         guard let activeKey = apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID }),
               let keyString = activeKey.key, !keyString.isEmpty else {
-            // 如果没有选中的 API Key，直接展示内置的常见模型列表
             showModelSheet = true
             return
         }
@@ -146,7 +147,12 @@ struct LLMApiSettingsView: View {
                 await MainActor.run {
                     self.availableModels = models
                     self.isFetchingModels = false
-                    self.showModelSheet = true // 获取成功后展示
+                    self.showModelSheet = true
+                    var dict = [String: ModelCapability]()
+                    for m in models {
+                        dict[m.id] = m.capabilities
+                    }
+                    activeKey.cachedCapabilities = dict
                 }
             } catch {
                 await MainActor.run {
@@ -161,21 +167,24 @@ struct LLMApiSettingsView: View {
 
 struct ModelSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let models: [String]
+    let models: [ModelInfo]
     @Binding var selectedModel: String
     
     var body: some View {
         NavigationStack {
-            List(models, id: \.self) { model in
+            List(models) { model in
                 Button(action: {
-                    selectedModel = model
+                    selectedModel = model.id
                     dismiss()
                 }) {
                     HStack {
-                        Text(model)
-                            .foregroundStyle(.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.id)
+                                .foregroundStyle(.primary)
+                            CapabilityRowView(capabilities: model.capabilities)
+                        }
                         Spacer()
-                        if model == selectedModel {
+                        if model.id == selectedModel {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.blue)
                         }

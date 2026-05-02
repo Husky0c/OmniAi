@@ -12,6 +12,11 @@ struct AddAPIKeyView: View {
     @State private var requestURL: String = ""
     @State private var apiType: APIType = .openAI
     @State private var selectedProviderID: String = "openai"
+    @State private var autoCapabilityProbe: Bool = true
+    
+    @State private var selectedModelIDs: [String] = []
+    @State private var availableModels: [ModelInfo] = []
+    @State private var isFetchingModels = false
     
     private var selectedPreset: ProviderPreset {
         ProviderPreset.all.first { $0.id == selectedProviderID } ?? ProviderPreset.all[0]
@@ -61,6 +66,40 @@ struct AddAPIKeyView: View {
                     
                     SecureField("API Key", text: $key)
                 }
+                
+                Section(header: Text("能力探测")) {
+                    Toggle("自动获取模型能力标识", isOn: $autoCapabilityProbe)
+                        .font(.subheadline)
+                }
+                
+                if editingKey != nil {
+                    Section(header: Text("已选模型")) {
+                        if isFetchingModels {
+                            HStack {
+                                ProgressView()
+                                Text("正在获取模型列表...")
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if availableModels.isEmpty {
+                            Button("刷新模型列表") {
+                                fetchModels()
+                            }
+                        } else {
+                            ForEach(availableModels) { model in
+                                Button(action: { toggleModelSelection(model.id) }) {
+                                    HStack {
+                                        Image(systemName: selectedModelIDs.contains(model.id) ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(selectedModelIDs.contains(model.id) ? .blue : .secondary)
+                                        Text(model.id)
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        CapabilityRowView(capabilities: model.capabilities)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle(editingKey == nil ? "添加新渠道" : "编辑渠道")
 #if os(iOS)
@@ -86,6 +125,8 @@ struct AddAPIKeyView: View {
                     key = existing.key ?? ""
                     requestURL = existing.requestURL ?? ""
                     apiType = existing.apiType
+                    autoCapabilityProbe = existing.autoCapabilityProbe
+                    selectedModelIDs = existing.selectedModelIDs
                     
                     let matched = ProviderPreset.matching(existing.apiType,
                         requestURL: existing.requestURL ?? "")
@@ -93,8 +134,42 @@ struct AddAPIKeyView: View {
                     if let matched {
                         requestURL = matched.defaultBaseURL
                     }
+                    
+                    fetchModels()
                 }
             }
+        }
+    }
+    
+    private func fetchModels() {
+        guard !requestURL.isEmpty, !key.isEmpty else { return }
+        isFetchingModels = true
+        availableModels = []
+        Task {
+            do {
+                let models = try await LLMService.shared.fetchAvailableModels(apiKey: key, baseURL: requestURL)
+                await MainActor.run {
+                    availableModels = models
+                    isFetchingModels = false
+                    var dict = [String: ModelCapability]()
+                    for m in models {
+                        dict[m.id] = m.capabilities
+                    }
+                    editingKey?.cachedCapabilities = dict
+                }
+            } catch {
+                await MainActor.run {
+                    isFetchingModels = false
+                }
+            }
+        }
+    }
+    
+    private func toggleModelSelection(_ modelID: String) {
+        if let idx = selectedModelIDs.firstIndex(of: modelID) {
+            selectedModelIDs.remove(at: idx)
+        } else {
+            selectedModelIDs.append(modelID)
         }
     }
     
@@ -105,6 +180,8 @@ struct AddAPIKeyView: View {
             existing.key = key.isEmpty ? nil : key
             existing.requestURL = requestURL.isEmpty ? nil : requestURL
             existing.apiType = apiType
+            existing.autoCapabilityProbe = autoCapabilityProbe
+            existing.selectedModelIDs = selectedModelIDs
             existing.timestamp = Date()
         } else {
             let newKey = APIKeys(
@@ -113,8 +190,10 @@ struct AddAPIKeyView: View {
                 key: key.isEmpty ? nil : key,
                 requestURL: requestURL.isEmpty ? nil : requestURL,
                 invisible: false,
+                autoCapabilityProbe: autoCapabilityProbe,
                 apiType: apiType
             )
+            newKey.selectedModelIDs = selectedModelIDs
             modelContext.insert(newKey)
         }
         dismiss()

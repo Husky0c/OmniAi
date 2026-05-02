@@ -69,12 +69,44 @@ struct OpenAIErrorResponse: Codable {
     }
 }
 
-struct OpenAIModelListResponse: Codable {
+struct OpenAIModelListResponse: Decodable {
     let data: [OpenAIModelItem]
 }
 
-struct OpenAIModelItem: Codable {
+struct OpenAIModelItem: Decodable {
     let id: String
+    let capabilities: [String]?
+    let supported_endpoint_types: [String]?
+}
+
+struct ModelInfo: Identifiable {
+    let id: String
+    let capabilities: ModelCapability
+}
+
+struct ModelCapability: Codable, Hashable {
+    var webSearch: Bool = false
+    var reasoning: Bool = false
+    var toolCalling: Bool = false
+    var vision: Bool = false
+    
+    init(capabilities: [String]? = nil, endpointTypes: [String]? = nil) {
+        let set = Set((capabilities ?? []).map { $0.lowercased() })
+        let types = Set((endpointTypes ?? []).map { $0.lowercased() })
+        webSearch = set.contains("web_search") || set.contains("search") || types.contains("search") || types.contains("web_search")
+        reasoning = set.contains("reasoning") || types.contains("reasoning")
+        toolCalling = set.contains("tools") || types.contains("tool") || types.contains("tools")
+        vision = set.contains("vision") || types.contains("vision")
+    }
+    
+    var symbols: [String] {
+        var result: [String] = []
+        if webSearch { result.append("globe") }
+        if reasoning { result.append("brain") }
+        if toolCalling { result.append("wrench") }
+        if vision { result.append("eye") }
+        return result
+    }
 }
 
 class LLMService {
@@ -108,7 +140,7 @@ class LLMService {
         return base
     }
     
-    func fetchAvailableModels(apiKey: String, baseURL: String?) async throws -> [String] {
+    func fetchAvailableModels(apiKey: String, baseURL: String?) async throws -> [ModelInfo] {
         let urlString = "\(getBaseURL(customURL: baseURL))/models"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
@@ -138,7 +170,9 @@ class LLMService {
         
         do {
             let listResponse = try JSONDecoder().decode(OpenAIModelListResponse.self, from: data)
-            let models = listResponse.data.map { $0.id }.sorted()
+            let models = listResponse.data.map { item in
+                ModelInfo(id: item.id, capabilities: ModelCapability(capabilities: item.capabilities, endpointTypes: item.supported_endpoint_types))
+            }.sorted { $0.id < $1.id }
             print("[LLMService] ✅ 成功获取 \(models.count) 个模型")
             return models
         } catch {

@@ -31,6 +31,8 @@ class APIKeys{
     var helpInfo: String? = ""
     var timestamp: Date = Date()
     var autoCapabilityProbe: Bool = true
+    var cachedCapabilitiesJSON: String? = nil
+    var selectedModelIDsJSON: String? = nil
     private var apiTypeRawValue: String = APIType.openAI.rawValue
     private var apiSourceRawValue: String = APISource.system.rawValue
     
@@ -42,6 +44,30 @@ class APIKeys{
     var apiSource: APISource{
         get{ APISource(rawValue: apiSourceRawValue) ?? .system }
         set{ apiSourceRawValue = newValue.rawValue }
+    }
+    
+    var cachedCapabilities: [String: ModelCapability] {
+        get {
+            guard let data = cachedCapabilitiesJSON?.data(using: .utf8),
+                  let dict = try? JSONDecoder().decode([String: ModelCapability].self, from: data)
+            else { return [:] }
+            return dict
+        }
+        set {
+            cachedCapabilitiesJSON = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).map { String(data: $0, encoding: .utf8) } ?? nil
+        }
+    }
+    
+    var selectedModelIDs: [String] {
+        get {
+            guard let data = selectedModelIDsJSON?.data(using: .utf8),
+                  let ids = try? JSONDecoder().decode([String].self, from: data)
+            else { return [] }
+            return ids
+        }
+        set {
+            selectedModelIDsJSON = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).map { String(data: $0, encoding: .utf8) } ?? nil
+        }
     }
     
     public init(

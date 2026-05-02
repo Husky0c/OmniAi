@@ -123,9 +123,12 @@ struct ChatDetailView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         if let channel = activeChannel {
-                            Text("\(channel.name) / \(defaultModelId)")
-                                .font(.headline)
-                                .lineLimit(1)
+                            HStack(spacing: 4) {
+                                Text("\(channel.name) / \(defaultModelId)")
+                                    .font(.headline)
+                                    .lineLimit(1)
+                                CapabilityRowView(capabilities: channel.cachedCapabilities[defaultModelId] ?? ModelCapability())
+                            }
                         } else {
                             Text("选择模型")
                                 .font(.headline)
@@ -285,11 +288,12 @@ struct ChatDetailView: View {
 
 struct ModelProviderSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     let apiKeys: [APIKeys]
     @Binding var activeAPIKeyID: String
     @Binding var defaultModelId: String
     
-    @State private var availableModels: [String] = []
+    @State private var availableModels: [ModelInfo] = []
     @State private var isFetchingModels: Bool = false
     @State private var errorMessage: String? = nil
     @State private var showError: Bool = false
@@ -341,16 +345,19 @@ struct ModelProviderSheet: View {
                         Text("点击渠道右侧切换后可获取模型列表")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(availableModels, id: \.self) { model in
+                        ForEach(availableModels) { model in
                             Button(action: {
-                                defaultModelId = model
+                                defaultModelId = model.id
                                 dismiss()
                             }) {
                                 HStack {
-                                    Text(model)
-                                        .foregroundStyle(.primary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(model.id)
+                                            .foregroundStyle(.primary)
+                                        CapabilityRowView(capabilities: model.capabilities)
+                                    }
                                     Spacer()
-                                    if model == defaultModelId {
+                                    if model.id == defaultModelId {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.blue)
                                     }
@@ -383,6 +390,15 @@ struct ModelProviderSheet: View {
             return
         }
         
+        if !channel.selectedModelIDs.isEmpty {
+            let models = channel.selectedModelIDs.compactMap { id -> ModelInfo? in
+                let caps = channel.cachedCapabilities[id] ?? ModelCapability()
+                return id.isEmpty ? nil : ModelInfo(id: id, capabilities: caps)
+            }
+            availableModels = models
+            return
+        }
+        
         isFetchingModels = true
         availableModels = []
         Task {
@@ -391,6 +407,11 @@ struct ModelProviderSheet: View {
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
+                    var dict = [String: ModelCapability]()
+                    for m in models {
+                        dict[m.id] = m.capabilities
+                    }
+                    channel.cachedCapabilities = dict
                 }
             } catch {
                 await MainActor.run {
@@ -672,6 +693,35 @@ struct ThinkingBlockView: View {
         .onAppear { if isStreaming { isExpanded = true } }
         .onChange(of: isStreaming) { new in
             if !new { isExpanded = false }
+        }
+    }
+}
+
+struct CapabilityRowView: View {
+    let capabilities: ModelCapability
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            if capabilities.webSearch {
+                Image(systemName: "globe")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if capabilities.reasoning {
+                Image(systemName: "brain")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if capabilities.toolCalling {
+                Image(systemName: "wrench")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if capabilities.vision {
+                Image(systemName: "eye")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
