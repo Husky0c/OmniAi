@@ -22,6 +22,7 @@ struct ChatDetailView: View {
     @State private var showModelProviderSheet: Bool = false
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
+    @State private var bottomPadding: CGFloat = 0
 #if canImport(UIKit)
     @StateObject private var keyboardObserver = KeyboardObserver()
 #endif
@@ -90,6 +91,7 @@ struct ChatDetailView: View {
                         }
                     }
                     .padding()
+                    .padding(.bottom, bottomPadding)
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -99,9 +101,10 @@ struct ChatDetailView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
 #if canImport(UIKit)
-                .onChange(of: keyboardObserver.keyboardHeight) { _ in
-                    if let lastID = sortedMessages.last?.id {
-                        withAnimation(keyboardObserver.keyboardAnimation ?? .easeOut(duration: 0.25)) {
+                .onChange(of: keyboardObserver.keyboardHeight) { newHeight in
+                    withAnimation(keyboardObserver.keyboardAnimation ?? .easeOut(duration: 0.25)) {
+                        bottomPadding = newHeight
+                        if let lastID = sortedMessages.last?.id {
                             scrollProxy.scrollTo(lastID, anchor: .bottom)
                         }
                     }
