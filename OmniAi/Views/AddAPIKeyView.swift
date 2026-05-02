@@ -93,7 +93,7 @@ struct AddAPIKeyView: View {
                                         Text(model.id)
                                             .foregroundStyle(.primary)
                                         Spacer()
-                                        CapabilityRowView(capabilities: model.capabilities)
+                                        CapabilityRowView(capabilities: ModelCapability.infer(from: model.id))
                                     }
                                 }
                             }

@@ -107,6 +107,80 @@ struct ModelCapability: Codable, Hashable {
         if vision { result.append("eye") }
         return result
     }
+    
+    static let defaultRules: [CapabilityKey: [String]] = [
+        .reasoning: ["o1|o3|o4|reasoning|thinks|thinking|r1|qwq|grok-3-mini|deep-think|deepseek-r1|claude-3\\.5-haiku"],
+        .vision: ["vision|gpt-4o|claude-3[.-]|gemini.*(flash|pro|vision)|qwen-vl|pixtral|llava|cogvlm|phi-*vision|mistral.*vision"],
+        .toolCalling: ["gpt|claude|qwen|gemini|deepseek|mistral|llama|command|yi-|glm|ministral|phi|grok|ernie|hunyuan|moonshot|step-|abab|minimax"],
+        .webSearch: ["search-preview|gemini|sonar|perplexity|search"],
+    ]
+    
+    enum CapabilityKey: String, Codable, CaseIterable {
+        case reasoning
+        case vision
+        case toolCalling
+        case webSearch
+    }
+    
+    private static var loadedRules: [CapabilityKey: [String]]?
+    
+    private static func rules() -> [CapabilityKey: [String]] {
+        if let cached = loadedRules { return cached }
+        if let url = Bundle.main.url(forResource: "model_capability_rules", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let dict = try? JSONDecoder().decode([String: [String]].self, from: data) {
+            var result = [CapabilityKey: [String]]()
+            for (key, patterns) in dict {
+                if let k = CapabilityKey(rawValue: key) {
+                    result[k] = patterns
+                }
+            }
+            loadedRules = result
+            return result.isEmpty ? defaultRules : result
+        }
+        loadedRules = defaultRules
+        return defaultRules
+    }
+    
+    static func infer(from modelId: String) -> ModelCapability {
+        let lower = modelId.lowercased()
+        var cap = ModelCapability()
+        let rules = rules()
+        
+        if let patterns = rules[.reasoning] {
+            for p in patterns {
+                if lower.range(of: p, options: .regularExpression) != nil {
+                    cap.reasoning = true
+                    break
+                }
+            }
+        }
+        if let patterns = rules[.vision] {
+            for p in patterns {
+                if lower.range(of: p, options: .regularExpression) != nil {
+                    cap.vision = true
+                    break
+                }
+            }
+        }
+        if let patterns = rules[.toolCalling] {
+            for p in patterns {
+                if lower.range(of: p, options: .regularExpression) != nil {
+                    cap.toolCalling = true
+                    break
+                }
+            }
+        }
+        if let patterns = rules[.webSearch] {
+            for p in patterns {
+                if lower.range(of: p, options: .regularExpression) != nil {
+                    cap.webSearch = true
+                    break
+                }
+            }
+        }
+        return cap
+    }
 }
 
 class LLMService {

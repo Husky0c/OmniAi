@@ -181,7 +181,7 @@ struct ModelSelectionSheet: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(model.id)
                                 .foregroundStyle(.primary)
-                            CapabilityRowView(capabilities: model.capabilities)
+                            CapabilityRowView(capabilities: ModelCapability.infer(from: model.id))
                         }
                         Spacer()
                         if model.id == selectedModel {

@@ -1,0 +1,14 @@
+{
+  "reasoning": [
+    "o1|o3|o4|reasoning|thinks|thinking|r1|qwq|grok-3-mini|deep-think|deepseek-r1|claude-3\\.5-haiku"
+  ],
+  "vision": [
+    "vision|gpt-4o|claude-3[.-]|gemini.*(flash|pro|vision)|qwen-vl|pixtral|llava|cogvlm|phi-*vision|mistral.*vision"
+  ],
+  "toolCalling": [
+    "gpt|claude|qwen|gemini|deepseek|mistral|llama|command|yi-|glm|ministral|phi|grok|ernie|hunyuan|moonshot|step-|abab|minimax"
+  ],
+  "webSearch": [
+    "search-preview|gemini|sonar|perplexity|search"
+  ]
+}
