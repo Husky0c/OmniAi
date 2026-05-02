@@ -79,6 +79,16 @@ struct OpenAIModelItem: Decodable {
     let supported_endpoint_types: [String]?
 }
 
+struct OpenAIChatResponse: Decodable {
+    struct Choice: Decodable {
+        struct Message: Decodable {
+            let content: String
+        }
+        let message: Message
+    }
+    let choices: [Choice]
+}
+
 struct ModelInfo: Identifiable {
     let id: String
     let capabilities: ModelCapability
@@ -351,17 +361,58 @@ class LLMService {
                                     if !trimmed.isEmpty {
                                         continuation.yield(.chunk(trimmed))
                                     }
-                                } else {
-                                    continuation.yield(.chunk(content))
-                                }
+                            } else {
+                                continuation.yield(.chunk(content))
                             }
                         }
                     }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
                 }
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
             }
         }
+        }
+    }
+    
+    func sendMessageCompletion(
+        messages: [(role: String, content: String)],
+        apiKey: String,
+        baseURL: String?,
+        modelId: String,
+        temperature: Double? = nil
+    ) async throws -> String {
+        let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
+        guard let url = URL(string: urlString) else {
+            throw URLError(.badURL)
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        
+        let openAIMessages = messages.map { OpenAIMessage(role: $0.role, content: $0.content) }
+        let chatRequest = OpenAIChatRequest(
+            model: modelId,
+            messages: openAIMessages,
+            stream: false,
+            temperature: temperature,
+            stream_options: nil
+        )
+        
+        request.httpBody = try JSONEncoder().encode(chatRequest)
+        
+        let (data, response) = try await session.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
+                throw NSError(domain: "LLMService", code: (response as? HTTPURLResponse)?.statusCode ?? 0, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
+            }
+            throw URLError(.badServerResponse)
+        }
+        
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        return chatResponse.choices.first?.message.content ?? ""
     }
 }

@@ -59,6 +59,19 @@ struct AssistantSettingsView: View {
                     }
                 }
                 
+                if assistant.isBuiltIn {
+                    Section(header: Text("自动重命名"), footer: Text("每 N 轮对话后使用此助手自动生成标题。0=禁用")) {
+                        HStack {
+                            Text("间隔（轮）")
+                            Spacer()
+                            TextField("", value: $assistant.renameInterval, format: .number)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.numberPad)
+                                .frame(width: 60)
+                        }
+                    }
+                }
+                
                 if !assistant.isBuiltIn {
                     Section(header: Text("模型参数")) {
                         VStack(alignment: .leading, spacing: 4) {

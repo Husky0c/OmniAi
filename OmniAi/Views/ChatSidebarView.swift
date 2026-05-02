@@ -26,50 +26,52 @@ struct ChatSidebarView: View {
             } else {
                 List {
                     ForEach(sortedAssistants) { assistant in
-                Section {
-                    Button(action: {
-                        if assistant.isBuiltIn {
-                            editingAssistant = assistant
-                        } else {
-                            withAnimation {
-                                if expandedIDs.contains(assistant.id) {
-                                    expandedIDs.remove(assistant.id)
-                                } else {
-                                    expandedIDs.insert(assistant.id)
-                                }
-                            }
-                        }
-                    }) {
+                    Section {
                         HStack {
-                            if !assistant.isBuiltIn {
-                                Image(systemName: expandedIDs.contains(assistant.id) ? "chevron.down" : "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            Button(action: {
+                                if assistant.isBuiltIn {
+                                    editingAssistant = assistant
+                                } else {
+                                    withAnimation {
+                                        if expandedIDs.contains(assistant.id) {
+                                            expandedIDs.remove(assistant.id)
+                                        } else {
+                                            expandedIDs.insert(assistant.id)
+                                        }
+                                    }
+                                }
+                            }) {
+                                HStack {
+                                    if !assistant.isBuiltIn {
+                                        Image(systemName: expandedIDs.contains(assistant.id) ? "chevron.down" : "chevron.right")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(assistant.name)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    if assistant.isBuiltIn {
+                                        Text("内置")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+                                    }
+                                    Spacer()
+                                }
+                                .contentShape(Rectangle())
                             }
-                            Text(assistant.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            if assistant.isBuiltIn {
-                                Text("内置")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-                            }
-                            Spacer()
+                            .buttonStyle(.plain)
+                            
                             Button(action: { editingAssistant = assistant }) {
                                 Image(systemName: "square.and.pencil")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
-                            .onTapGesture { editingAssistant = assistant }
                         }
                         .padding(.vertical, 4)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
                     
                     if !assistant.isBuiltIn, expandedIDs.contains(assistant.id) {
                         let sortedSessions = assistant.sessions.sorted { $0.lastModified > $1.lastModified }
@@ -88,6 +90,7 @@ struct ChatSidebarView: View {
                                         .font(.caption2)
                                         .foregroundStyle(.tertiary)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.vertical, 2)
                                 .padding(.leading, 20)
                                 .contentShape(Rectangle())

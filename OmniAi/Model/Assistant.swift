@@ -12,6 +12,7 @@ final class Assistant {
     var createdAt: Date = Date()
     var isBuiltIn: Bool = false
     var modelId: String? = nil
+    var renameInterval: Int = 0
     
     @Relationship(deleteRule: .cascade)
     var sessions: [ChatSession] = []
@@ -23,7 +24,8 @@ final class Assistant {
         streamEnabled: Bool = true,
         temperature: Double = 1.0,
         isBuiltIn: Bool = false,
-        modelId: String? = nil
+        modelId: String? = nil,
+        renameInterval: Int = 0
     ) {
         self.id = UUID()
         self.name = name
@@ -34,5 +36,6 @@ final class Assistant {
         self.createdAt = Date()
         self.isBuiltIn = isBuiltIn
         self.modelId = modelId
+        self.renameInterval = renameInterval
     }
 }

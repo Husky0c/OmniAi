@@ -13,6 +13,7 @@ struct ChatDetailView: View {
     @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
     @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
+    @Query(filter: #Predicate<Assistant> { $0.isBuiltIn == true }) private var builtInAssistants: [Assistant]
     
     var sortedMessages: [ChatMessage] {
         session.messages.sorted { $0.createdAt < $1.createdAt }
@@ -29,6 +30,10 @@ struct ChatDetailView: View {
     
     private var activeChannel: APIKeys? {
         apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
+    }
+    
+    private var quickAssistant: Assistant? {
+        builtInAssistants.first(where: { $0.name == "快速任务助手" })
     }
     
     private func bubbleView(for message: ChatMessage) -> MessageBubbleView {
@@ -285,6 +290,59 @@ struct ChatDetailView: View {
                 isGenerating = false
                 session.lastModified = Date()
             }
+            
+            if let qa = quickAssistant, qa.renameInterval > 0 {
+                let rounds = session.messages.filter { $0.role == .user }.count
+                if session.title == "新对话" || (rounds > 0 && rounds % qa.renameInterval == 0) {
+                    await autoTitle(using: qa)
+                }
+            }
+        }
+    }
+    
+    private func autoTitle(using quickAssist: Assistant) async {
+        guard let activeKey = activeChannel, let keyString = activeKey.key, !keyString.isEmpty else { return }
+        
+        let lastTwo = session.messages
+            .filter { $0.role == .user || $0.role == .assistant }
+            .suffix(4)
+            .map { "[\($0.role == .user ? "用户" : "助手")]: \($0.content.prefix(300))" }
+            .joined(separator: "\n")
+        
+        let titlePrompt = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
+        
+        let messages: [(role: String, content: String)] = [
+            ("system", titlePrompt),
+            ("user", "对话内容：\n\(lastTwo)")
+        ]
+        
+        let modelId = (quickAssist.modelId ?? "").isEmpty ? defaultModelId : quickAssist.modelId!
+        
+        do {
+            let title = try await LLMService.shared.sendMessageCompletion(
+                messages: messages,
+                apiKey: keyString,
+                baseURL: activeKey.requestURL,
+                modelId: modelId,
+                temperature: 0.3
+            )
+            let lines = title.split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && $0.count <= 25 }
+            let titleLine = lines.last ?? lines.first ?? ""
+            let trimmed = titleLine
+                .replacingOccurrences(of: "\"", with: "")
+                .replacingOccurrences(of: "「", with: "")
+                .replacingOccurrences(of: "」", with: "")
+                .replacingOccurrences(of: "标题：", with: "")
+                .replacingOccurrences(of: "标题:", with: "")
+            await MainActor.run {
+                if !trimmed.isEmpty {
+                    session.title = trimmed
+                    session.lastModified = Date()
+                }
+            }
+        } catch {
         }
     }
 }
@@ -693,6 +751,7 @@ struct ThinkingBlockView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             
