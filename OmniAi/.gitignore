@@ -4,6 +4,7 @@ opencode.json
 # claude
 AGENTS.md
 CLAUDE.md
+.claude/
 
 # macOS
 .DS_Store
