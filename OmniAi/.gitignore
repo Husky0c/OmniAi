@@ -1,6 +1,9 @@
 # opencode
 opencode.json
 
+# claude
+AGENTS.md
+
 # macOS
 .DS_Store
 ._*
