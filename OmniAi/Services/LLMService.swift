@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OSLog
 
 enum LLMStreamEvent {
     case chunk(String)
@@ -205,6 +206,8 @@ struct ModelCapability: Codable, Hashable {
 class LLMService {
     static let shared = LLMService()
     
+    private let logger = Logger(subsystem: "com.omniai.network", category: "LLMService")
+    
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 300
@@ -244,7 +247,7 @@ class LLMService {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
-        print("[LLMService] 🚀 尝试获取模型列表: \(urlString)")
+        logger.debug("🚀 尝试获取模型列表: \(urlString)")
         
         let (data, response) = try await session.data(for: request)
         
@@ -254,9 +257,11 @@ class LLMService {
         
         guard httpResponse.statusCode == 200 else {
             if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
+                logger.error("❌ 模型列表获取失败 [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
                 throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
             } else {
                 let raw = String(data: data, encoding: .utf8) ?? "无法读取响应体"
+                logger.error("❌ 模型列表获取失败 [\(httpResponse.statusCode)]: \(raw)")
                 throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: raw])
             }
         }
@@ -268,11 +273,11 @@ class LLMService {
                 let caps = parsed.hasAny ? parsed : ModelCapability.infer(from: item.id)
                 return ModelInfo(id: item.id, capabilities: caps)
             }.sorted { $0.id < $1.id }
-            print("[LLMService] ✅ 成功获取 \(models.count) 个模型")
+            logger.debug("✅ 成功获取 \(models.count) 个模型")
             return models
         } catch {
             let raw = String(data: data, encoding: .utf8) ?? "无法解析响应体"
-            print("[LLMService] ❌ 模型列表解析失败，原始返回: \(raw.prefix(500))")
+            logger.error("❌ 模型列表解析失败，原始返回: \(raw.prefix(500))")
             throw NSError(domain: "LLMService", code: 0, userInfo: [NSLocalizedDescriptionKey: "模型列表格式异常: \(raw.prefix(200))"])
         }
     }
@@ -299,10 +304,23 @@ class LLMService {
             stream_options: OpenAIChatRequest.StreamOptions(include_usage: true)
         )
         
-        request.httpBody = try? JSONEncoder().encode(chatRequest)
+        do {
+            request.httpBody = try JSONEncoder().encode(chatRequest)
+        } catch {
+            logger.error("❌ 请求体编码失败: \(error.localizedDescription)")
+        }
         
-        print("[LLMService] 🚀 发送请求至: \(urlString)")
-        print("[LLMService] 📝 模型: \(modelId)")
+        if let body = request.httpBody,
+           let jsonString = String(data: body, encoding: .utf8) {
+            logger.debug("🚀 流式请求至: \(urlString)")
+            logger.debug("📝 模型: \(modelId)")
+            if let prettyData = try? JSONSerialization.data(withJSONObject: try JSONSerialization.jsonObject(with: body), options: [.prettyPrinted, .sortedKeys]),
+               let prettyString = String(data: prettyData, encoding: .utf8) {
+                logger.debug("📦 请求体 JSON:\n\(prettyString)")
+            } else {
+                logger.debug("📦 请求体 JSON: \(jsonString)")
+            }
+        }
         
         return AsyncThrowingStream { continuation in
             Task {
@@ -313,7 +331,7 @@ class LLMService {
                         throw URLError(.badServerResponse)
                     }
                     
-                    print("[LLMService] 📡 收到响应状态码: \(httpResponse.statusCode)")
+                    logger.debug("📡 收到响应状态码: \(httpResponse.statusCode)")
                     
                     guard httpResponse.statusCode == 200 else {
                         var errorBody = ""
@@ -323,9 +341,11 @@ class LLMService {
                         
                         if let data = errorBody.data(using: .utf8),
                            let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
+                            logger.error("❌ 流式请求失败 [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
                             throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
                         } else {
                             let fallbackMessage = errorBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "服务器返回 HTTP 错误码: \(httpResponse.statusCode) (503通常代表中转服务器宕机或配置错误)" : errorBody
+                            logger.error("❌ 流式请求失败 [\(httpResponse.statusCode)]: \(fallbackMessage)")
                             throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: fallbackMessage])
                         }
                     }
@@ -367,8 +387,10 @@ class LLMService {
                         }
                     }
                 }
+                logger.debug("✅ 流式请求完成")
                 continuation.finish()
             } catch {
+                logger.error("❌ 流式请求异常: \(error.localizedDescription)")
                 continuation.finish(throwing: error)
             }
         }
@@ -401,18 +423,40 @@ class LLMService {
             stream_options: nil
         )
         
-        request.httpBody = try JSONEncoder().encode(chatRequest)
+        do {
+            request.httpBody = try JSONEncoder().encode(chatRequest)
+        } catch {
+            logger.error("❌ 请求体编码失败: \(error.localizedDescription)")
+            throw error
+        }
+        
+        if let body = request.httpBody,
+           let jsonString = String(data: body, encoding: .utf8) {
+            logger.debug("🚀 一次性请求至: \(urlString)")
+            logger.debug("📝 模型: \(modelId)")
+            if let prettyData = try? JSONSerialization.data(withJSONObject: try JSONSerialization.jsonObject(with: body), options: [.prettyPrinted, .sortedKeys]),
+               let prettyString = String(data: prettyData, encoding: .utf8) {
+                logger.debug("📦 请求体 JSON:\n\(prettyString)")
+            } else {
+                logger.debug("📦 请求体 JSON: \(jsonString)")
+            }
+        }
         
         let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                throw NSError(domain: "LLMService", code: (response as? HTTPURLResponse)?.statusCode ?? 0, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
+                logger.error("❌ 一次性请求失败 [\(statusCode)]: \(errorResponse.error.message)")
+                throw NSError(domain: "LLMService", code: statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
             }
+            let raw = String(data: data, encoding: .utf8) ?? "空响应"
+            logger.error("❌ 一次性请求失败 [\(statusCode)]: \(raw)")
             throw URLError(.badServerResponse)
         }
         
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        logger.debug("✅ 一次性请求成功，完成")
         return chatResponse.choices.first?.message.content ?? ""
     }
 }
