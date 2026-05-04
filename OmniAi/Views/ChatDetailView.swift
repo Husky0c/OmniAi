@@ -105,6 +105,13 @@ struct ChatDetailView: View {
 #endif
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .onAppear {
+                    DispatchQueue.main.async {
+                        if let lastID = sortedMessages.last?.id {
+                            scrollProxy.scrollTo(lastID, anchor: .bottom)
+                        }
+                    }
+                }
 #if canImport(UIKit)
                 .onChange(of: keyboardObserver.keyboardHeight) { _, newHeight in
                     withAnimation(keyboardObserver.keyboardAnimation ?? .easeOut(duration: 0.25)) {
