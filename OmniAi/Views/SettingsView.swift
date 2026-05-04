@@ -61,7 +61,10 @@ struct SettingsView: View {
                 
                 Section {
                     NavigationLink(destination: LLMApiSettingsView()) {
-                        Label("大模型 API 渠道配置", systemImage: "cpu")
+                        Label("API 渠道配置", systemImage: "cpu")
+                    }
+                    NavigationLink(destination: DefaultModelSettingsView()) {
+                        Label("默认模型", systemImage: "sparkles")
                     }
                 }
                 

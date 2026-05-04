@@ -11,8 +11,8 @@ final class Assistant {
     var temperature: Double = 1.0
     var createdAt: Date = Date()
     var isBuiltIn: Bool = false
+    var channelId: String? = nil
     var modelId: String? = nil
-    var renameInterval: Int = 0
     
     @Relationship(deleteRule: .cascade)
     var sessions: [ChatSession] = []
@@ -24,18 +24,18 @@ final class Assistant {
         streamEnabled: Bool = true,
         temperature: Double = 1.0,
         isBuiltIn: Bool = false,
-        modelId: String? = nil,
-        renameInterval: Int = 0
+        channelId: String? = nil,
+        modelId: String? = nil
     ) {
         self.id = UUID()
         self.name = name
         self.systemPrompt = systemPrompt
-        self.contextCount = isBuiltIn ? 2 : max(2, contextCount)
-        self.streamEnabled = isBuiltIn ? false : streamEnabled
-        self.temperature = isBuiltIn ? 1.0 : min(2.0, max(0.0, temperature))
+        self.contextCount = max(1, contextCount)
+        self.streamEnabled = streamEnabled
+        self.temperature = min(2.0, max(0.0, temperature))
         self.createdAt = Date()
         self.isBuiltIn = isBuiltIn
+        self.channelId = channelId
         self.modelId = modelId
-        self.renameInterval = renameInterval
     }
 }

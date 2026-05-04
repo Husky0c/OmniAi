@@ -11,10 +11,6 @@ struct ChatSidebarView: View {
     @State private var showNewAssistant = false
     @State private var editingAssistant: Assistant? = nil
     
-    private var sortedAssistants: [Assistant] {
-        assistants.sorted { $0.isBuiltIn && !$1.isBuiltIn || ($0.isBuiltIn == $1.isBuiltIn && $0.createdAt < $1.createdAt) }
-    }
-    
     var body: some View {
         ZStack {
             if assistants.isEmpty {
@@ -25,39 +21,25 @@ struct ChatSidebarView: View {
                 )
             } else {
                 List {
-                    ForEach(sortedAssistants) { assistant in
+                    ForEach(assistants) { assistant in
                     Section {
                         HStack {
                             Button(action: {
-                                if assistant.isBuiltIn {
-                                    editingAssistant = assistant
-                                } else {
-                                    withAnimation {
-                                        if expandedIDs.contains(assistant.id) {
-                                            expandedIDs.remove(assistant.id)
-                                        } else {
-                                            expandedIDs.insert(assistant.id)
-                                        }
+                                withAnimation {
+                                    if expandedIDs.contains(assistant.id) {
+                                        expandedIDs.remove(assistant.id)
+                                    } else {
+                                        expandedIDs.insert(assistant.id)
                                     }
                                 }
                             }) {
                                 HStack {
-                                    if !assistant.isBuiltIn {
-                                        Image(systemName: expandedIDs.contains(assistant.id) ? "chevron.down" : "chevron.right")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
+                                    Image(systemName: expandedIDs.contains(assistant.id) ? "chevron.down" : "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                     Text(assistant.name)
                                         .font(.headline)
                                         .foregroundStyle(.primary)
-                                    if assistant.isBuiltIn {
-                                        Text("内置")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-                                    }
                                     Spacer()
                                 }
                                 .contentShape(Rectangle())
@@ -73,7 +55,7 @@ struct ChatSidebarView: View {
                         }
                         .padding(.vertical, 4)
                     
-                    if !assistant.isBuiltIn, expandedIDs.contains(assistant.id) {
+                    if expandedIDs.contains(assistant.id) {
                         let sortedSessions = assistant.sessions.sorted { $0.lastModified > $1.lastModified }
                         
                         ForEach(sortedSessions) { session in
@@ -142,14 +124,7 @@ struct ChatSidebarView: View {
             AssistantSettingsView(assistant: assistant)
         }
         .onAppear {
-            let seeded = UserDefaults.standard.bool(forKey: "builtInAssistantsSeeded")
-            if !seeded {
-                let t = Assistant(name: "翻译助手", systemPrompt: "你是一个专业的翻译助手，请将用户输入的内容准确翻译为目标语言。", isBuiltIn: true)
-                modelContext.insert(t)
-                let q = Assistant(name: "快速任务助手", systemPrompt: "你是一个高效的任务助手，请简洁准确地完成用户指定的任务。", isBuiltIn: true)
-                modelContext.insert(q)
-                UserDefaults.standard.set(true, forKey: "builtInAssistantsSeeded")
-            }
+            // No-op: built-in assistants are no longer seeded
         }
     }
     

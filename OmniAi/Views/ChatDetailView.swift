@@ -12,8 +12,11 @@ struct ChatDetailView: View {
     
     @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
     @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
+    @AppStorage("autoRenameInterval") private var autoRenameInterval: Int = 2
+    @AppStorage("autoRenameModelId") private var autoRenameModelId: String = ""
+    @AppStorage("autoRenameAPIKeyID") private var autoRenameAPIKeyID: String = ""
+    @AppStorage("autoRenamePrompt") private var autoRenamePrompt: String = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
-    @Query(filter: #Predicate<Assistant> { $0.isBuiltIn == true }) private var builtInAssistants: [Assistant]
     
     var sortedMessages: [ChatMessage] {
         session.messages.sorted { $0.createdAt < $1.createdAt }
@@ -28,12 +31,20 @@ struct ChatDetailView: View {
     @StateObject private var keyboardObserver = KeyboardObserver()
 #endif
     
-    private var activeChannel: APIKeys? {
-        apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
+    private var effectiveChannelId: String {
+        session.assistant?.channelId ?? activeAPIKeyID
     }
     
-    private var quickAssistant: Assistant? {
-        builtInAssistants.first(where: { $0.name == "快速任务助手" })
+    private var effectiveModelId: String {
+        session.assistant?.modelId ?? defaultModelId
+    }
+    
+    private var effectiveChannel: APIKeys? {
+        apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
+    }
+    
+    private var activeChannel: APIKeys? {
+        apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
     }
     
     private func bubbleView(for message: ChatMessage) -> MessageBubbleView {
@@ -68,9 +79,9 @@ struct ChatDetailView: View {
                             toDelete.contains { $0.id == m.id }
                         }
                     }
-                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session, modelId: defaultModelId)
+                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session, modelId: effectiveModelId)
                     session.messages.append(newUserMsg)
-                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session, modelId: defaultModelId)
+                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session, modelId: effectiveModelId)
                     session.messages.append(newAssistantMsg)
                     fetchAIResponse(for: newAssistantMsg)
                 } else {
@@ -134,13 +145,13 @@ struct ChatDetailView: View {
                         Image(systemName: "chevron.down")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        if let channel = activeChannel {
+                        if let channel = effectiveChannel {
                             VStack(alignment: .center, spacing: 1) {
-                                Text("\(channel.name) / \(defaultModelId)")
+                                Text("\(channel.name) / \(effectiveModelId)")
                                     .font(.footnote)
                                     .fontWeight(.medium)
                                     .lineLimit(1)
-                                CapabilityRowView(capabilities: ModelCapability.effective(for: defaultModelId, cached: activeChannel?.cachedCapabilities ?? [:]))
+                                CapabilityRowView(capabilities: ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]))
                             }
                         } else {
                             Text("选择模型")
@@ -182,8 +193,14 @@ struct ChatDetailView: View {
         .sheet(isPresented: $showModelProviderSheet) {
             ModelProviderSheet(
                 apiKeys: Array(apiKeys),
-                activeAPIKeyID: $activeAPIKeyID,
-                defaultModelId: $defaultModelId
+                activeAPIKeyID: Binding(
+                    get: { session.assistant?.channelId ?? activeAPIKeyID },
+                    set: { session.assistant?.channelId = $0 }
+                ),
+                defaultModelId: Binding(
+                    get: { session.assistant?.modelId ?? defaultModelId },
+                    set: { session.assistant?.modelId = $0 }
+                )
             )
         }
         .sheet(item: $editingMessage) { message in
@@ -216,11 +233,11 @@ struct ChatDetailView: View {
     private func sendMessage(_ text: String) {
         guard !text.isEmpty else { return }
         
-        let userMessage = ChatMessage(content: text, role: .user, session: session, modelId: defaultModelId)
+        let userMessage = ChatMessage(content: text, role: .user, session: session, modelId: effectiveModelId)
         session.messages.append(userMessage)
         session.lastModified = Date()
         
-        let assistantMessage = ChatMessage(content: "", role: .assistant, session: session, modelId: defaultModelId)
+        let assistantMessage = ChatMessage(content: "", role: .assistant, session: session, modelId: effectiveModelId)
         session.messages.append(assistantMessage)
         
         fetchAIResponse(for: assistantMessage)
@@ -229,7 +246,7 @@ struct ChatDetailView: View {
     private func fetchAIResponse(for assistantMessage: ChatMessage) {
         isGenerating = true
         
-        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID }),
+        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId }),
               let apiKeyString = activeKey.key, !apiKeyString.isEmpty else {
             assistantMessage.content = "⚠️ 错误：未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。"
             isGenerating = false
@@ -256,13 +273,13 @@ struct ChatDetailView: View {
             let startTime = Date()
             var hasReceivedFirstChunk = false
             
-            let effectiveModelId = session.assistant?.modelId ?? defaultModelId
+            let modelId = effectiveModelId
             
             let stream = LLMService.shared.sendMessageStream(
                 messages: history,
                 apiKey: apiKeyString,
                 baseURL: activeKey.requestURL,
-                modelId: effectiveModelId,
+                modelId: modelId,
                 temperature: temperature
             )
             
@@ -298,42 +315,58 @@ struct ChatDetailView: View {
                 session.lastModified = Date()
             }
             
-            if let qa = quickAssistant, qa.renameInterval > 0 {
+            if autoRenameInterval > 0 {
                 let rounds = session.messages.filter { $0.role == .user }.count
-                if session.title == "新对话" || (rounds > 0 && rounds % qa.renameInterval == 0) {
-                    await autoTitle(using: qa)
+                if session.title == "新对话" || (rounds > 0 && rounds % autoRenameInterval == 0) {
+                    await autoTitle()
                 }
             }
         }
     }
     
-    private func autoTitle(using quickAssist: Assistant) async {
-        guard let activeKey = activeChannel, let keyString = activeKey.key, !keyString.isEmpty else { return }
+    private func autoTitle() async {
+        let channel: APIKeys
+        if autoRenameAPIKeyID.isEmpty {
+            guard let effective = effectiveChannel else { return }
+            channel = effective
+        } else {
+            guard let rename = apiKeys.first(where: { $0.id.uuidString == autoRenameAPIKeyID }),
+                  let _ = rename.key, !rename.key!.isEmpty else { return }
+            channel = rename
+        }
         
-        let lastTwo = session.messages
+        guard let keyString = channel.key, !keyString.isEmpty else { return }
+        
+        let recent = session.messages
             .filter { $0.role == .user || $0.role == .assistant }
             .suffix(4)
             .map { "[\($0.role == .user ? "用户" : "助手")]: \($0.content.prefix(300))" }
             .joined(separator: "\n")
         
-        let titlePrompt = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
+        let titlePrompt = autoRenamePrompt
         
         let messages: [(role: String, content: String)] = [
             ("system", titlePrompt),
-            ("user", "对话内容：\n\(lastTwo)")
+            ("user", "对话内容：\n\(recent)")
         ]
         
-        let modelId = (quickAssist.modelId ?? "").isEmpty ? defaultModelId : quickAssist.modelId!
+        let modelId = autoRenameModelId.isEmpty ? effectiveModelId : autoRenameModelId
         
         do {
-            let title = try await LLMService.shared.sendMessageCompletion(
+            let raw = try await LLMService.shared.sendMessageCompletion(
                 messages: messages,
                 apiKey: keyString,
-                baseURL: activeKey.requestURL,
+                baseURL: channel.requestURL,
                 modelId: modelId,
                 temperature: 0.3
             )
-            let lines = title.split(separator: "\n")
+            // Strip <think> tags from reasoning model outputs
+            let stripped = raw.replacingOccurrences(
+                of: "(?s)<think>.*?</think>",
+                with: "",
+                options: .regularExpression
+            )
+            let lines = stripped.split(separator: "\n")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty && $0.count <= 25 }
             let titleLine = lines.last ?? lines.first ?? ""

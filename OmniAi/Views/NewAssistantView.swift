@@ -4,6 +4,8 @@ import SwiftData
 struct NewAssistantView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
+    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
     
     @State private var name: String = ""
     
@@ -24,7 +26,11 @@ struct NewAssistantView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("创建") {
-                        let assistant = Assistant(name: name.trimmingCharacters(in: .whitespacesAndNewlines))
+                        let assistant = Assistant(
+                            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                            channelId: activeAPIKeyID.isEmpty ? nil : activeAPIKeyID,
+                            modelId: defaultModelId.isEmpty ? nil : defaultModelId
+                        )
                         modelContext.insert(assistant)
                         dismiss()
                     }

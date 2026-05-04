@@ -5,6 +5,7 @@ struct AssistantSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
+    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
     @Bindable var assistant: Assistant
@@ -13,21 +14,18 @@ struct AssistantSettingsView: View {
     @State private var showTempInput = false
     @State private var contextInputText = ""
     @State private var tempInputText = ""
-    @State private var showModelSheet = false
-    @State private var modelPickerModels: [ModelInfo] = []
-    @State private var isFetchingModels = false
+    @State private var showModelProviderSheet = false
     
-    private var modelDisplayName: String {
-        let mid = assistant.modelId ?? defaultModelId
-        if mid.isEmpty { return defaultModelId }
-        return mid
+    private var effectiveChannelId: String {
+        assistant.channelId ?? activeAPIKeyID
     }
     
-    private var selectedModelBinding: Binding<String> {
-        Binding(
-            get: { assistant.modelId ?? defaultModelId },
-            set: { assistant.modelId = $0 }
-        )
+    private var effectiveModelId: String {
+        assistant.modelId ?? defaultModelId
+    }
+    
+    private var effectiveChannel: APIKeys? {
+        apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
     }
     
     var body: some View {
@@ -43,36 +41,27 @@ struct AssistantSettingsView: View {
                 }
                 
                 Section(header: Text("模型")) {
-                    HStack {
-                        Text(modelDisplayName)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if isFetchingModels {
-                            ProgressView()
-                        } else {
-                            Button(action: fetchAndShowModels) {
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .foregroundStyle(.blue)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-                
-                if assistant.isBuiltIn {
-                    Section(header: Text("自动重命名"), footer: Text("每 N 轮对话后使用此助手自动生成标题。0=禁用")) {
+                    Button(action: { showModelProviderSheet = true }) {
                         HStack {
-                            Text("间隔（轮）")
+                            if let channel = effectiveChannel {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(channel.name) / \(effectiveModelId)")
+                                        .foregroundStyle(.primary)
+                                        .font(.subheadline)
+                                    CapabilityRowView(capabilities: ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]))
+                                }
+                            } else {
+                                Text(effectiveModelId)
+                                    .foregroundStyle(.primary)
+                            }
                             Spacer()
-                            TextField("", value: $assistant.renameInterval, format: .number)
-                                .multilineTextAlignment(.trailing)
-                                .keyboardType(.numberPad)
-                                .frame(width: 60)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
                 
-                if !assistant.isBuiltIn {
                     Section(header: Text("模型参数")) {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -125,7 +114,6 @@ struct AssistantSettingsView: View {
                             Label("删除此助手", systemImage: "trash")
                         }
                     }
-                }
             }
             .navigationTitle("编辑助手")
 #if os(iOS)
@@ -166,36 +154,18 @@ struct AssistantSettingsView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showModelSheet) {
-                ModelSelectionSheet(
-                    models: modelPickerModels,
-                    selectedModel: selectedModelBinding,
-                    cachedCapabilities: [:]
+            .sheet(isPresented: $showModelProviderSheet) {
+                ModelProviderSheet(
+                    apiKeys: Array(apiKeys),
+                    activeAPIKeyID: Binding(
+                        get: { assistant.channelId ?? activeAPIKeyID },
+                        set: { assistant.channelId = $0 }
+                    ),
+                    defaultModelId: Binding(
+                        get: { assistant.modelId ?? defaultModelId },
+                        set: { assistant.modelId = $0 }
+                    )
                 )
-            }
-        }
-    }
-    
-    private func fetchAndShowModels() {
-        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == UserDefaults.standard.string(forKey: "activeAPIKeyID") ?? "" }),
-              let keyString = activeKey.key, !keyString.isEmpty else {
-            modelPickerModels = []
-            showModelSheet = true
-            return
-        }
-        isFetchingModels = true
-        Task {
-            do {
-                let models = try await LLMService.shared.fetchAvailableModels(apiKey: keyString, baseURL: activeKey.requestURL)
-                await MainActor.run {
-                    modelPickerModels = models
-                    isFetchingModels = false
-                    showModelSheet = true
-                }
-            } catch {
-                await MainActor.run {
-                    isFetchingModels = false
-                }
             }
         }
     }
