@@ -71,6 +71,7 @@ struct ChatInputBar: View{
                             .padding(8)
                             .background(Circle().fill(Color.gray.opacity(0.1)))
                     }
+                    .compositingGroup()
                     
                     Spacer()
                     
