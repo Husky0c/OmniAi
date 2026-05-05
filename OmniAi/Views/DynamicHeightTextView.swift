@@ -10,7 +10,10 @@ class IntrinsicTextView: UITextView {
         let width = max(frame.width, 100)
         let fittingSize = CGSize(width: width, height: UIView.layoutFittingCompressedSize.height)
         let size = sizeThatFits(fittingSize)
-        isScrollEnabled = size.height >= maxHeight
+        let shouldScroll = size.height >= maxHeight
+        if isScrollEnabled != shouldScroll {
+            isScrollEnabled = shouldScroll
+        }
         return CGSize(width: UIView.noIntrinsicMetric, height: min(size.height, maxHeight))
     }
 }
