@@ -756,6 +756,7 @@ struct ThinkingBlockView: View {
     let thinkingText: String
     let isStreaming: Bool
     @State private var isExpanded = false
+    @State private var scrollTrigger = PassthroughSubject<Void, Never>()
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -800,6 +801,9 @@ struct ThinkingBlockView: View {
                     }
                     .frame(height: 80)
                     .onChange(of: thinkingText) { _, _ in
+                        scrollTrigger.send()
+                    }
+                    .onReceive(scrollTrigger.debounce(for: .seconds(0.1), scheduler: RunLoop.main)) { _ in
                         withAnimation {
                             proxy.scrollTo("thinkingBottom", anchor: .bottom)
                         }
