@@ -24,10 +24,6 @@ struct ChatDetailView: View {
     @State private var showModelProviderSheet: Bool = false
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
-    @State private var bottomPadding: CGFloat = 0
-#if canImport(UIKit)
-    @StateObject private var keyboardObserver = KeyboardObserver()
-#endif
     
     private var effectiveChannelId: String {
         session.assistant?.channelId ?? activeAPIKeyID
@@ -105,8 +101,8 @@ struct ChatDetailView: View {
                         }
                     }
                     .padding()
-                    .padding(.bottom, bottomPadding)
                 }
+                .defaultScrollAnchor(.bottom)
                 .contentShape(Rectangle())
                 .onTapGesture {
 #if canImport(UIKit)
@@ -116,29 +112,22 @@ struct ChatDetailView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .onAppear {
                     sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
-                    DispatchQueue.main.async {
-                        if let lastID = sortedMessages.last?.id {
+                    if let lastID = sortedMessages.last?.id {
+                        scrollProxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                }
+                .onChange(of: session.messages.count) { _, _ in
+                    sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
+                    if let lastID = sortedMessages.last?.id {
+                        withAnimation {
                             scrollProxy.scrollTo(lastID, anchor: .bottom)
                         }
                     }
                 }
-#if canImport(UIKit)
-                .onChange(of: keyboardObserver.keyboardHeight) { _, newHeight in
-                    withAnimation(keyboardObserver.keyboardAnimation ?? .easeOut(duration: 0.25)) {
-                        bottomPadding = newHeight
-                        if let lastID = sortedMessages.last?.id {
-                            scrollProxy.scrollTo(lastID, anchor: .bottom)
-                        }
-                    }
-                }
-#endif
             }
             
             ChatInputBar(onSend: sendMessage)
                 .disabled(isGenerating)
-        }
-        .onChange(of: session.messages.count) { _, _ in
-            sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -905,41 +894,4 @@ struct CapabilityEditSheet: View {
     }
 }
 
-#if canImport(UIKit)
-import UIKit
-import Combine
 
-final class KeyboardObserver: ObservableObject {
-    @Published var keyboardHeight: CGFloat = 0
-    @Published var keyboardAnimation: Animation? = nil
-    private var cancellables = Set<AnyCancellable>()
-    
-    init() {
-        NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
-            .merge(with: NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification))
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] notification in
-                guard let self,
-                      let userInfo = notification.userInfo,
-                      let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
-                else { return }
-                let screenHeight = UIScreen.main.bounds.height
-                self.keyboardHeight = max(0, screenHeight - endFrame.origin.y)
-                
-                let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-                let rawCurve = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int ?? UIView.AnimationCurve.easeInOut.rawValue
-                let curve = UIView.AnimationCurve(rawValue: rawCurve) ?? .easeInOut
-                let animation: Animation
-                switch curve {
-                case .easeInOut: animation = .easeInOut(duration: duration)
-                case .easeIn: animation = .easeIn(duration: duration)
-                case .easeOut: animation = .easeOut(duration: duration)
-                case .linear: animation = .linear(duration: duration)
-                @unknown default: animation = .easeInOut(duration: duration)
-                }
-                self.keyboardAnimation = animation
-            }
-            .store(in: &cancellables)
-    }
-}
-#endif

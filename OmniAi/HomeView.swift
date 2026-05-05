@@ -60,6 +60,7 @@ struct MainStageView: View {
                         onToggleSidebar: onToggleSidebar,
                         onOpenSettings: onOpenSettings
                     )
+                    .id(session.id)
                 } else {
                     ContentUnavailableView(
                         "没有选中的对话",
