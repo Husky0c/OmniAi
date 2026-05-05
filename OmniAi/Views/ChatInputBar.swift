@@ -7,9 +7,12 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 struct ChatInputBar: View{
     var onSend: ((String) -> Void)?
+    
+    private let logger = Logger(subsystem: "com.omniai.ui", category: "ChatInputBar")
     
     @State private var messageText: String = ""
 #if canImport(UIKit)
@@ -43,9 +46,25 @@ struct ChatInputBar: View{
 #endif
                 
                 HStack {
-                    Button(action: {
-                        print("打开附件菜单")
-                    }){
+                    Menu {
+                        Button(action: {
+                            logger.debug("选择文件")
+                        }) {
+                            Label("文件", systemImage: "doc")
+                        }
+                        
+                        Button(action: {
+                            logger.debug("选择照片")
+                        }) {
+                            Label("照片", systemImage: "photo")
+                        }
+                        
+                        Button(action: {
+                            logger.debug("打开相机")
+                        }) {
+                            Label("相机", systemImage: "camera")
+                        }
+                    } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 15))
                             .foregroundStyle(.primary)
@@ -60,7 +79,7 @@ struct ChatInputBar: View{
                             onSend?(messageText)
                             messageText = ""
                         }else{
-                            print("开始语音")
+                            logger.debug("开始语音")
                         }
                     }){
                         Image(systemName: hasText ? "arrow.up" : "mic.fill")

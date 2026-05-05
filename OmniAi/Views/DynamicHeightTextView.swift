@@ -63,11 +63,15 @@ struct DynamicHeightTextView: UIViewRepresentable {
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
-            isFocused = true
+            DispatchQueue.main.async {
+                self.isFocused = true
+            }
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            isFocused = false
+            DispatchQueue.main.async {
+                self.isFocused = false
+            }
         }
     }
 
