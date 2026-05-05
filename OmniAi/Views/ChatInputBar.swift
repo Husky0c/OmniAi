@@ -8,14 +8,15 @@
 import SwiftUI
 import SwiftData
 
-
 struct ChatInputBar: View{
     var onSend: ((String) -> Void)?
     
-    // 1. 记录用户输入的内容
     @State private var messageText: String = ""
-    // 2. 状态管理：是否正在输入（控制按钮是发送还是麦克风）
+#if canImport(UIKit)
+    @State private var isFocused: Bool = false
+#else
     @FocusState private var isFocused: Bool
+#endif
     
     private var hasText: Bool {
         !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -23,24 +24,26 @@ struct ChatInputBar: View{
     
     var body: some View{
         VStack(spacing: 8){
-            // 预留位置：如果选中了图片，可以在这里展示预览
-            // SelectedImagesPreviewView()
-            
-            // 输入区
             VStack(spacing: 4){
-                // 输入框
+#if canImport(UIKit)
+                DynamicHeightTextView(
+                    text: $messageText,
+                    placeholder: "聊你所想",
+                    isFocused: $isFocused
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 38)
+#else
                 TextField("聊你所想", text: $messageText, axis: .vertical)
                     .focused($isFocused)
                     .padding(.top, 16)
                     .padding(.bottom, 8)
                     .padding(.horizontal, 14)
                     .lineLimit(1...5)
+#endif
                 
-                // 按钮栏
                 HStack {
-                    // 左侧附件按钮
                     Button(action: {
-                        // TODO: 打开相册或文件选择器
                         print("打开附件菜单")
                     }){
                         Image(systemName: "plus")
@@ -52,14 +55,11 @@ struct ChatInputBar: View{
                     
                     Spacer()
                     
-                    // 右侧发送/语音按钮
                     Button(action: {
                         if hasText{
-                            // TODO: 执行发送逻辑，然后清空输入框
                             onSend?(messageText)
                             messageText = ""
                         }else{
-                            // TODO: 语音输入逻辑
                             print("开始语音")
                         }
                     }){
@@ -74,7 +74,6 @@ struct ChatInputBar: View{
                 .padding(.horizontal, 10)
                 .padding(.bottom, 8)
             }
-
         }
         .containerRelativeFrame(.horizontal) { length, _ in
             min(length * 0.92, 600)
@@ -82,11 +81,10 @@ struct ChatInputBar: View{
         .background(
             RoundedRectangle(cornerRadius: 24)
                 .fill(.regularMaterial)
-                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+                .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 2)
                 .overlay(
                     RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
-                        .blendMode(.overlay)
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 0.5)
                 )
         )
         .padding(.horizontal, 16)

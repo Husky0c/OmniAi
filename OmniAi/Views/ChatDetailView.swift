@@ -18,9 +18,7 @@ struct ChatDetailView: View {
     @AppStorage("autoRenamePrompt") private var autoRenamePrompt: String = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
-    var sortedMessages: [ChatMessage] {
-        session.messages.sorted { $0.createdAt < $1.createdAt }
-    }
+    @State private var sortedMessages: [ChatMessage] = []
     
     @State private var isGenerating: Bool = false
     @State private var showModelProviderSheet: Bool = false
@@ -117,6 +115,7 @@ struct ChatDetailView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onAppear {
+                    sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
                     DispatchQueue.main.async {
                         if let lastID = sortedMessages.last?.id {
                             scrollProxy.scrollTo(lastID, anchor: .bottom)
@@ -137,6 +136,9 @@ struct ChatDetailView: View {
             
             ChatInputBar(onSend: sendMessage)
                 .disabled(isGenerating)
+        }
+        .onChange(of: session.messages.count) { _, _ in
+            sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -293,10 +295,8 @@ struct ChatDetailView: View {
                                 assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
                             }
                             assistantMessage.content += text
-                            session.lastModified = Date()
                         case .thinking(let text):
                             assistantMessage.thinkingContent = (assistantMessage.thinkingContent ?? "") + text
-                            session.lastModified = Date()
                         case .usage(let promptTokens, let completionTokens, let totalTokens):
                             assistantMessage.promptTokens = promptTokens
                             assistantMessage.completionTokens = completionTokens
