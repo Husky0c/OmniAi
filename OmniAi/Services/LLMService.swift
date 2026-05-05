@@ -8,12 +8,28 @@ enum LLMStreamEvent {
     case usage(promptTokens: Int, completionTokens: Int, totalTokens: Int)
 }
 
+struct ThinkingConfig: Codable {
+    var type: String?
+    var budget_tokens: Int?
+}
+
+struct ReasoningParams: Codable {
+    var reasoning_effort: String?
+    var thinking: ThinkingConfig?
+    var enable_thinking: Bool?
+    var thinking_budget: Int?
+}
+
 struct OpenAIChatRequest: Codable {
     let model: String
     let messages: [OpenAIMessage]
     let stream: Bool
     let temperature: Double?
     let stream_options: StreamOptions?
+    var reasoning_effort: String?
+    var thinking: ThinkingConfig?
+    var enable_thinking: Bool?
+    var thinking_budget: Int?
     
     struct StreamOptions: Codable {
         let include_usage: Bool
@@ -129,7 +145,7 @@ struct ModelCapability: Codable, Hashable {
     var hasAny: Bool { webSearch || reasoning || toolCalling || vision }
     
     static let defaultRules: [CapabilityKey: [String]] = [
-        .reasoning: ["o1|o3|o4|reasoning|thinks|thinking|r1|qwq|grok-3-mini|deep-think|deepseek-r1|claude-3\\.5-haiku"],
+        .reasoning: ["o1|o3|o4|reasoning|thinks|thinking|r1|qwq|grok|deep-think|deepseek|claude-3[.-]|claude-4|gemini-2\\.5"],
         .vision: ["vision|gpt-4o|claude-3[.-]|gemini.*(flash|pro|vision)|qwen-vl|pixtral|llava|cogvlm|phi-*vision|mistral.*vision"],
         .toolCalling: ["gpt|claude|qwen|gemini|deepseek|mistral|llama|command|yi-|glm|ministral|phi|grok|ernie|hunyuan|moonshot|step-|abab|minimax"],
         .webSearch: ["search-preview|gemini|sonar|perplexity|search"],
@@ -282,7 +298,7 @@ class LLMService {
         }
     }
     
-    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
@@ -296,13 +312,24 @@ class LLMService {
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
         let openAIMessages = messages.map { OpenAIMessage(role: $0.role, content: $0.content) }
-        let chatRequest = OpenAIChatRequest(
+        var chatRequest = OpenAIChatRequest(
             model: modelId,
             messages: openAIMessages,
             stream: true,
             temperature: temperature,
             stream_options: OpenAIChatRequest.StreamOptions(include_usage: true)
         )
+        
+        let reasoningParams = ReasoningConfigBuilder.build(
+            apiType: apiType,
+            baseURL: baseURL,
+            modelId: modelId,
+            effort: reasoningEffort
+        )
+        chatRequest.reasoning_effort = reasoningParams.reasoning_effort
+        chatRequest.thinking = reasoningParams.thinking
+        chatRequest.enable_thinking = reasoningParams.enable_thinking
+        chatRequest.thinking_budget = reasoningParams.thinking_budget
         
         do {
             request.httpBody = try JSONEncoder().encode(chatRequest)
@@ -351,6 +378,8 @@ class LLMService {
                     }
                     
                     var hasReceivedContent = false
+                    var isInThinkTag = false
+                    var thinkTagBuffer = ""
                     
                     for try await line in result.lines {
                         let prefix = "data: "
@@ -374,26 +403,94 @@ class LLMService {
                                 if !thinking.isEmpty {
                                     continuation.yield(.thinking(thinking))
                                 }
-                            } else if let content = streamResponse.choices?.first?.delta.content {
-                                if !hasReceivedContent {
-                                    hasReceivedContent = true
-                                    let trimmed = content.trimmingCharacters(in: CharacterSet.newlines.union(.whitespaces))
-                                    if !trimmed.isEmpty {
-                                        continuation.yield(.chunk(trimmed))
-                                    }
-                            } else {
-                                continuation.yield(.chunk(content))
+                            } else if let rawContent = streamResponse.choices?.first?.delta.content {
+                                processThinkTaggedContent(rawContent, hasReceivedContent: &hasReceivedContent, isInThinkTag: &isInThinkTag, buffer: &thinkTagBuffer, yield: { continuation.yield($0) })
                             }
                         }
                     }
+                    logger.debug("✅ 流式请求完成")
+                    continuation.finish()
+                } catch {
+                    logger.error("❌ 流式请求异常: \(error.localizedDescription)")
+                    continuation.finish(throwing: error)
                 }
-                logger.debug("✅ 流式请求完成")
-                continuation.finish()
-            } catch {
-                logger.error("❌ 流式请求异常: \(error.localizedDescription)")
-                continuation.finish(throwing: error)
             }
         }
+    }
+    
+    private func processThinkTaggedContent(_ raw: String, hasReceivedContent: inout Bool, isInThinkTag: inout Bool, buffer: inout String, yield: (LLMStreamEvent) -> Void) {
+        var remaining = raw
+        while !remaining.isEmpty {
+            if isInThinkTag {
+                if let endRange = remaining.range(of: "</think>") {
+                    let thinking = String(remaining[remaining.startIndex..<endRange.lowerBound])
+                    if !thinking.isEmpty {
+                        yield(.thinking(thinking))
+                    }
+                    isInThinkTag = false
+                    remaining = String(remaining[endRange.upperBound...])
+                    if !remaining.isEmpty {
+                        let trimmed = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            hasReceivedContent = true
+                            yield(.chunk(trimmed))
+                        }
+                    }
+                } else if let endRange = remaining.range(of: "</thought>") {
+                    let thinking = String(remaining[remaining.startIndex..<endRange.lowerBound])
+                    if !thinking.isEmpty {
+                        yield(.thinking(thinking))
+                    }
+                    isInThinkTag = false
+                    remaining = String(remaining[endRange.upperBound...])
+                    if !remaining.isEmpty {
+                        let trimmed = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            hasReceivedContent = true
+                            yield(.chunk(trimmed))
+                        }
+                    }
+                } else {
+                    buffer += remaining
+                    yield(.thinking(remaining))
+                    remaining = ""
+                }
+            } else {
+                if let startRange = remaining.range(of: "<think>") {
+                    let before = String(remaining[remaining.startIndex..<startRange.lowerBound])
+                    if !before.isEmpty {
+                        let trimmed = before.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            hasReceivedContent = true
+                            yield(.chunk(trimmed))
+                        }
+                    }
+                    isInThinkTag = true
+                    remaining = String(remaining[startRange.upperBound...])
+                } else if let startRange = remaining.range(of: "<thought>") {
+                    let before = String(remaining[remaining.startIndex..<startRange.lowerBound])
+                    if !before.isEmpty {
+                        let trimmed = before.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            hasReceivedContent = true
+                            yield(.chunk(trimmed))
+                        }
+                    }
+                    isInThinkTag = true
+                    remaining = String(remaining[startRange.upperBound...])
+                } else {
+                    if !hasReceivedContent {
+                        hasReceivedContent = true
+                        let trimmed = remaining.trimmingCharacters(in: CharacterSet.newlines.union(.whitespaces))
+                        if !trimmed.isEmpty {
+                            yield(.chunk(trimmed))
+                        }
+                    } else {
+                        yield(.chunk(remaining))
+                    }
+                    remaining = ""
+                }
+            }
         }
     }
     

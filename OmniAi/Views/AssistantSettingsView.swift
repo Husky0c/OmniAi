@@ -92,6 +92,14 @@ struct AssistantSettingsView: View {
                         
                         Toggle("流式输出", isOn: $assistant.streamEnabled)
                         
+                        if ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]).reasoning {
+                            Picker("思考强度", selection: $assistant.reasoningEffort) {
+                                ForEach(ReasoningEffortOption.allCases, id: \.rawValue) { option in
+                                    Text(option.displayName).tag(option.rawValue)
+                                }
+                            }
+                        }
+                        
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text("模型温度")

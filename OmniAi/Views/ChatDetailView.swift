@@ -271,7 +271,9 @@ struct ChatDetailView: View {
                 apiKey: apiKeyString,
                 baseURL: activeKey.requestURL,
                 modelId: modelId,
-                temperature: temperature
+                temperature: temperature,
+                reasoningEffort: session.assistant?.reasoningEffort,
+                apiType: activeKey.apiType
             )
             
             do {

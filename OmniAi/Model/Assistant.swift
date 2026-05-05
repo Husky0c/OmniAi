@@ -13,6 +13,7 @@ final class Assistant {
     var isBuiltIn: Bool = false
     var channelId: String? = nil
     var modelId: String? = nil
+    var reasoningEffort: String = "default"
     
     @Relationship(deleteRule: .cascade)
     var sessions: [ChatSession] = []
