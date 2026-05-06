@@ -14,6 +14,7 @@ struct OmniAiApp: App {
         let schema = Schema([
             ChatSession.self,
             ChatMessage.self,
+            MessageAttachment.self,
             APIKeys.self,
             Assistant.self
         ])

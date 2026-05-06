@@ -3,6 +3,9 @@ import SwiftData
 import MarkdownUI
 import Combine
 import UIKit
+#if canImport(PDFKit)
+import PDFKit
+#endif
 
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -221,10 +224,15 @@ struct ChatDetailView: View {
         }
     }
     
-    private func sendMessage(_ text: String) {
-        guard !text.isEmpty else { return }
+    private func sendMessage(_ text: String, attachments: [InputAttachment] = []) {
+        guard !text.isEmpty || !attachments.isEmpty else { return }
         
         let userMessage = ChatMessage(content: text, role: .user, session: session, modelId: effectiveModelId)
+        if !attachments.isEmpty {
+            userMessage.attachments = attachments.map { input in
+                MessageAttachment(type: input.type, name: input.name, data: input.data)
+            }
+        }
         session.messages.append(userMessage)
         session.lastModified = Date()
         
@@ -253,21 +261,57 @@ struct ChatDetailView: View {
                 allMessages = Array(allMessages.suffix(assistant.contextCount))
             }
             
+            var aiMessages: [OpenAIMessage] = []
+            
             if let assistant = session.assistant, !assistant.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let systemMsg = ChatMessage(content: assistant.systemPrompt, role: .system)
-                allMessages.insert(systemMsg, at: 0)
+                aiMessages.append(OpenAIMessage(role: "system", content: .text(assistant.systemPrompt)))
             }
             
-            let history = allMessages.map { (role: $0.role.rawValue, content: $0.content) }
-            let temperature = session.assistant?.temperature
+            for msg in allMessages {
+                let role = msg.role.rawValue
+                let atts = msg.attachments ?? []
+                let imageAttachments = atts.filter { $0.type == .image }
+                let nonImageAttachments = atts.filter { $0.type != .image }
+                
+                if imageAttachments.isEmpty {
+                    var finalContent = msg.content
+                    for attachment in nonImageAttachments {
+                        if let extracted = extractText(from: attachment) {
+                            finalContent = "[\(attachment.name)]\n\(extracted)\n\n" + finalContent
+                        }
+                    }
+                    aiMessages.append(OpenAIMessage(role: role, content: .text(finalContent)))
+                } else {
+                    var parts: [ContentPart] = []
+                    var textContent = msg.content
+                    for attachment in nonImageAttachments {
+                        if let extracted = extractText(from: attachment) {
+                            textContent = "[文件: \(attachment.name)]\n\(extracted)\n\n" + textContent
+                        }
+                    }
+                    if !textContent.isEmpty {
+                        parts.append(.text(textContent))
+                    }
+                    for attachment in imageAttachments {
+                        if let data = attachment.data {
+                            let base64 = data.base64EncodedString()
+                            let ext = URL(fileURLWithPath: attachment.name).pathExtension.lowercased()
+                            let mimeType = ext == "png" ? "image/png" : "image/jpeg"
+                            let url = "data:\(mimeType);base64,\(base64)"
+                            parts.append(.image(url: url, detail: "auto"))
+                        }
+                    }
+                    aiMessages.append(OpenAIMessage(role: role, content: .parts(parts)))
+                }
+            }
             
+            let temperature = session.assistant?.temperature
             let startTime = Date()
             var hasReceivedFirstChunk = false
-            
             let modelId = effectiveModelId
             
             let stream = LLMService.shared.sendMessageStream(
-                messages: history,
+                messages: aiMessages,
                 apiKey: apiKeyString,
                 baseURL: activeKey.requestURL,
                 modelId: modelId,
@@ -315,6 +359,31 @@ struct ChatDetailView: View {
         }
     }
     
+    private func extractText(from attachment: MessageAttachment) -> String? {
+        guard let data = attachment.data else { return nil }
+        switch attachment.type {
+        case .text:
+            return String(data: data, encoding: .utf8)
+        case .pdf:
+#if canImport(PDFKit)
+            let doc = PDFDocument(data: data)
+            return doc?.string
+#else
+            return nil
+#endif
+        case .document:
+            if let attrStr = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil) {
+                return attrStr.string
+            }
+            if let attrStr = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.rtfd], documentAttributes: nil) {
+                return attrStr.string
+            }
+            return String(data: data, encoding: .utf8)
+        default:
+            return nil
+        }
+    }
+
     private func autoTitle() async {
         let channel: APIKeys
         if autoRenameAPIKeyID.isEmpty {
@@ -336,9 +405,9 @@ struct ChatDetailView: View {
         
         let titlePrompt = autoRenamePrompt
         
-        let messages: [(role: String, content: String)] = [
-            ("system", titlePrompt),
-            ("user", "对话内容：\n\(recent)")
+        let messages: [OpenAIMessage] = [
+            OpenAIMessage(role: "system", content: .text(titlePrompt)),
+            OpenAIMessage(role: "user", content: .text("对话内容：\n\(recent)"))
         ]
         
         let modelId = autoRenameModelId.isEmpty ? effectiveModelId : autoRenameModelId
@@ -623,20 +692,37 @@ struct MessageBubbleView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 14)
                     } else {
-                        Markdown(message.content)
-                            .textSelection(.enabled)
-                            .padding(12)
-                            .markdownTextStyle {
-                                ForegroundColor(isUser ? .white : .primary)
-                            }
-                            .markdownTheme(
-                                Theme.basic.bulletedListMarker { configuration in
-                                    let markers = ["•", "◦", "▪"]
-                                    let marker = markers[min(configuration.listLevel, markers.count) - 1]
-                                    Text(marker)
-                                        .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+                        VStack(alignment: .leading, spacing: 4) {
+                            let imageAttachments = (message.attachments ?? []).filter { $0.type == .image }
+                            if !imageAttachments.isEmpty {
+                                ForEach(imageAttachments) { att in
+                                    if let data = att.data, let uiImage = UIImage(data: data) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(maxHeight: 200)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            .padding(.horizontal, 12)
+                                            .padding(.top, 8)
+                                    }
                                 }
-                            )
+                            }
+                            
+                            Markdown(message.content)
+                                .textSelection(.enabled)
+                                .padding(12)
+                                .markdownTextStyle {
+                                    ForegroundColor(isUser ? .white : .primary)
+                                }
+                                .markdownTheme(
+                                    Theme.basic.bulletedListMarker { configuration in
+                                        let markers = ["•", "◦", "▪"]
+                                        let marker = markers[min(configuration.listLevel, markers.count) - 1]
+                                        Text(marker)
+                                            .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+                                    }
+                                )
+                        }
                     }
                 }
                 .background(isUser ? Color.blue : Color.gray.opacity(0.2))
@@ -651,23 +737,69 @@ struct MessageBubbleView: View {
                     }
             )
             
-            if !isUser && !message.content.isEmpty, !isGenerating, let latency = message.firstTokenLatency {
-                HStack(spacing: 4) {
+            let nonImageAttachments = (message.attachments ?? []).filter { $0.type != .image }
+            let hasStats = !isUser && !message.content.isEmpty && !isGenerating && message.firstTokenLatency != nil
+            
+            if isUser && !nonImageAttachments.isEmpty {
+                HStack {
                     Spacer()
-                    Button(action: { showStats.toggle() }) {
-                        HStack(spacing: 2) {
-                            Text(String(format: "%.2fs ⚡️", latency))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            if showStats {
-                                Text("• Tokens: \(message.totalTokens ?? 0) (↑\(message.promptTokens ?? 0) ↓\(message.completionTokens ?? 0))")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(nonImageAttachments.reversed()) { att in
+                                Text(att.name)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
-                                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(maxWidth: 120)
+                                    .environment(\.layoutDirection, .leftToRight)
                             }
                         }
+                        .padding(.horizontal, 2)
                     }
-                    .buttonStyle(.plain)
+                    .environment(\.layoutDirection, .rightToLeft)
+                    .frame(maxWidth: 280)
+                }
+                .padding(.trailing, 4)
+            }
+            
+            if !isUser && (!nonImageAttachments.isEmpty || hasStats) {
+                HStack(spacing: 4) {
+                    if !nonImageAttachments.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(nonImageAttachments) { att in
+                                    Text(att.name)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .frame(maxWidth: 120)
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                        }
+                        .frame(maxWidth: hasStats ? 200 : 280)
+                    }
+                    
+                    Spacer()
+                    
+                    if hasStats {
+                        Button(action: { showStats.toggle() }) {
+                            HStack(spacing: 2) {
+                                Text(String(format: "%.2fs ⚡️", message.firstTokenLatency!))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                if showStats {
+                                    Text("• Tokens: \(message.totalTokens ?? 0) (↑\(message.promptTokens ?? 0) ↓\(message.completionTokens ?? 0))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.trailing, 4)
                 .animation(.easeInOut(duration: 0.2), value: showStats)

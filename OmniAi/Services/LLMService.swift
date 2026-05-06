@@ -36,9 +36,87 @@ struct OpenAIChatRequest: Codable {
     }
 }
 
+enum ContentPart: Codable {
+    case text(String)
+    case image(url: String, detail: String = "auto")
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case text
+        case imageUrl = "image_url"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .text(let text):
+            try container.encode("text", forKey: .type)
+            try container.encode(text, forKey: .text)
+        case .image(let url, let detail):
+            try container.encode("image_url", forKey: .type)
+            var imageContainer = container.nestedContainer(keyedBy: ImageUrlCodingKeys.self, forKey: .imageUrl)
+            try imageContainer.encode(url, forKey: .url)
+            try imageContainer.encode(detail, forKey: .detail)
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        switch type {
+        case "text":
+            let text = try container.decode(String.self, forKey: .text)
+            self = .text(text)
+        case "image_url":
+            let imageContainer = try container.nestedContainer(keyedBy: ImageUrlCodingKeys.self, forKey: .imageUrl)
+            let url = try imageContainer.decode(String.self, forKey: .url)
+            let detail = try imageContainer.decodeIfPresent(String.self, forKey: .detail) ?? "auto"
+            self = .image(url: url, detail: detail)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown content part type: \(type)")
+        }
+    }
+
+    enum ImageUrlCodingKeys: String, CodingKey {
+        case url
+        case detail
+    }
+}
+
 struct OpenAIMessage: Codable {
     let role: String
-    let content: String
+    let content: MessageContent
+
+    init(role: String, content: MessageContent) {
+        self.role = role
+        self.content = content
+    }
+}
+
+enum MessageContent: Codable {
+    case text(String)
+    case parts([ContentPart])
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .text(let string):
+            try container.encode(string)
+        case .parts(let parts):
+            try container.encode(parts)
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let string = try? container.decode(String.self) {
+            self = .text(string)
+        } else if let parts = try? container.decode([ContentPart].self) {
+            self = .parts(parts)
+        } else {
+            self = .text("")
+        }
+    }
 }
 
 struct OpenAIStreamResponse: Codable {
@@ -298,7 +376,7 @@ class LLMService {
         }
     }
     
-    func sendMessageStream(messages: [(role: String, content: String)], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+    func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
@@ -311,10 +389,9 @@ class LLMService {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
-        let openAIMessages = messages.map { OpenAIMessage(role: $0.role, content: $0.content) }
         var chatRequest = OpenAIChatRequest(
             model: modelId,
-            messages: openAIMessages,
+            messages: messages,
             stream: true,
             temperature: temperature,
             stream_options: OpenAIChatRequest.StreamOptions(include_usage: true)
@@ -495,7 +572,7 @@ class LLMService {
     }
     
     func sendMessageCompletion(
-        messages: [(role: String, content: String)],
+        messages: [OpenAIMessage],
         apiKey: String,
         baseURL: String?,
         modelId: String,
@@ -511,10 +588,9 @@ class LLMService {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
-        let openAIMessages = messages.map { OpenAIMessage(role: $0.role, content: $0.content) }
         let chatRequest = OpenAIChatRequest(
             model: modelId,
-            messages: openAIMessages,
+            messages: messages,
             stream: false,
             temperature: temperature,
             stream_options: nil

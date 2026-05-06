@@ -12,7 +12,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 struct ChatInputBar: View{
-    var onSend: ((String) -> Void)?
+    var onSend: ((String, [InputAttachment]) -> Void)?
     
     private let logger = Logger(subsystem: "com.omniai.ui", category: "ChatInputBar")
     
@@ -30,8 +30,8 @@ struct ChatInputBar: View{
     @FocusState private var isFocused: Bool
 #endif
     
-    private var hasText: Bool {
-        !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var canSend: Bool {
+        !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
     
     var body: some View{
@@ -85,19 +85,20 @@ struct ChatInputBar: View{
                     Spacer()
                     
                     Button(action: {
-                        if hasText{
-                            onSend?(messageText)
+                        if canSend {
+                            onSend?(messageText, attachments)
                             messageText = ""
-                        }else{
+                            attachments.removeAll()
+                        } else {
                             logger.debug("开始语音")
                         }
                     }){
-                        Image(systemName: hasText ? "arrow.up" : "mic.fill")
+                        Image(systemName: canSend ? "arrow.up" : "mic.fill")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 16, height: 16)
                             .frame(width: 34, height: 34)
-                            .background(Circle().fill(hasText ? Color.black : Color.gray))
+                            .background(Circle().fill(canSend ? Color.black : Color.gray))
                     }
                 }
                 .padding(.horizontal, 10)
@@ -237,11 +238,12 @@ struct ChatInputBar: View{
                 let ext = url.pathExtension
                 let type = AttachmentType.from(extension: ext)
                 let name = url.lastPathComponent
+                let fileData = try? Data(contentsOf: url)
                 attachments.append(InputAttachment(
                     type: type,
                     name: name,
                     url: url,
-                    data: type == .image ? try? Data(contentsOf: url) : nil
+                    data: fileData
                 ))
             }
         case .failure(let error):

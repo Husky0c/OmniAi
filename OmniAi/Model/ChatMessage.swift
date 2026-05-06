@@ -17,12 +17,15 @@ final class ChatMessage {
     
     @Relationship(inverse: \ChatSession.messages)
     var session: ChatSession?
-    
+
+    @Relationship(deleteRule: .cascade)
+    var attachments: [MessageAttachment]?
+
     var role: MessageRole {
         get { MessageRole(rawValue: roleRawValue) ?? .user }
         set { roleRawValue = newValue.rawValue }
     }
-    
+
     init(content: String, role: MessageRole, session: ChatSession? = nil, modelId: String? = nil) {
         self.id = UUID()
         self.content = content
