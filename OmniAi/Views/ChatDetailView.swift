@@ -127,6 +127,16 @@ struct ChatDetailView: View {
                         }
                     }
                 }
+#if canImport(UIKit)
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+                    let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
+                    if let lastID = sortedMessages.last?.id {
+                        withAnimation(.easeOut(duration: duration)) {
+                            scrollProxy.scrollTo(lastID, anchor: .bottom)
+                        }
+                    }
+                }
+#endif
             }
             
             ChatInputBar(onSend: sendMessage)
