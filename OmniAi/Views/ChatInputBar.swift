@@ -8,6 +8,8 @@
 import SwiftUI
 import SwiftData
 import OSLog
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct ChatInputBar: View{
     var onSend: ((String) -> Void)?
@@ -15,6 +17,13 @@ struct ChatInputBar: View{
     private let logger = Logger(subsystem: "com.omniai.ui", category: "ChatInputBar")
     
     @State private var messageText: String = ""
+    @State private var attachments: [InputAttachment] = []
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var showPhotoPicker = false
+    @State private var showCamera = false
+    @State private var capturedImageData: Data?
+    @State private var showFileImporter = false
+    
 #if canImport(UIKit)
     @State private var isFocused: Bool = false
 #else
@@ -28,6 +37,10 @@ struct ChatInputBar: View{
     var body: some View{
         VStack(spacing: 8){
             VStack(spacing: 4){
+                if !attachments.isEmpty {
+                    attachmentPreviewArea
+                }
+                
 #if canImport(UIKit)
                 DynamicHeightTextView(
                     text: $messageText,
@@ -47,23 +60,19 @@ struct ChatInputBar: View{
                 
                 HStack {
                     Menu {
-                        Button(action: {
-                            logger.debug("选择文件")
-                        }) {
+                        Button(action: { showFileImporter = true }) {
                             Label("文件", systemImage: "doc")
                         }
                         
-                        Button(action: {
-                            logger.debug("选择照片")
-                        }) {
+                        Button(action: { showPhotoPicker = true }) {
                             Label("照片", systemImage: "photo")
                         }
                         
-                        Button(action: {
-                            logger.debug("打开相机")
-                        }) {
+#if canImport(UIKit)
+                        Button(action: { showCamera = true }) {
                             Label("相机", systemImage: "camera")
                         }
+#endif
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 15))
@@ -109,16 +118,144 @@ struct ChatInputBar: View{
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, matching: .any(of: [.images]))
+        .onChange(of: selectedPhotos) { _, _ in
+            Task { await handleSelectedPhotos() }
+        }
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            handleFileImporter(result)
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+#if canImport(UIKit)
+            CameraPicker(imageData: $capturedImageData)
+                .ignoresSafeArea()
+#endif
+        }
+        .onChange(of: capturedImageData) { _, newData in
+            if let data = newData {
+                attachments.append(InputAttachment(
+                    type: .image,
+                    name: "IMG_\(Int(Date().timeIntervalSince1970)).jpg",
+                    data: data
+                ))
+                capturedImageData = nil
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var attachmentPreviewArea: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(attachments) { attachment in
+                    attachmentThumbnail(attachment)
+                        .overlay(alignment: .topTrailing) {
+                            Button(action: {
+                                attachments.removeAll { $0.id == attachment.id }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.white)
+                                    .background(Circle().fill(Color.black.opacity(0.5)))
+                                    .offset(x: 4, y: -4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        }
+        .frame(height: 70)
+    }
+    
+    @ViewBuilder
+    private func attachmentThumbnail(_ attachment: InputAttachment) -> some View {
+        if attachment.type == .image, let data = attachment.data {
+#if canImport(UIKit)
+            if let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 50, height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                fallbackThumbnail(attachment)
+            }
+#else
+            fallbackThumbnail(attachment)
+#endif
+        } else {
+            fallbackThumbnail(attachment)
+        }
+    }
+
+    private func fallbackThumbnail(_ attachment: InputAttachment) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: iconForType(attachment.type))
+                .font(.title3)
+            Text(attachment.name)
+                .font(.caption2)
+                .lineLimit(1)
+                .frame(maxWidth: 50)
+        }
+        .frame(width: 50, height: 50)
+        .background(Color.gray.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+    
+    private func iconForType(_ type: AttachmentType) -> String {
+        switch type {
+        case .image: return "photo"
+        case .pdf: return "doc.richtext"
+        case .text: return "doc.text"
+        case .document: return "doc"
+        case .other: return "questionmark.diamond"
+        }
+    }
+    
+    private func handleSelectedPhotos() async {
+        for item in selectedPhotos {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            let name = item.itemIdentifier ?? "photo_\(Int(Date().timeIntervalSince1970)).jpg"
+            attachments.append(InputAttachment(
+                type: .image,
+                name: name,
+                data: data
+            ))
+        }
+        selectedPhotos.removeAll()
+    }
+    
+    private func handleFileImporter(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            for url in urls {
+                guard url.startAccessingSecurityScopedResource() else { continue }
+                defer { url.stopAccessingSecurityScopedResource() }
+                
+                let ext = url.pathExtension
+                let type = AttachmentType.from(extension: ext)
+                let name = url.lastPathComponent
+                attachments.append(InputAttachment(
+                    type: type,
+                    name: name,
+                    url: url,
+                    data: type == .image ? try? Data(contentsOf: url) : nil
+                ))
+            }
+        case .failure(let error):
+            logger.error("文件选择失败: \(error.localizedDescription)")
+        }
     }
 }
 
 #Preview {
-    // 把背景涂灰一点，方便看清白色的输入栏
     ZStack {
         Color.gray.opacity(0.1).ignoresSafeArea()
         
         VStack {
-            Spacer() // 把输入栏推到底部
+            Spacer()
             ChatInputBar()
         }
     }
