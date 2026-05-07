@@ -56,7 +56,7 @@ struct SettingsView: View {
                     }
                 }
                 .onAppear {
-                    avatarImage = AvatarManager.load()
+                    avatarImage = AvatarManager.loadAsync()
                 }
                 
                 Section {

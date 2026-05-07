@@ -79,7 +79,7 @@ struct MainStageView: View {
                             Button(action: { onOpenSettings?() }) {
 #if canImport(UIKit)
                                 Group {
-                                    if let image = AvatarManager.load() {
+                                    if let image = AvatarManager.loadAsync() {
                                         Image(uiImage: image)
                                             .resizable()
                                             .scaledToFill()

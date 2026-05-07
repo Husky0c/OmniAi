@@ -197,7 +197,7 @@ struct ChatDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { onOpenSettings?() }) {
                     Group {
-                        if let image = AvatarManager.load() {
+                        if let image = AvatarManager.loadAsync() {
                             Image(uiImage: image)
                                 .resizable()
                                 .scaledToFill()
@@ -919,7 +919,7 @@ struct MessageBubbleView: View {
                 Label("删除", systemImage: "trash")
             }
         }
-        .onAppear { userAvatar = AvatarManager.load() }
+        .onAppear { userAvatar = AvatarManager.loadAsync() }
     }
     
     @ViewBuilder
