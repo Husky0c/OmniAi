@@ -22,24 +22,26 @@ struct ChatDetailView: View {
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
     @State private var sortedMessages: [ChatMessage] = []
-    
+
     @State private var isGenerating: Bool = false
     @State private var showModelProviderSheet: Bool = false
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
-    
+
+    @State private var _cachedChannel: APIKeys?
+
     private var effectiveChannelId: String {
         session.assistant?.channelId ?? activeAPIKeyID
     }
-    
+
     private var effectiveModelId: String {
         session.assistant?.modelId ?? defaultModelId
     }
-    
+
     private var effectiveChannel: APIKeys? {
-        apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
+        _cachedChannel
     }
-    
+
     private var activeChannel: APIKeys? {
         apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
     }
@@ -94,53 +96,54 @@ struct ChatDetailView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { scrollProxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(sortedMessages) { message in
-                            bubbleView(for: message)
-                                .id(message.id)
-                        }
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(sortedMessages) { message in
+                        bubbleView(for: message)
+                            .id(message.id)
                     }
-                    .padding()
                 }
-                .defaultScrollAnchor(.bottom)
-                .contentShape(Rectangle())
-                .onTapGesture {
+                .padding(.horizontal)
+            }
+            .defaultScrollAnchor(.bottom)
+            .contentShape(Rectangle())
+            .onTapGesture {
 #if canImport(UIKit)
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 #endif
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onAppear {
+                sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
+                if let lastID = sortedMessages.last?.id {
+                    scrollProxy.scrollTo(lastID, anchor: .bottom)
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .onAppear {
-                    sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
-                    if let lastID = sortedMessages.last?.id {
+            }
+            .onChange(of: session.messages.count) { _, _ in
+                sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
+                if let lastID = sortedMessages.last?.id {
+                    withAnimation {
                         scrollProxy.scrollTo(lastID, anchor: .bottom)
                     }
                 }
-                .onChange(of: session.messages.count) { _, _ in
-                    sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
-                    if let lastID = sortedMessages.last?.id {
-                        withAnimation {
-                            scrollProxy.scrollTo(lastID, anchor: .bottom)
-                        }
-                    }
-                }
-#if canImport(UIKit)
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
-                    let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-                    if let lastID = sortedMessages.last?.id {
-                        withAnimation(.easeOut(duration: duration)) {
-                            scrollProxy.scrollTo(lastID, anchor: .bottom)
-                        }
-                    }
-                }
-#endif
             }
-            
+        }
+        .safeAreaInset(edge: .bottom) {
             ChatInputBar(onSend: sendMessage)
                 .disabled(isGenerating)
+        }
+        .onAppear {
+            _cachedChannel = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
+        }
+        .onChange(of: activeAPIKeyID) { _, _ in
+            _cachedChannel = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
+        }
+        .onChange(of: session.assistant?.channelId) { _, _ in
+            _cachedChannel = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
+        }
+        .onChange(of: apiKeys.count) { _, _ in
+            _cachedChannel = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
         }
         .toolbar {
             ToolbarItem(placement: .principal) {

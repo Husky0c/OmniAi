@@ -5,16 +5,29 @@ import UIKit
 
 class IntrinsicTextView: UITextView {
     var maxHeight: CGFloat = 150
+    private var lastWidth: CGFloat = 0
+    private var lastText: String = ""
+    private var cachedSize: CGSize = .zero
 
     override var intrinsicContentSize: CGSize {
         let width = max(frame.width, 100)
+        let currentText = text ?? ""
+
+        if width == lastWidth && currentText == lastText {
+            return cachedSize
+        }
+
         let fittingSize = CGSize(width: width, height: UIView.layoutFittingCompressedSize.height)
         let size = sizeThatFits(fittingSize)
         let shouldScroll = size.height >= maxHeight
         if isScrollEnabled != shouldScroll {
             isScrollEnabled = shouldScroll
         }
-        return CGSize(width: UIView.noIntrinsicMetric, height: min(size.height, maxHeight))
+
+        lastWidth = width
+        lastText = currentText
+        cachedSize = CGSize(width: UIView.noIntrinsicMetric, height: min(size.height, maxHeight))
+        return cachedSize
     }
 }
 
@@ -108,7 +121,9 @@ struct DynamicHeightTextView: UIViewRepresentable {
 
     func updateUIView(_ uiView: IntrinsicTextView, context: Context) {
         let isEnabled = context.environment.isEnabled
-        uiView.isEditable = isEnabled
+        if uiView.isEditable != isEnabled {
+            uiView.isEditable = isEnabled
+        }
 
         if uiView.text != text {
             uiView.text = text
