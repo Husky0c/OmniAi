@@ -46,11 +46,24 @@ struct ChatDetailView: View {
         apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
     }
     
-    private func bubbleView(for message: ChatMessage, showHeader: Bool = true) -> MessageBubbleView {
+    private func messageContext(for message: ChatMessage, at index: Int) -> (showHeader: Bool, isIntermediateTool: Bool) {
+        let idx = sortedMessages.firstIndex(where: { $0.id == message.id }) ?? index
+        let isLast = idx == sortedMessages.count - 1
+        let nextIsAssistant = !isLast && sortedMessages[idx + 1].role == .assistant
+        let isIntermediateTool = message.role == .assistant
+            && message.content.isEmpty
+            && message.toolCallsData != nil
+            && nextIsAssistant
+        let showHeader = index == 0 || sortedMessages[index - 1].role != message.role
+        return (showHeader: showHeader, isIntermediateTool: isIntermediateTool)
+    }
+
+    private func bubbleView(for message: ChatMessage, showHeader: Bool = true, isIntermediateToolMessage: Bool = false) -> MessageBubbleView {
         MessageBubbleView(
             message: message,
             isGenerating: isGenerating && message.id == sortedMessages.last?.id,
             showHeader: showHeader,
+            isIntermediateToolMessage: isIntermediateToolMessage,
             onCopy: {
                 #if os(macOS)
                 NSPasteboard.general.clearContents()
@@ -101,8 +114,8 @@ struct ChatDetailView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(Array(sortedMessages.enumerated()), id: \.element.id) { index, message in
-                        let showHeader = index == 0 || sortedMessages[index - 1].role != message.role
-                        bubbleView(for: message, showHeader: showHeader)
+                        let ctx = messageContext(for: message, at: index)
+                        bubbleView(for: message, showHeader: ctx.showHeader, isIntermediateToolMessage: ctx.isIntermediateTool)
                             .id(message.id)
                     }
                 }
@@ -738,6 +751,7 @@ struct MessageBubbleView: View {
     let message: ChatMessage
     let isGenerating: Bool
     let showHeader: Bool
+    let isIntermediateToolMessage: Bool
     var onCopy: (() -> Void)? = nil
     var onEdit: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
@@ -764,232 +778,208 @@ struct MessageBubbleView: View {
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
             if showHeader {
-                HStack(alignment: .top, spacing: 6) {
-                if !isUser {
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable()
-                        .frame(width: 22, height: 22)
-                        .foregroundStyle(.purple)
-                }
-                
-                VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
-                    Text(displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontWeight(.medium)
-                    Text(formattedTime)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary.opacity(0.7))
-                }
-                
-                if isUser {
-                    Group {
-                        if let image = userAvatar {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            Image(systemName: "person.crop.circle.fill")
-                                .resizable()
-                                .foregroundStyle(.blue)
-                        }
-                    }
-                    .frame(width: 22, height: 22)
-                    .clipShape(Circle())
-                }
+                headerView
             }
-            .padding(.horizontal, 2)
-            }
-            
-            if !isUser, let thinking = message.thinkingContent, !thinking.isEmpty {
-                ThinkingBlockView(
-                    thinkingText: thinking,
-                    isStreaming: message.content.isEmpty
-                )
-                .frame(maxWidth: 400, alignment: .leading)
-            }
-            
-            if !isUser, let toolData = message.toolCallsData,
-               let toolCalls = try? JSONDecoder().decode([OpenAIToolCall].self, from: toolData),
-               !toolCalls.isEmpty {
-                ToolCallBlockView(toolCalls: toolCalls)
-                    .frame(maxWidth: 400, alignment: .leading)
-            }
-            
-            HStack {
-                if isUser { Spacer() }
-                
-                Group {
-                    if !isUser && message.content.isEmpty
-                        && (message.thinkingContent?.isEmpty ?? true)
-                        && message.toolCallsData == nil {
-                        TypingIndicatorView()
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 14)
-                    } else {
-                        VStack(alignment: .leading, spacing: 4) {
-                            let imageAttachments = (message.attachments ?? []).filter { $0.type == .image }
-                            if !imageAttachments.isEmpty {
-                                ForEach(imageAttachments) { att in
-                                    if let data = att.data, let uiImage = UIImage(data: data) {
-                                        Image(uiImage: uiImage)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(maxHeight: 200)
-                                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                                            .padding(.horizontal, 12)
-                                            .padding(.top, 8)
+            thinkingBlock
+            toolCallBlock
+            if !isIntermediateToolMessage {
+                if !isUser && message.content.isEmpty
+                    && (message.thinkingContent?.isEmpty ?? true)
+                    && message.toolCallsData == nil {
+                    TypingIndicatorView()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 14)
+                        .background(isUser ? Color.blue : Color.gray.opacity(0.2))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                } else if !(isUser || message.content.isEmpty) || isUser {
+                    HStack {
+                        if isUser { Spacer() }
+                        Group {
+                            if isUser || !message.content.isEmpty {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    let imageAttachments = (message.attachments ?? []).filter { $0.type == .image }
+                                    if !imageAttachments.isEmpty {
+                                        ForEach(imageAttachments) { att in
+                                            if let data = att.data, let uiImage = UIImage(data: data) {
+                                                Image(uiImage: uiImage)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(maxHeight: 200)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.top, 8)
+                                            }
+                                        }
                                     }
+                                    Markdown(message.content)
+                                        .textSelection(.enabled)
+                                        .padding(12)
+                                        .markdownTextStyle {
+                                            ForegroundColor(isUser ? .white : .primary)
+                                        }
+                                        .markdownTheme(
+                                            Theme.basic.bulletedListMarker { configuration in
+                                                let markers = ["•", "◦", "▪"]
+                                                let marker = markers[min(configuration.listLevel, markers.count) - 1]
+                                                Text(marker)
+                                                    .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+                                            }
+                                        )
                                 }
                             }
-                            
-                            Markdown(message.content)
-                                .textSelection(.enabled)
-                                .padding(12)
-                                .markdownTextStyle {
-                                    ForegroundColor(isUser ? .white : .primary)
-                                }
-                                .markdownTheme(
-                                    Theme.basic.bulletedListMarker { configuration in
-                                        let markers = ["•", "◦", "▪"]
-                                        let marker = markers[min(configuration.listLevel, markers.count) - 1]
-                                        Text(marker)
-                                            .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
-                                    }
-                                )
                         }
+                        .background(isUser ? Color.blue : Color.gray.opacity(0.2))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        
+                        if !isUser { Spacer() }
                     }
-                }
-                .background(isUser ? Color.blue : Color.gray.opacity(0.2))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                
-                if !isUser { Spacer() }
-            }
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.5)
-                    .onEnded { _ in
-                        showActionMenu = true
-                    }
-            )
-            
-            let nonImageAttachments = (message.attachments ?? []).filter { $0.type != .image }
-            let hasStats = !isUser && !message.content.isEmpty && !isGenerating && message.firstTokenLatency != nil
-            
-            if isUser && !nonImageAttachments.isEmpty {
-                HStack {
-                    Spacer()
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(nonImageAttachments.reversed()) { att in
-                                Text(att.name)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .frame(maxWidth: 120)
-                                    .environment(\.layoutDirection, .leftToRight)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in
+                                showActionMenu = true
                             }
-                        }
-                        .padding(.horizontal, 2)
-                    }
-                    .environment(\.layoutDirection, .rightToLeft)
-                    .frame(maxWidth: 280)
+                    )
                 }
-                .padding(.trailing, 4)
             }
             
-            if !isUser && (!nonImageAttachments.isEmpty || hasStats) {
-                HStack(spacing: 4) {
-                    if !nonImageAttachments.isEmpty {
+            if isUser || (!isIntermediateToolMessage && !message.content.isEmpty && !isGenerating && message.firstTokenLatency != nil) {
+                let nonImageAttachments = (message.attachments ?? []).filter { $0.type != .image }
+                let hasStats = !isUser && !message.content.isEmpty && !isGenerating && message.firstTokenLatency != nil
+                
+                if isUser && !nonImageAttachments.isEmpty {
+                    HStack {
+                        Spacer()
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
-                                ForEach(nonImageAttachments) { att in
-                                    Text(att.name)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .frame(maxWidth: 120)
+                                ForEach(nonImageAttachments.reversed()) { att in
+                                    if let data = att.data, let text = String(data: data, encoding: .utf8) {
+                                        Text(att.name + " (\(text.prefix(20)))")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.secondary.opacity(0.15))
+                                            .clipShape(Capsule())
+                                    }
                                 }
                             }
-                            .padding(.horizontal, 2)
                         }
-                        .frame(maxWidth: hasStats ? 200 : 280)
+                        .frame(maxWidth: 200)
                     }
-                    
-                    Spacer()
-                    
-                    if hasStats {
-                        Button(action: { showStats.toggle() }) {
-                            HStack(spacing: 2) {
-                                Text(String(format: "%.2fs ⚡️", message.firstTokenLatency!))
+                }
+                if hasStats {
+                    Button(action: { showStats.toggle() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            if let latency = message.firstTokenLatency {
+                                Text(String(format: "%.1f", latency) + "s")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                if showStats {
-                                    Text("• Tokens: \(message.totalTokens ?? 0) (↑\(message.promptTokens ?? 0) ↓\(message.completionTokens ?? 0))")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                                }
                             }
+                            Image(systemName: "arrow.up")
+                                .font(.caption2)
+                            Text("\(message.promptTokens ?? 0)")
+                                .font(.caption2)
+                            Image(systemName: "arrow.down")
+                                .font(.caption2)
+                            Text("\(message.completionTokens ?? 0)")
+                                .font(.caption2)
                         }
-                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showStats) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let latency = message.firstTokenLatency {
+                                Text("首 Token 延迟: \(String(format: "%.1f", latency))s")
+                            }
+                            Text("输入 Token: \(message.promptTokens ?? 0)")
+                            Text("输出 Token: \(message.completionTokens ?? 0)")
+                            Text("总 Token: \(message.totalTokens ?? 0)")
+                        }
+                        .font(.caption)
+                        .padding()
                     }
                 }
-                .padding(.trailing, 4)
-                .animation(.easeInOut(duration: 0.2), value: showStats)
             }
         }
-        .overlay(alignment: isUser ? .bottomTrailing : .bottomLeading) {
-            if showActionMenu {
-                ZStack {
-                    Color.black.opacity(0.001)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .onTapGesture { showActionMenu = false }
-                    
-                    VStack(spacing: 0) {
-                        Button(action: { onCopy?(); showActionMenu = false }) {
-                            Label("复制", systemImage: "doc.on.doc")
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        Divider()
-                        Button(action: { onEdit?(); showActionMenu = false }) {
-                            Label("修改", systemImage: "pencil")
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        Divider()
-                        Button(action: { onDelete?(); showActionMenu = false }) {
-                            Label("删除", systemImage: "trash")
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .disabled(isGenerating)
-                        Divider()
-                        Button(action: { onRegenerate?(); showActionMenu = false }) {
-                            Label("重新生成", systemImage: "arrow.clockwise")
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .disabled(isGenerating)
-                    }
-                    .frame(width: 200)
-                    .background(.regularMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-                    .offset(y: -8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contextMenu {
+            Button(action: { onCopy?() }) {
+                Label("复制", systemImage: "doc.on.doc")
+            }
+            Button(action: { onEdit?() }) {
+                Label("编辑", systemImage: "pencil")
+            }
+            if onRegenerate != nil {
+                Button(action: { onRegenerate?() }) {
+                    Label("重新生成", systemImage: "arrow.clockwise")
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+            Button(role: .destructive, action: { onDelete?() }) {
+                Label("删除", systemImage: "trash")
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: showActionMenu)
         .onAppear { userAvatar = AvatarManager.load() }
+    }
+    
+    @ViewBuilder
+    private var thinkingBlock: some View {
+        if !isUser, let thinking = message.thinkingContent, !thinking.isEmpty {
+            ThinkingBlockView(
+                thinkingText: thinking,
+                isStreaming: isGenerating && message.content.isEmpty
+            )
+            .frame(maxWidth: 400, alignment: .leading)
+        }
+    }
+    
+    @ViewBuilder
+    private var toolCallBlock: some View {
+        if !isUser, let toolData = message.toolCallsData,
+           let toolCalls = try? JSONDecoder().decode([OpenAIToolCall].self, from: toolData),
+           !toolCalls.isEmpty {
+            ToolCallBlockView(toolCalls: toolCalls)
+                .frame(maxWidth: 400, alignment: .leading)
+        }
+    }
+    
+    @ViewBuilder
+    private var headerView: some View {
+        HStack(alignment: .top, spacing: 6) {
+            if !isUser {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .frame(width: 22, height: 22)
+                    .foregroundStyle(.purple)
+            }
+            
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
+                Text(displayName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fontWeight(.medium)
+                Text(formattedTime)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(0.7))
+            }
+            
+            if isUser {
+                Group {
+                    if let image = userAvatar {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable()
+                            .foregroundStyle(.blue)
+                    }
+                }
+                .frame(width: 22, height: 22)
+                .clipShape(Circle())
+            }
+        }
+        .padding(.horizontal, 2)
     }
 }
 
@@ -1104,7 +1094,7 @@ struct ToolCallBlockView: View {
                     Image(systemName: "wrench.fill")
                         .font(.caption2)
                         .foregroundStyle(.orange)
-                    Text("🔧 \(toolSummary)")
+                    Text(toolSummary)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()

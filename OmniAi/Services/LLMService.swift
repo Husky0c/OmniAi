@@ -130,12 +130,29 @@ struct OpenAIMessage: Codable {
     var tool_call_id: String?
     var reasoning_content: String?
 
+    enum CodingKeys: String, CodingKey {
+        case role
+        case content
+        case tool_calls
+        case tool_call_id
+        case reasoning_content
+    }
+
     init(role: String, content: MessageContent, tool_calls: [OpenAIToolCall]? = nil, tool_call_id: String? = nil, reasoning_content: String? = nil) {
         self.role = role
         self.content = content
         self.tool_calls = tool_calls
         self.tool_call_id = tool_call_id
         self.reasoning_content = reasoning_content
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(role, forKey: .role)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(tool_calls, forKey: .tool_calls)
+        try container.encodeIfPresent(tool_call_id, forKey: .tool_call_id)
+        try container.encodeIfPresent(reasoning_content, forKey: .reasoning_content)
     }
 }
 
