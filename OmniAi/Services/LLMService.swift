@@ -516,7 +516,7 @@ class LLMService {
                         throw URLError(.badServerResponse)
                     }
                     
-                    logger.debug("📡 收到响应状态码: \(httpResponse.statusCode)")
+                    logger.info("📡 收到响应状态码: \(httpResponse.statusCode)")
                     
                     guard httpResponse.statusCode == 200 else {
                         var errorBody = ""
