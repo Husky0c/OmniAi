@@ -46,10 +46,11 @@ struct ChatDetailView: View {
         apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
     }
     
-    private func bubbleView(for message: ChatMessage) -> MessageBubbleView {
+    private func bubbleView(for message: ChatMessage, showHeader: Bool = true) -> MessageBubbleView {
         MessageBubbleView(
             message: message,
             isGenerating: isGenerating && message.id == sortedMessages.last?.id,
+            showHeader: showHeader,
             onCopy: {
                 #if os(macOS)
                 NSPasteboard.general.clearContents()
@@ -99,8 +100,9 @@ struct ChatDetailView: View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(sortedMessages) { message in
-                        bubbleView(for: message)
+                    ForEach(Array(sortedMessages.enumerated()), id: \.element.id) { index, message in
+                        let showHeader = index == 0 || sortedMessages[index - 1].role != message.role
+                        bubbleView(for: message, showHeader: showHeader)
                             .id(message.id)
                     }
                 }
@@ -115,13 +117,17 @@ struct ChatDetailView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear {
-                sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
+                sortedMessages = session.messages
+                    .filter { $0.role != .tool }
+                    .sorted { $0.createdAt < $1.createdAt }
                 if let lastID = sortedMessages.last?.id {
                     scrollProxy.scrollTo(lastID, anchor: .bottom)
                 }
             }
             .onChange(of: session.messages.count) { _, _ in
-                sortedMessages = session.messages.sorted { $0.createdAt < $1.createdAt }
+                sortedMessages = session.messages
+                    .filter { $0.role != .tool }
+                    .sorted { $0.createdAt < $1.createdAt }
                 if let lastID = sortedMessages.last?.id {
                     withAnimation {
                         scrollProxy.scrollTo(lastID, anchor: .bottom)
@@ -282,6 +288,28 @@ struct ChatDetailView: View {
             
             for msg in allMessages {
                 let role = msg.role.rawValue
+                
+                if role == "tool" {
+                    aiMessages.append(OpenAIMessage(
+                        role: "tool",
+                        content: .text(msg.content),
+                        tool_call_id: msg.toolCallId
+                    ))
+                    continue
+                }
+                
+                if role == "assistant", let toolData = msg.toolCallsData,
+                   let toolCalls = try? JSONDecoder().decode([OpenAIToolCall].self, from: toolData) {
+                    let content: MessageContent = .text(msg.content)
+                    aiMessages.append(OpenAIMessage(
+                        role: "assistant",
+                        content: content,
+                        tool_calls: toolCalls,
+                        reasoning_content: msg.thinkingContent
+                    ))
+                    continue
+                }
+                
                 let atts = msg.attachments ?? []
                 let imageAttachments = atts.filter { $0.type == .image }
                 let nonImageAttachments = atts.filter { $0.type != .image }
@@ -293,7 +321,15 @@ struct ChatDetailView: View {
                             finalContent = "[\(attachment.name)]\n\(extracted)\n\n" + finalContent
                         }
                     }
-                    aiMessages.append(OpenAIMessage(role: role, content: .text(finalContent)))
+                    if role == "assistant" {
+                        aiMessages.append(OpenAIMessage(
+                            role: role,
+                            content: .text(finalContent),
+                            reasoning_content: msg.thinkingContent
+                        ))
+                    } else {
+                        aiMessages.append(OpenAIMessage(role: role, content: .text(finalContent)))
+                    }
                 } else {
                     var parts: [ContentPart] = []
                     var textContent = msg.content
@@ -323,6 +359,9 @@ struct ChatDetailView: View {
             var hasReceivedFirstChunk = false
             let modelId = effectiveModelId
             
+            let caps = ModelCapability.effective(for: modelId, cached: activeKey.cachedCapabilities)
+            let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? ToolExecutionService.shared.getDefinitions() : nil
+            
             let stream = LLMService.shared.sendMessageStream(
                 messages: aiMessages,
                 apiKey: apiKeyString,
@@ -330,25 +369,52 @@ struct ChatDetailView: View {
                 modelId: modelId,
                 temperature: temperature,
                 reasoningEffort: session.assistant?.reasoningEffort,
-                apiType: activeKey.apiType
+                apiType: activeKey.apiType,
+                tools: toolDefinitions
             )
+            
+            var toolCallAccumulators: [Int: (id: String?, name: String?, arguments: String)] = [:]
+            var shouldReenter = false
             
             do {
                 for try await event in stream {
-                    await MainActor.run {
-                        switch event {
-                        case .chunk(let text):
+                    switch event {
+                    case .chunk(let text):
+                        await MainActor.run {
                             if !hasReceivedFirstChunk {
                                 hasReceivedFirstChunk = true
                                 assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
                             }
                             assistantMessage.content += text
-                        case .thinking(let text):
+                        }
+                    case .thinking(let text):
+                        await MainActor.run {
                             assistantMessage.thinkingContent = (assistantMessage.thinkingContent ?? "") + text
-                        case .usage(let promptTokens, let completionTokens, let totalTokens):
+                        }
+                    case .usage(let promptTokens, let completionTokens, let totalTokens):
+                        await MainActor.run {
                             assistantMessage.promptTokens = promptTokens
                             assistantMessage.completionTokens = completionTokens
                             assistantMessage.totalTokens = totalTokens
+                        }
+                    case .toolCallDelta(let index, let id, let name, let argumentsChunk):
+                        var acc = toolCallAccumulators[index] ?? (id: nil, name: nil, arguments: "")
+                        if let newId = id { acc.id = newId }
+                        if let newName = name { acc.name = newName }
+                        acc.arguments += argumentsChunk
+                        toolCallAccumulators[index] = acc
+                        await MainActor.run {
+                            if let toolName = name ?? toolCallAccumulators[index]?.name {
+                                if !hasReceivedFirstChunk {
+                                    hasReceivedFirstChunk = true
+                                    assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
+                                }
+                                assistantMessage.toolCallName = toolName
+                            }
+                        }
+                    case .finishReason(let reason):
+                        if reason == "tool_calls" {
+                            shouldReenter = true
                         }
                     }
                 }
@@ -356,6 +422,50 @@ struct ChatDetailView: View {
                 await MainActor.run {
                     assistantMessage.content += "\n[Error: \(error.localizedDescription)]"
                 }
+            }
+            
+            if shouldReenter, !toolCallAccumulators.isEmpty {
+                let toolCalls: [OpenAIToolCall] = toolCallAccumulators.sorted { $0.key < $1.key }.map { _, acc in
+                    OpenAIToolCall(
+                        id: acc.id,
+                        type: "function",
+                        function: OpenAIToolCallFunction(name: acc.name, arguments: acc.arguments)
+                    )
+                }
+                
+                if let toolData = try? JSONEncoder().encode(toolCalls) {
+                    await MainActor.run {
+                        assistantMessage.toolCallsData = toolData
+                    }
+                }
+                
+                await MainActor.run {
+                    session.lastModified = Date()
+                }
+                
+                for toolCall in toolCalls {
+                    guard let name = toolCall.function?.name, let args = toolCall.function?.arguments else {
+                        continue
+                    }
+                    let result = await ToolExecutionService.shared.execute(name: name, argumentsJSON: args)
+                    let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: modelId)
+                    toolMessage.toolCallId = toolCall.id
+                    await MainActor.run {
+                        session.messages.append(toolMessage)
+                    }
+                }
+                
+                let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session, modelId: modelId)
+                await MainActor.run {
+                    session.messages.append(newAssistantMsg)
+                }
+                
+                await MainActor.run {
+                    isGenerating = false
+                }
+                
+                fetchAIResponse(for: newAssistantMsg)
+                return
             }
             
             await MainActor.run {
@@ -437,10 +547,10 @@ struct ChatDetailView: View {
             let stripped = raw.replacingOccurrences(
                 of: "(?s)<think>.*?</think>",
                 with: "",
-                options: .regularExpression
+                options: [.regularExpression]
             )
             let lines = stripped.split(separator: "\n")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
                 .filter { !$0.isEmpty && $0.count <= 25 }
             let titleLine = lines.last ?? lines.first ?? ""
             let trimmed = titleLine
@@ -627,6 +737,7 @@ struct ModelProviderSheet: View {
 struct MessageBubbleView: View {
     let message: ChatMessage
     let isGenerating: Bool
+    let showHeader: Bool
     var onCopy: (() -> Void)? = nil
     var onEdit: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
@@ -652,7 +763,8 @@ struct MessageBubbleView: View {
     
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 6) {
+            if showHeader {
+                HStack(alignment: .top, spacing: 6) {
                 if !isUser {
                     Image(systemName: "person.crop.circle.fill")
                         .resizable()
@@ -687,6 +799,7 @@ struct MessageBubbleView: View {
                 }
             }
             .padding(.horizontal, 2)
+            }
             
             if !isUser, let thinking = message.thinkingContent, !thinking.isEmpty {
                 ThinkingBlockView(
@@ -696,11 +809,20 @@ struct MessageBubbleView: View {
                 .frame(maxWidth: 400, alignment: .leading)
             }
             
+            if !isUser, let toolData = message.toolCallsData,
+               let toolCalls = try? JSONDecoder().decode([OpenAIToolCall].self, from: toolData),
+               !toolCalls.isEmpty {
+                ToolCallBlockView(toolCalls: toolCalls)
+                    .frame(maxWidth: 400, alignment: .leading)
+            }
+            
             HStack {
                 if isUser { Spacer() }
                 
                 Group {
-                    if !isUser && message.content.isEmpty {
+                    if !isUser && message.content.isEmpty
+                        && (message.thinkingContent?.isEmpty ?? true)
+                        && message.toolCallsData == nil {
                         TypingIndicatorView()
                             .padding(.horizontal, 12)
                             .padding(.vertical, 14)
@@ -962,6 +1084,87 @@ struct ThinkingBlockView: View {
         .onChange(of: isStreaming) { _, new in
             if !new { isExpanded = false }
         }
+    }
+}
+
+struct ToolCallBlockView: View {
+    let toolCalls: [OpenAIToolCall]
+    @State private var isExpanded = false
+
+    private var toolSummary: String {
+        let names = toolCalls.compactMap { $0.function?.name }
+        if names.isEmpty { return "工具调用" }
+        return names.joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: { isExpanded.toggle() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "wrench.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    Text("🔧 \(toolSummary)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if isExpanded {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: "chevron.forward")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(toolCalls.enumerated()), id: \.offset) { _, tc in
+                        if let name = tc.function?.name {
+                            HStack(spacing: 4) {
+                                Text("工具:")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(name)
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                        if let args = tc.function?.arguments, !args.isEmpty, args != "{}" {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("参数:")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(args)
+                                    .font(.caption2)
+                                    .foregroundStyle(.primary)
+                                    .fontDesign(.monospaced)
+                                    .padding(6)
+                                    .background(Color.secondary.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+        }
+        .background(Color.orange.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.orange.opacity(0.2), lineWidth: 0.5)
+        )
     }
 }
 

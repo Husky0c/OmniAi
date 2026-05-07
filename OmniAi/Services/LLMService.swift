@@ -6,6 +6,8 @@ enum LLMStreamEvent {
     case chunk(String)
     case thinking(String)
     case usage(promptTokens: Int, completionTokens: Int, totalTokens: Int)
+    case toolCallDelta(index: Int, id: String?, name: String?, argumentsChunk: String)
+    case finishReason(String?)
 }
 
 struct ThinkingConfig: Codable {
@@ -20,6 +22,42 @@ struct ReasoningParams: Codable {
     var thinking_budget: Int?
 }
 
+struct OpenAIToolCall: Codable {
+    let id: String?
+    let type: String?
+    let function: OpenAIToolCallFunction?
+}
+
+struct OpenAIToolCallFunction: Codable {
+    let name: String?
+    let arguments: String?
+}
+
+struct ToolFunction: Codable {
+    let name: String
+    let description: String
+    let parameters: JSONSchema
+    let strict: Bool?
+}
+
+struct ToolDefinition: Codable {
+    var type: String = "function"
+    let function: ToolFunction
+}
+
+struct JSONSchema: Codable {
+    let type: String
+    var properties: [String: PropertySchema]?
+    var required: [String]?
+    var additionalProperties: Bool?
+}
+
+struct PropertySchema: Codable {
+    let type: String
+    var description: String?
+    var `enum`: [String]?
+}
+
 struct OpenAIChatRequest: Codable {
     let model: String
     let messages: [OpenAIMessage]
@@ -30,6 +68,8 @@ struct OpenAIChatRequest: Codable {
     var thinking: ThinkingConfig?
     var enable_thinking: Bool?
     var thinking_budget: Int?
+    var tools: [ToolDefinition]?
+    var tool_choice: String?
     
     struct StreamOptions: Codable {
         let include_usage: Bool
@@ -86,10 +126,16 @@ enum ContentPart: Codable {
 struct OpenAIMessage: Codable {
     let role: String
     let content: MessageContent
+    var tool_calls: [OpenAIToolCall]?
+    var tool_call_id: String?
+    var reasoning_content: String?
 
-    init(role: String, content: MessageContent) {
+    init(role: String, content: MessageContent, tool_calls: [OpenAIToolCall]? = nil, tool_call_id: String? = nil, reasoning_content: String? = nil) {
         self.role = role
         self.content = content
+        self.tool_calls = tool_calls
+        self.tool_call_id = tool_call_id
+        self.reasoning_content = reasoning_content
     }
 }
 
@@ -139,6 +185,19 @@ struct OpenAIStreamResponse: Codable {
         let role: String?
         let reasoning_content: String?
         let thinking: String?
+        let tool_calls: [StreamToolCall]?
+    }
+    
+    struct StreamToolCall: Codable {
+        let index: Int
+        let id: String?
+        let type: String?
+        let function: StreamToolCallFunction?
+    }
+    
+    struct StreamToolCallFunction: Codable {
+        let name: String?
+        let arguments: String?
     }
     
     struct Usage: Codable {
@@ -376,7 +435,7 @@ class LLMService {
         }
     }
     
-    func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+    func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
@@ -396,6 +455,11 @@ class LLMService {
             temperature: temperature,
             stream_options: OpenAIChatRequest.StreamOptions(include_usage: true)
         )
+        
+        if let tools = tools, !tools.isEmpty {
+            chatRequest.tools = tools
+            chatRequest.tool_choice = "auto"
+        }
         
         let reasoningParams = ReasoningConfigBuilder.build(
             apiType: apiType,
@@ -470,11 +534,25 @@ class LLMService {
                         
                         if let data = jsonStr.data(using: .utf8),
                            let streamResponse = try? JSONDecoder().decode(OpenAIStreamResponse.self, from: data) {
+                            
+                            if let finishReason = streamResponse.choices?.first?.finishReason {
+                                continuation.yield(.finishReason(finishReason))
+                            }
+                            
                             if let usage = streamResponse.usage,
                                let prompt = usage.promptTokens,
                                let completion = usage.completionTokens,
                                let total = usage.totalTokens {
                                 continuation.yield(.usage(promptTokens: prompt, completionTokens: completion, totalTokens: total))
+                            } else if let toolCalls = streamResponse.choices?.first?.delta.tool_calls {
+                                for tc in toolCalls {
+                                    continuation.yield(.toolCallDelta(
+                                        index: tc.index,
+                                        id: tc.id,
+                                        name: tc.function?.name,
+                                        argumentsChunk: tc.function?.arguments ?? ""
+                                    ))
+                                }
                             } else if let thinking = streamResponse.choices?.first?.delta.reasoning_content
                                        ?? streamResponse.choices?.first?.delta.thinking {
                                 if !thinking.isEmpty {

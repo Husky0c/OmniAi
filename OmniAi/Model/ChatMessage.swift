@@ -15,6 +15,10 @@ final class ChatMessage {
     var thinkingContent: String?
     var modelId: String?
     
+    var toolCallsData: Data?
+    var toolCallId: String?
+    var toolCallName: String?
+    
     @Relationship(inverse: \ChatSession.messages)
     var session: ChatSession?
 
@@ -40,4 +44,5 @@ enum MessageRole: String, Codable {
     case user
     case assistant
     case system
+    case tool
 }
