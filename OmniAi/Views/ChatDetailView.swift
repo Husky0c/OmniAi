@@ -1057,13 +1057,13 @@ struct ThinkingBlockView: View {
                             .id("thinkingBottom")
                     }
                     .frame(height: 80)
-                    .onChange(of: thinkingText) { _, _ in
-                        scrollTrigger.send()
-                    }
                     .onReceive(scrollTrigger.debounce(for: .seconds(0.1), scheduler: RunLoop.main)) { _ in
                         withAnimation {
                             proxy.scrollTo("thinkingBottom", anchor: .bottom)
                         }
+                    }
+                    .task(id: thinkingText) {
+                        scrollTrigger.send()
                     }
                 }
             }
