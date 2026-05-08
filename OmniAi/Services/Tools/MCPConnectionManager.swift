@@ -133,11 +133,11 @@ private extension MCPConnectionManager {
         let serverId = config.id.uuidString
         switch config.transportType {
         case .stdio:
-            return StdioTransport(serverId: serverId, command: config.command, arguments: config.arguments)
+            return StdioTransport(serverId: serverId, command: config.command, arguments: config.arguments, timeoutSeconds: config.timeoutSeconds)
         case .sse:
-            return SSETransport(serverId: serverId, url: config.serverURL)
+            return SSETransport(serverId: serverId, url: config.serverURL, authToken: config.authToken, timeoutSeconds: config.timeoutSeconds)
         case .streamableHTTP:
-            return StreamableHTTPTransport(serverId: serverId, url: config.serverURL, authToken: config.authToken)
+            return StreamableHTTPTransport(serverId: serverId, url: config.serverURL, authToken: config.authToken, timeoutSeconds: config.timeoutSeconds)
         }
     }
 

@@ -25,6 +25,7 @@ final class MCPServerConfig {
     var serverURL: String = ""
     var authToken: String? = nil
     var isEnabled: Bool = true
+    var timeoutSeconds: Int = 60
     var timestamp: Date = Date()
 
     var transportType: MCPTransportType {
@@ -51,7 +52,8 @@ final class MCPServerConfig {
         arguments: [String] = [],
         serverURL: String = "",
         authToken: String? = nil,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        timeoutSeconds: Int = 60
     ) {
         self.id = UUID()
         self.name = name
@@ -61,6 +63,7 @@ final class MCPServerConfig {
         self.serverURL = serverURL
         self.authToken = authToken
         self.isEnabled = isEnabled
+        self.timeoutSeconds = timeoutSeconds
         self.timestamp = Date()
     }
 }

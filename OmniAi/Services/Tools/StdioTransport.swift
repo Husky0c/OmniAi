@@ -7,6 +7,7 @@ final class StdioTransport {
     let serverId: String
     private let command: String
     private let arguments: [String]
+    let timeoutSeconds: Int
 
     private var process: AnyObject?
     private var stdinPipe: Pipe?
@@ -19,10 +20,11 @@ final class StdioTransport {
     private var pendingRequests: [Int: CheckedContinuation<MCPJSONRPC.Response, Error>] = [:]
     private let pendingLock = NSLock()
 
-    init(serverId: String, command: String, arguments: [String] = []) {
+    init(serverId: String, command: String, arguments: [String] = [], timeoutSeconds: Int = 60) {
         self.serverId = serverId
         self.command = command
         self.arguments = arguments
+        self.timeoutSeconds = timeoutSeconds
     }
 
     deinit {
@@ -94,14 +96,34 @@ extension StdioTransport: MCPTransport {
         let data = try request.toJSONData()
         let line = String(data: data, encoding: .utf8)! + "\n"
 
-        return try await withCheckedThrowingContinuation { continuation in
-            pendingLock.lock()
-            pendingRequests[request.id] = continuation
-            pendingLock.unlock()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                pendingLock.lock()
+                pendingRequests[request.id] = continuation
+                pendingLock.unlock()
 
-            queue.async {
-                stdin.fileHandleForWriting.write(line.data(using: .utf8)!)
+                queue.async {
+                    stdin.fileHandleForWriting.write(line.data(using: .utf8)!)
+                }
+
+                let timeoutNs = UInt64(timeoutSeconds) * 1_000_000_000
+                Task {
+                    try await Task.sleep(nanoseconds: timeoutNs)
+                    pendingLock.lock()
+                    if let cont = pendingRequests.removeValue(forKey: request.id) {
+                        pendingLock.unlock()
+                        cont.resume(throwing: MCPJSONRPC.MCPError(
+                            code: -32000, message: "Request timed out after \(timeoutSeconds)s", data: nil
+                        ))
+                    } else {
+                        pendingLock.unlock()
+                    }
+                }
             }
+        } onCancel: {
+            pendingLock.lock()
+            pendingRequests.removeValue(forKey: request.id)
+            pendingLock.unlock()
         }
     }
 

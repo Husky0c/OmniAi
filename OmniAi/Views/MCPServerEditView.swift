@@ -14,6 +14,8 @@ struct MCPServerEditView: View {
     @State private var serverURL: String = ""
     @State private var authToken: String = ""
     @State private var isEnabled: Bool = true
+    @State private var timeoutSeconds: Int = 60
+    @State private var showAdvanced: Bool = false
     @State private var testResult: String?
     @State private var isTesting: Bool = false
 
@@ -78,6 +80,22 @@ struct MCPServerEditView: View {
                             .foregroundStyle(result.contains("✅") ? .green : .red)
                     }
                 }
+
+                Section {
+                    DisclosureGroup(isExpanded: $showAdvanced) {
+                        HStack {
+                            Text("超时时间")
+                            Spacer()
+                            TextField("秒", value: $timeoutSeconds, format: .number)
+                                .frame(width: 60)
+                                .multilineTextAlignment(.trailing)
+                            Text("秒")
+                                .foregroundStyle(.secondary)
+                        }
+                    } label: {
+                        Label("高级选项", systemImage: "gearshape")
+                    }
+                }
             }
             .navigationTitle(isEditing ? "编辑服务器" : "新增服务器")
 #if os(iOS)
@@ -122,6 +140,7 @@ struct MCPServerEditView: View {
         serverURL = server.serverURL
         authToken = server.authToken ?? ""
         isEnabled = server.isEnabled
+        timeoutSeconds = server.timeoutSeconds
     }
 
     private func save() {
@@ -139,6 +158,7 @@ struct MCPServerEditView: View {
         cfg.serverURL = serverURL
         cfg.authToken = authToken.isEmpty ? nil : authToken
         cfg.isEnabled = isEnabled
+        cfg.timeoutSeconds = timeoutSeconds
         cfg.timestamp = Date()
     }
 
@@ -146,25 +166,18 @@ struct MCPServerEditView: View {
         isTesting = true
         testResult = nil
 
-        let config = MCPServerConfig(
-            name: name,
-            transportType: transportType,
-            command: command,
-            arguments: argumentsText.split(separator: " ").map(String.init),
-            serverURL: serverURL,
-            authToken: authToken.isEmpty ? nil : authToken
-        )
+        let timeout = timeoutSeconds
 
         Task {
             do {
                 let transport: MCPTransport
                 switch transportType {
                 case .stdio:
-                    transport = StdioTransport(serverId: "test", command: config.command, arguments: config.arguments)
+                    transport = StdioTransport(serverId: "test", command: command, arguments: argumentsText.split(separator: " ").map(String.init), timeoutSeconds: timeout)
                 case .sse:
-                    transport = SSETransport(serverId: "test", url: config.serverURL)
+                    transport = SSETransport(serverId: "test", url: serverURL, authToken: authToken.isEmpty ? nil : authToken, timeoutSeconds: timeout)
                 case .streamableHTTP:
-                    transport = StreamableHTTPTransport(serverId: "test", url: config.serverURL, authToken: config.authToken)
+                    transport = StreamableHTTPTransport(serverId: "test", url: serverURL, authToken: authToken.isEmpty ? nil : authToken, timeoutSeconds: timeout)
                 }
 
                 try await transport.connect()

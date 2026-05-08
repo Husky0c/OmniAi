@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import OSLog
 
 @Model
 final class ChatSession {
@@ -27,10 +28,17 @@ final class ChatSession {
         return service
     }
 
-    func connectAssistantMCPServers() async {
+    func connectAssistantMCPServers(enabledConfigs: [MCPServerConfig]) async {
         guard let assistant, assistant.mcpEnabled else { return }
         let service = ensureToolService()
-        // MCPServerConfig connections will be loaded by ToolExecutionServiceManager
+        for config in enabledConfigs where config.isEnabled {
+            do {
+                try await service.connectMCPServer(config: config)
+            } catch {
+                os_log("Failed to connect MCP server '%{public}@': %{public}@",
+                       log: .default, type: .error, config.name, error.localizedDescription)
+            }
+        }
     }
 
     init(title: String = "新对话", provider: String = "openai", modelId: String = "gpt-4o", customBaseURL: String? = nil, assistant: Assistant? = nil) {

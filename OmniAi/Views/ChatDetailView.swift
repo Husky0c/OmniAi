@@ -28,6 +28,7 @@ struct ChatDetailView: View {
     @State private var showModelProviderSheet: Bool = false
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
+    @State private var mcpConnected: Bool = false
 
     private var effectiveChannelId: String {
         session.assistant?.channelId ?? activeAPIKeyID
@@ -142,6 +143,13 @@ struct ChatDetailView: View {
                     }
                 }
             }
+        }
+        .task(id: session.id) {
+            guard !mcpConnected else { return }
+            mcpConnected = true
+            let descriptor = FetchDescriptor<MCPServerConfig>()
+            let configs = (try? modelContext.fetch(descriptor)) ?? []
+            await session.connectAssistantMCPServers(enabledConfigs: configs)
         }
         .safeAreaInset(edge: .bottom) {
             ChatInputBar(onSend: sendMessage, isGenerating: isGenerating, onStop: stopGeneration)

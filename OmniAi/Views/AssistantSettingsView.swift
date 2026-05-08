@@ -118,7 +118,7 @@ struct AssistantSettingsView: View {
                     }
                     
                     Section(header: Text("MCP 工具")) {
-                        Toggle("启用 MCP 工具调用", isOn: $assistant.mcpEnabled)
+                        Toggle("MCP 工具调用", isOn: $assistant.mcpEnabled)
                     }
 
                     Section {
