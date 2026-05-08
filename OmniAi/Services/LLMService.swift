@@ -535,10 +535,8 @@ class LLMService: LLMServiceProtocol {
                         }
                     }
                     
-                    var hasReceivedContent = false
-                    var isInThinkTag = false
-                    var thinkTagBuffer = ""
-                    
+                    let thinkTagParser = ThinkTagParser()
+
                     for try await line in result.lines {
                         try Task.checkCancellation()
                         let prefix = "data: "
@@ -577,7 +575,9 @@ class LLMService: LLMServiceProtocol {
                                     continuation.yield(.thinking(thinking))
                                 }
                             } else if let rawContent = streamResponse.choices?.first?.delta.content {
-                                processThinkTaggedContent(rawContent, hasReceivedContent: &hasReceivedContent, isInThinkTag: &isInThinkTag, buffer: &thinkTagBuffer, yield: { continuation.yield($0) })
+                                for event in thinkTagParser.feed(rawContent) {
+                                    continuation.yield(event)
+                                }
                             }
                         }
                     }
@@ -586,82 +586,6 @@ class LLMService: LLMServiceProtocol {
                 } catch {
                     logger.error("❌ 流式请求异常: \(error.localizedDescription)")
                     continuation.finish(throwing: error)
-                }
-            }
-        }
-    }
-    
-    private func processThinkTaggedContent(_ raw: String, hasReceivedContent: inout Bool, isInThinkTag: inout Bool, buffer: inout String, yield: (LLMStreamEvent) -> Void) {
-        var remaining = raw
-        while !remaining.isEmpty {
-            if isInThinkTag {
-                if let endRange = remaining.range(of: "</think>") {
-                    let thinking = String(remaining[remaining.startIndex..<endRange.lowerBound])
-                    if !thinking.isEmpty {
-                        yield(.thinking(thinking))
-                    }
-                    isInThinkTag = false
-                    remaining = String(remaining[endRange.upperBound...])
-                    if !remaining.isEmpty {
-                        let trimmed = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            hasReceivedContent = true
-                            yield(.chunk(trimmed))
-                        }
-                    }
-                } else if let endRange = remaining.range(of: "</thought>") {
-                    let thinking = String(remaining[remaining.startIndex..<endRange.lowerBound])
-                    if !thinking.isEmpty {
-                        yield(.thinking(thinking))
-                    }
-                    isInThinkTag = false
-                    remaining = String(remaining[endRange.upperBound...])
-                    if !remaining.isEmpty {
-                        let trimmed = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            hasReceivedContent = true
-                            yield(.chunk(trimmed))
-                        }
-                    }
-                } else {
-                    buffer += remaining
-                    yield(.thinking(remaining))
-                    remaining = ""
-                }
-            } else {
-                if let startRange = remaining.range(of: "<think>") {
-                    let before = String(remaining[remaining.startIndex..<startRange.lowerBound])
-                    if !before.isEmpty {
-                        let trimmed = before.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            hasReceivedContent = true
-                            yield(.chunk(trimmed))
-                        }
-                    }
-                    isInThinkTag = true
-                    remaining = String(remaining[startRange.upperBound...])
-                } else if let startRange = remaining.range(of: "<thought>") {
-                    let before = String(remaining[remaining.startIndex..<startRange.lowerBound])
-                    if !before.isEmpty {
-                        let trimmed = before.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            hasReceivedContent = true
-                            yield(.chunk(trimmed))
-                        }
-                    }
-                    isInThinkTag = true
-                    remaining = String(remaining[startRange.upperBound...])
-                } else {
-                    if !hasReceivedContent {
-                        hasReceivedContent = true
-                        let trimmed = remaining.trimmingCharacters(in: CharacterSet.newlines.union(.whitespaces))
-                        if !trimmed.isEmpty {
-                            yield(.chunk(trimmed))
-                        }
-                    } else {
-                        yield(.chunk(remaining))
-                    }
-                    remaining = ""
                 }
             }
         }
