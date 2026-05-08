@@ -13,6 +13,8 @@ import UniformTypeIdentifiers
 
 struct ChatInputBar: View{
     var onSend: ((String, [InputAttachment]) -> Void)?
+    var isGenerating: Bool = false
+    var onStop: (() -> Void)? = nil
     
     private let logger = Logger(subsystem: "com.omniai.ui", category: "ChatInputBar")
     
@@ -85,7 +87,9 @@ struct ChatInputBar: View{
                     Spacer()
                     
                     Button(action: {
-                        if canSend {
+                        if isGenerating {
+                            onStop?()
+                        } else if canSend {
                             onSend?(messageText, attachments)
                             messageText = ""
                             attachments.removeAll()
@@ -93,12 +97,12 @@ struct ChatInputBar: View{
                             logger.debug("开始语音")
                         }
                     }){
-                        Image(systemName: canSend ? "arrow.up" : "mic.fill")
+                        Image(systemName: isGenerating ? "stop.fill" : (canSend ? "arrow.up" : "mic.fill"))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 16, height: 16)
                             .frame(width: 34, height: 34)
-                            .background(Circle().fill(canSend ? Color.black : Color.gray))
+                            .background(Circle().fill(isGenerating ? Color.orange : (canSend ? Color.black : Color.gray)))
                     }
                 }
                 .padding(.horizontal, 10)

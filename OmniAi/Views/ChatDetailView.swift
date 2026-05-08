@@ -24,6 +24,7 @@ struct ChatDetailView: View {
     @State private var sortedMessages: [ChatMessage] = []
 
     @State private var isGenerating: Bool = false
+    @State private var currentGenerationTask: Task<Void, Never>?
     @State private var showModelProviderSheet: Bool = false
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
@@ -149,8 +150,7 @@ struct ChatDetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            ChatInputBar(onSend: sendMessage)
-                .disabled(isGenerating)
+            ChatInputBar(onSend: sendMessage, isGenerating: isGenerating, onStop: stopGeneration)
         }
         .onAppear {
             _cachedChannel = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
@@ -273,21 +273,26 @@ struct ChatDetailView: View {
         
         fetchAIResponse(for: assistantMessage)
     }
-    
+
+    private func stopGeneration() {
+        currentGenerationTask?.cancel()
+        currentGenerationTask = nil
+        isGenerating = false
+    }
+
     private func fetchAIResponse(for assistantMessage: ChatMessage) {
         isGenerating = true
-        
+
         guard let activeKey = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId }),
               let apiKeyString = activeKey.key, !apiKeyString.isEmpty else {
             assistantMessage.content = "⚠️ 错误：未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。"
             isGenerating = false
             return
         }
-        
-        Task {
+
+        currentGenerationTask?.cancel()
+        currentGenerationTask = Task {
             var allMessages = session.messages
-                .sorted { $0.createdAt < $1.createdAt }
-                .filter { $0.id != assistantMessage.id }
             
             if let assistant = session.assistant, assistant.contextCount < allMessages.count {
                 allMessages = Array(allMessages.suffix(assistant.contextCount))
@@ -431,13 +436,9 @@ struct ChatDetailView: View {
                         }
                     }
                 }
+            } catch is CancellationError {
+                // 用户主动打断，保留已生成内容
             } catch {
-                await MainActor.run {
-                    assistantMessage.content += "\n[Error: \(error.localizedDescription)]"
-                }
-            }
-            
-            if shouldReenter, !toolCallAccumulators.isEmpty {
                 let toolCalls: [OpenAIToolCall] = toolCallAccumulators.sorted { $0.key < $1.key }.map { _, acc in
                     OpenAIToolCall(
                         id: acc.id,

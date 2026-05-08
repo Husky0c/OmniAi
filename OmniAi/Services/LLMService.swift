@@ -540,6 +540,7 @@ class LLMService {
                     var thinkTagBuffer = ""
                     
                     for try await line in result.lines {
+                        try Task.checkCancellation()
                         let prefix = "data: "
                         guard line.hasPrefix(prefix) else { continue }
                         let jsonStr = String(line.dropFirst(prefix.count))
