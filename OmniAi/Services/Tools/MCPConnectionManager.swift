@@ -19,6 +19,15 @@ final class MCPConnectionManager {
 extension MCPConnectionManager {
     func connect(to config: MCPServerConfig) async throws {
         let serverId = config.id.uuidString
+
+        lock.lock()
+        if transports[serverId] != nil {
+            logger.debug("MCP server '\(config.name)' already connected, skipping")
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
         let transport: MCPTransport = try createTransport(from: config)
 
         lock.lock()
