@@ -373,7 +373,7 @@ struct ModelCapability: Codable, Hashable {
     }
 }
 
-class LLMService {
+class LLMService: LLMServiceProtocol {
     static let shared = LLMService()
     
     private let logger = Logger(subsystem: "com.omniai.network", category: "LLMService")

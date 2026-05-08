@@ -71,6 +71,14 @@ final class ToolExecutionService {
         ]
     }
 
+    func register(name: String, handler: @Sendable @escaping (String) async -> String) {
+        handlers[name] = handler
+    }
+
+    func unregister(name: String) {
+        handlers.removeValue(forKey: name)
+    }
+
     func canHandle(name: String) -> Bool {
         handlers[name] != nil
     }
