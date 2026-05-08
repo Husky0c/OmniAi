@@ -291,8 +291,10 @@ struct ChatDetailView: View {
         }
 
         currentGenerationTask?.cancel()
-        currentGenerationTask = Task {
+        currentGenerationTask = Task { [session] in
             var allMessages = session.messages
+                .sorted { $0.createdAt < $1.createdAt }
+                .filter { $0.id != assistantMessage.id }
             
             if let assistant = session.assistant, assistant.contextCount < allMessages.count {
                 allMessages = Array(allMessages.suffix(assistant.contextCount))
@@ -439,6 +441,12 @@ struct ChatDetailView: View {
             } catch is CancellationError {
                 // 用户主动打断，保留已生成内容
             } catch {
+                await MainActor.run {
+                    assistantMessage.content += "\n[Error: \(error.localizedDescription)]"
+                }
+            }
+
+            if shouldReenter, !toolCallAccumulators.isEmpty {
                 let toolCalls: [OpenAIToolCall] = toolCallAccumulators.sorted { $0.key < $1.key }.map { _, acc in
                     OpenAIToolCall(
                         id: acc.id,
@@ -786,7 +794,8 @@ struct MessageBubbleView: View {
             if !isIntermediateToolMessage {
                 if !isUser && message.content.isEmpty
                     && (message.thinkingContent?.isEmpty ?? true)
-                    && message.toolCallsData == nil {
+                    && message.toolCallsData == nil
+                    && isGenerating {
                     TypingIndicatorView()
                         .padding(.horizontal, 12)
                         .padding(.vertical, 14)
