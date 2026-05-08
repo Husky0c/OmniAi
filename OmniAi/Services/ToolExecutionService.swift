@@ -1,92 +1,62 @@
 import Foundation
+import OSLog
 
 final class ToolExecutionService {
-    static let shared = ToolExecutionService()
+    private let logger = Logger(subsystem: "com.omniai.tools", category: "ToolExecutionService")
 
-    private var handlers: [String: @Sendable (String) async -> String] = [:]
+    let sessionId: UUID
+    let localRegistry: LocalToolRegistry
+    let mcpManager: MCPConnectionManager
 
-    private init() {
-        registerNativeTools()
-    }
-
-    private func registerNativeTools() {
-        handlers["get_current_time"] = { _ in
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            let json = """
-            {"time": "\(formatter.string(from: Date()))", "timezone": "\(TimeZone.current.identifier)"}
-            """
-            return json
-        }
-
-        handlers["calculator"] = { argumentsJSON in
-            guard let data = argumentsJSON.data(using: .utf8),
-                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let expression = dict["expression"] as? String else {
-                return #"{"error": "Invalid arguments: expected {expression: string}"}"#
-            }
-            let expr = expression
-                .replacingOccurrences(of: "×", with: "*")
-                .replacingOccurrences(of: "÷", with: "/")
-            let allowed = CharacterSet(charactersIn: "0123456789+-*/()., ")
-            guard expr.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
-                return #"{"error": "Expression contains disallowed characters"}"#
-            }
-            let nsExpr = NSExpression(format: expr)
-            if let result = nsExpr.expressionValue(with: nil, context: nil) {
-                return #"{"expression": "\#(expression)", "result": \#(result)}"#
-            }
-            return #"{"error": "Could not evaluate expression"}"#
-        }
+    init(sessionId: UUID) {
+        self.sessionId = sessionId
+        self.localRegistry = LocalToolRegistry()
+        self.mcpManager = MCPConnectionManager()
+        localRegistry.registerNativeTools()
     }
 
     func getDefinitions() -> [ToolDefinition] {
-        return [
-            ToolDefinition(function: ToolFunction(
-                name: "get_current_time",
-                description: "Get the current date and time",
-                parameters: JSONSchema(
-                    type: "object",
-                    properties: [:],
-                    additionalProperties: false
-                ),
-                strict: true
-            )),
-            ToolDefinition(function: ToolFunction(
-                name: "calculator",
-                description: "Evaluate a mathematical expression. Supports + - * / and parentheses.",
-                parameters: JSONSchema(
-                    type: "object",
-                    properties: [
-                        "expression": PropertySchema(
-                            type: "string",
-                            description: "The mathematical expression to evaluate, e.g. 2+3*4"
-                        )
-                    ],
-                    required: ["expression"],
-                    additionalProperties: false
-                ),
-                strict: true
-            )),
-        ]
-    }
-
-    func register(name: String, handler: @Sendable @escaping (String) async -> String) {
-        handlers[name] = handler
-    }
-
-    func unregister(name: String) {
-        handlers.removeValue(forKey: name)
+        localRegistry.allDefinitions() + mcpManager.discoveredDefinitions()
     }
 
     func canHandle(name: String) -> Bool {
-        handlers[name] != nil
+        localRegistry.canHandle(name: name) || mcpManager.canForward(toolName: name)
     }
 
     func execute(name: String, argumentsJSON: String) async -> String {
-        guard let handler = handlers[name] else {
-            return #"{"error": "Unknown tool: \#(name)"}"#
+        if localRegistry.canHandle(name: name) {
+            return await localRegistry.execute(name: name, argumentsJSON: argumentsJSON)
         }
-        return await handler(argumentsJSON)
+
+        if mcpManager.canForward(toolName: name) {
+            do {
+                return try await mcpManager.forward(toolName: name, argumentsJSON: argumentsJSON)
+            } catch {
+                logger.error("MCP tool '\(name)' failed: \(error.localizedDescription)")
+                return #"{"error": "Tool '\#(name)' failed: \#(error.localizedDescription)"}"#
+            }
+        }
+
+        return #"{"error": "Unknown tool: \#(name)"}"#
+    }
+
+    func registerLocalTool(name: String, handler: @escaping LocalToolRegistry.ToolHandler, definition: ToolDefinition) {
+        localRegistry.register(name: name, handler: handler, definition: definition)
+    }
+
+    func unregisterLocalTool(name: String) {
+        localRegistry.unregister(name: name)
+    }
+
+    func connectMCPServer(config: MCPServerConfig) async throws {
+        try await mcpManager.connect(to: config)
+    }
+
+    func disconnectMCPServer(serverId: String) async {
+        await mcpManager.disconnect(serverId: serverId)
+    }
+
+    func disconnectAllMCPServers() async {
+        await mcpManager.disconnectAll()
     }
 }

@@ -117,6 +117,10 @@ struct AssistantSettingsView: View {
                         }
                     }
                     
+                    Section(header: Text("MCP 工具")) {
+                        Toggle("启用 MCP 工具调用", isOn: $assistant.mcpEnabled)
+                    }
+
                     Section {
                         Button(role: .destructive, action: { showDeleteConfirmation = true }) {
                             Label("删除此助手", systemImage: "trash")

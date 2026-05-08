@@ -17,7 +17,22 @@ final class ChatSession {
     var messages: [ChatMessage] = []
     
     var assistant: Assistant?
-    
+
+    @Transient var toolService: ToolExecutionService?
+
+    func ensureToolService() -> ToolExecutionService {
+        if let existing = toolService { return existing }
+        let service = ToolExecutionService(sessionId: id)
+        toolService = service
+        return service
+    }
+
+    func connectAssistantMCPServers() async {
+        guard let assistant, assistant.mcpEnabled else { return }
+        let service = ensureToolService()
+        // MCPServerConfig connections will be loaded by ToolExecutionServiceManager
+    }
+
     init(title: String = "新对话", provider: String = "openai", modelId: String = "gpt-4o", customBaseURL: String? = nil, assistant: Assistant? = nil) {
         self.id = UUID()
         self.title = title

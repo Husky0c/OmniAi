@@ -368,7 +368,8 @@ struct ChatDetailView: View {
             let modelId = effectiveModelId
             
             let caps = ModelCapability.effective(for: modelId, cached: activeKey.cachedCapabilities)
-            let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? ToolExecutionService.shared.getDefinitions() : nil
+            let toolService = session.ensureToolService()
+            let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
             
             let stream = LLMService.shared.sendMessageStream(
                 messages: aiMessages,
@@ -457,7 +458,7 @@ struct ChatDetailView: View {
                     guard let name = toolCall.function?.name, let args = toolCall.function?.arguments else {
                         continue
                     }
-                    let result = await ToolExecutionService.shared.execute(name: name, argumentsJSON: args)
+                    let result = await session.ensureToolService().execute(name: name, argumentsJSON: args)
                     let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: modelId)
                     toolMessage.toolCallId = toolCall.id
                     await MainActor.run {

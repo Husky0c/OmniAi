@@ -66,6 +66,9 @@ struct SettingsView: View {
                     NavigationLink(destination: DefaultModelSettingsView()) {
                         Label("默认模型", systemImage: "sparkles")
                     }
+                    NavigationLink(destination: MCPServerSettingsView()) {
+                        Label("MCP 服务器", systemImage: "server.rack")
+                    }
                 }
                 
                 Section(header: Text("数据管理"), footer: Text("即将支持将您的对话数据备份到本地，或通过 iCloud 跨设备同步。")) {

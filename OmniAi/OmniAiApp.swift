@@ -16,7 +16,8 @@ struct OmniAiApp: App {
             ChatMessage.self,
             MessageAttachment.self,
             APIKeys.self,
-            Assistant.self
+            Assistant.self,
+            MCPServerConfig.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
