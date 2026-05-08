@@ -134,6 +134,7 @@ struct ChatSidebarView: View {
             modelContext.insert(newSession)
             assistant.sessions.append(newSession)
             selectedSession = newSession
+            onSessionSelected?()
         }
     }
     
