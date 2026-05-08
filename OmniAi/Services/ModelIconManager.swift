@@ -49,30 +49,80 @@ struct ModelIconManager {
 
     @ViewBuilder
     static func view(forModelId modelId: String, size: CGFloat = 22) -> some View {
-        if let name = iconName(forModelId: modelId),
-           let url = Bundle.main.url(forResource: name, withExtension: "svg") {
-            SVGView(contentsOf: url)
-                .frame(width: size, height: size)
-                .clipShape(Circle())
-        } else {
-            Image(systemName: "person.crop.circle.fill")
-                .resizable()
-                .frame(width: size, height: size)
-                .foregroundStyle(.purple)
-        }
+        AdaptiveIcon(
+            name: iconName(forModelId: modelId),
+            size: size,
+            clipCircle: true
+        )
     }
 
     @ViewBuilder
     static func view(forChannel channel: APIKeys, size: CGFloat = 28) -> some View {
-        let name = iconName(forChannel: channel)
-        if let url = Bundle.main.url(forResource: name, withExtension: "svg") {
-            SVGView(contentsOf: url)
+        AdaptiveIcon(
+            name: iconName(forChannel: channel),
+            size: size,
+            clipCircle: false
+        )
+    }
+}
+
+// MARK: - Adaptive Icon
+
+private struct AdaptiveIcon: View {
+    @Environment(\.colorScheme) var colorScheme
+    let name: String?
+    let size: CGFloat
+    let clipCircle: Bool
+
+    @ViewBuilder
+    var body: some View {
+        if let name, let url = resolvedURL(for: name) {
+            if clipCircle {
+                SVGView(contentsOf: url)
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+                    .invertIf(colorScheme == .dark)
+            } else {
+                SVGView(contentsOf: url)
+                    .frame(width: size, height: size)
+                    .invertIf(colorScheme == .dark)
+            }
+        } else {
+            fallbackView
+        }
+    }
+
+    private func resolvedURL(for name: String) -> URL? {
+        if colorScheme == .light,
+           let url = Bundle.main.url(forResource: "\(name)-color", withExtension: "svg") {
+            return url
+        }
+        return Bundle.main.url(forResource: name, withExtension: "svg")
+    }
+
+    @ViewBuilder
+    private var fallbackView: some View {
+        if clipCircle {
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
                 .frame(width: size, height: size)
+                .foregroundStyle(.purple)
         } else {
             Image(systemName: "cpu")
                 .resizable()
                 .frame(width: size, height: size)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func invertIf(_ condition: Bool) -> some View {
+        if condition {
+            colorInvert()
+        } else {
+            self
         }
     }
 }
