@@ -38,19 +38,11 @@ struct ModelIconManager {
 
     // MARK: - Channel → icon name
 
-    static func iconName(forChannel channel: APIKeys) -> String {
-        switch channel.apiType {
-        case .openAI, .openAIResponse:
-            if let url = channel.requestURL?.lowercased() {
-                if url.contains("deepseek") { return "deepseek" }
-                if url.contains("openrouter") { return "openrouter" }
-            }
-            return "openai"
-        case .anthropic:
-            return "anthropic"
-        case .gemini:
-            return "gemini"
-        }
+    static func iconName(forChannel channel: APIKeys) -> String? {
+        guard let company = channel.company,
+              let preset = ProviderPreset.all.first(where: { $0.name == company })
+        else { return nil }
+        return preset.id
     }
 
     // MARK: - Views
