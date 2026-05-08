@@ -947,10 +947,7 @@ struct MessageBubbleView: View {
     private var headerView: some View {
         HStack(alignment: .top, spacing: 6) {
             if !isUser {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .frame(width: 22, height: 22)
-                    .foregroundStyle(.purple)
+                ModelIconManager.view(forModelId: message.modelId ?? "", size: 22)
             }
             
             VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {

@@ -17,13 +17,16 @@ struct LLMApiSettingsView: View {
                     Button(action: {
                         editingKey = apiKey
                     }) {
-                        VStack(alignment: .leading) {
-                            Text(apiKey.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            Text(apiKey.apiType.rawValue)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        HStack(alignment: .center, spacing: 12) {
+                            ModelIconManager.view(forChannel: apiKey, size: 28)
+                            VStack(alignment: .leading) {
+                                Text(apiKey.name)
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text(apiKey.apiType.rawValue)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
