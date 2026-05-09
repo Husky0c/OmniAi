@@ -40,6 +40,12 @@ struct ProviderPreset: Identifiable, Hashable {
             defaultBaseURL: "https://openrouter.ai/api/v1"
         ),
         ProviderPreset(
+            id: "minimax",
+            name: "MiniMax",
+            apiType: .openAI,
+            defaultBaseURL: "https://api.minimaxi.com/v1"
+        ),
+        ProviderPreset(
             id: "newapi",
             name: "NewAPI",
             apiType: .openAI,
