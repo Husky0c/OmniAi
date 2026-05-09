@@ -386,10 +386,13 @@ class LLMService: LLMServiceProtocol {
         return config
     }())
     
-    func getBaseURL(customURL: String?, apiType: APIType = .openAI) -> String {
+    func getBaseURL(customURL: String?, providerId: String? = nil, apiType: APIType = .openAI) -> String {
         var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if base.isEmpty {
-            return apiType == .zhipu ? "https://open.bigmodel.cn/api/paas/v4" : "https://api.openai.com/v1"
+            if let pid = providerId, let provider = ProviderRegistry.shared.getProvider(id: pid) {
+                return provider.defaultBaseURL
+            }
+            return "https://api.openai.com/v1"
         }
         while base.hasSuffix("/") {
             base.removeLast()
@@ -400,15 +403,22 @@ class LLMService: LLMServiceProtocol {
                 base.removeLast()
             }
         }
-        if apiType == .zhipu { return base }
-        if !base.hasSuffix("/v1") {
-            base.append("/v1")
+        if let pid = providerId, let provider = ProviderRegistry.shared.getProvider(id: pid) {
+            if provider.urlNormalization.appendVersion, !provider.urlNormalization.versionPath.isEmpty {
+                if !base.hasSuffix(provider.urlNormalization.versionPath) {
+                    base.append(provider.urlNormalization.versionPath)
+                }
+            }
+        } else {
+            if !base.hasSuffix("/v1") {
+                base.append("/v1")
+            }
         }
         return base
     }
     
-    func fetchAvailableModels(apiKey: String, baseURL: String?, apiType: APIType = .openAI) async throws -> [ModelInfo] {
-        let urlString = "\(getBaseURL(customURL: baseURL, apiType: apiType))/models"
+    func fetchAvailableModels(apiKey: String, baseURL: String?, apiType: APIType = .openAI, providerId: String? = nil) async throws -> [ModelInfo] {
+        let urlString = "\(getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType))/models"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
@@ -453,8 +463,8 @@ class LLMService: LLMServiceProtocol {
         }
     }
     
-    func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil) -> AsyncThrowingStream<LLMStreamEvent, Error> {
-        let urlString = "\(getBaseURL(customURL: baseURL, apiType: apiType))/chat/completions"
+    func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil, providerId: String? = nil) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+        let urlString = "\(getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
                 continuation.finish(throwing: URLError(.badURL))
@@ -480,6 +490,7 @@ class LLMService: LLMServiceProtocol {
         }
         
         let reasoningParams = ReasoningConfigBuilder.build(
+            providerId: providerId,
             apiType: apiType,
             baseURL: baseURL,
             modelId: modelId,
@@ -598,9 +609,10 @@ class LLMService: LLMServiceProtocol {
         baseURL: String?,
         modelId: String,
         temperature: Double? = nil,
-        apiType: APIType = .openAI
+        apiType: APIType = .openAI,
+        providerId: String? = nil
     ) async throws -> String {
-        let urlString = "\(getBaseURL(customURL: baseURL, apiType: apiType))/chat/completions"
+        let urlString = "\(getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType))/chat/completions"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }

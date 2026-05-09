@@ -149,7 +149,7 @@ struct ModelProviderSheet: View {
         availableModels = []
         Task {
             do {
-                let models = try await LLMService.shared.fetchAvailableModels(apiKey: keyString, baseURL: channel.requestURL, apiType: channel.apiType)
+                let models = try await LLMService.shared.fetchAvailableModels(apiKey: keyString, baseURL: channel.requestURL, apiType: channel.apiType, providerId: channel.providerID)
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false

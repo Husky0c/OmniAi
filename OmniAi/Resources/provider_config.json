@@ -1,0 +1,90 @@
+{
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "category": "openai",
+      "defaultBaseURL": "https://api.openai.com/v1",
+      "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+      "reasoning": { "strategy": "openai-standard" }
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "category": "openai",
+      "defaultBaseURL": "https://api.deepseek.com/v1",
+      "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+      "reasoning": { "strategy": "deepseek-hybrid" }
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "category": "anthropic",
+      "defaultBaseURL": "https://api.anthropic.com/v1",
+      "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+      "reasoning": { "strategy": "anthropic-thinking" }
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "category": "gemini",
+      "defaultBaseURL": "https://generativelanguage.googleapis.com/v1beta",
+      "urlNormalization": { "appendVersion": false, "versionPath": "" },
+      "reasoning": { "strategy": "gemini-hybrid" }
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "category": "openai",
+      "defaultBaseURL": "https://openrouter.ai/api/v1",
+      "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+      "reasoning": { "strategy": "openai-standard" }
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "category": "openai",
+      "defaultBaseURL": "https://api.minimaxi.com/v1",
+      "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+      "reasoning": { "strategy": "openai-standard" }
+    },
+    {
+      "id": "zhipu",
+      "name": "Zhipu",
+      "category": "openai",
+      "defaultBaseURL": "https://open.bigmodel.cn/api/paas/v4",
+      "urlNormalization": { "appendVersion": false, "versionPath": "" },
+      "reasoning": { "strategy": "openai-standard" }
+    },
+    {
+      "id": "zai",
+      "name": "Z.AI",
+      "category": "openai",
+      "defaultBaseURL": "https://api.z.ai/api/paas/v4",
+      "urlNormalization": { "appendVersion": false, "versionPath": "" },
+      "reasoning": { "strategy": "openai-standard" }
+    }
+  ],
+  "reasoningStrategies": {
+    "openai-standard": {
+      "enableParams": ["reasoning_effort"],
+      "disableAction": "reasoning_effort_none"
+    },
+    "anthropic-thinking": {
+      "enableParams": ["thinking"],
+      "disableAction": "thinking_disabled",
+      "supportsBudget": true,
+      "budgetField": "budget_tokens"
+    },
+    "gemini-hybrid": {
+      "enableParams": ["reasoning_effort", "thinking_budget"],
+      "disableAction": "reasoning_effort_none"
+    },
+    "deepseek-hybrid": {
+      "enableParams": ["reasoning_effort", "thinking", "enable_thinking"],
+      "disableAction": "thinking_disabled",
+      "supportsBudget": true,
+      "budgetField": "budget_tokens"
+    }
+  }
+}

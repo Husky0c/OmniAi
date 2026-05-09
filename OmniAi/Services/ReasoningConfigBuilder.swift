@@ -53,30 +53,101 @@ enum ReasoningConfigBuilder {
         (pattern: "baichuan-m3", min: 0, max: 30000),
     ]
 
-    static func build(apiType: APIType, baseURL: String?, modelId: String, effort: String?) -> ReasoningParams {
+    static func build(providerId: String? = nil, apiType: APIType, baseURL: String?, modelId: String, effort: String?) -> ReasoningParams {
         guard let effort, effort != "default" else { return ReasoningParams() }
         let lower = modelId.lowercased()
-        let isDeepSeek = lower.contains("deepseek")
-        let isQwen = lower.contains("qwen")
-        let isClaude = lower.contains("claude")
-        let isGemini = lower.contains("gemini")
 
-        let budget = computeThinkingBudget(modelId: lower, effort: effort)
+        if let pid = providerId,
+           let provider = ProviderRegistry.shared.getProvider(id: pid),
+           let strategy = ProviderRegistry.shared.getReasoningStrategy(name: provider.reasoning.strategy) {
+            let budget = computeThinkingBudget(modelId: lower, effort: effort)
+            if effort == "none" {
+                return buildDisableFromStrategy(strategy: strategy, modelId: lower)
+            }
+            return buildEnableFromStrategy(strategy: strategy, effort: effort, budget: budget)
+        }
+
+        return buildLegacy(apiType: apiType, baseURL: baseURL, modelId: lower, effort: effort)
+    }
+
+    // MARK: - Strategy-based path
+
+    private static func buildEnableFromStrategy(strategy: ReasoningStrategy, effort: String, budget: Int?) -> ReasoningParams {
+        var params = ReasoningParams()
+
+        for param in strategy.enableParams {
+            switch param {
+            case "reasoning_effort":
+                params.reasoning_effort = mapEffort(effort)
+            case "thinking":
+                if let budget, strategy.supportsBudget == true {
+                    params.thinking = ThinkingConfig(type: "enabled", budget_tokens: budget)
+                } else {
+                    params.thinking = ThinkingConfig(type: "enabled")
+                }
+            case "enable_thinking":
+                params.enable_thinking = true
+            case "thinking_budget":
+                params.thinking_budget = budget
+            default:
+                break
+            }
+        }
+
+        return params
+    }
+
+    private static func buildDisableFromStrategy(strategy: ReasoningStrategy, modelId: String) -> ReasoningParams {
+        if modelId.contains("claude") {
+            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
+        }
+        if modelId.contains("gemini") && modelId.contains("flash") {
+            return ReasoningParams(reasoning_effort: "none")
+        }
+        if modelId.contains("glm") {
+            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
+        }
+        if modelId.range(of: "deepseek-(r1|v4)", options: .regularExpression) != nil {
+            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
+        }
+        if modelId.contains("deepseek") {
+            return ReasoningParams(enable_thinking: false)
+        }
+
+        switch strategy.disableAction {
+        case "reasoning_effort_none":
+            return ReasoningParams(reasoning_effort: "none")
+        case "thinking_disabled":
+            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
+        case "enable_thinking_false":
+            return ReasoningParams(enable_thinking: false)
+        default:
+            return ReasoningParams(reasoning_effort: "none")
+        }
+    }
+
+    // MARK: - Legacy path (fallback for unknown provider IDs)
+
+    private static func buildLegacy(apiType: APIType, baseURL: String?, modelId: String, effort: String) -> ReasoningParams {
+        let isDeepSeek = modelId.contains("deepseek")
+        let isQwen = modelId.contains("qwen")
+        let isClaude = modelId.contains("claude")
+        let isGemini = modelId.contains("gemini")
+
+        let budget = computeThinkingBudget(modelId: modelId, effort: effort)
 
         if effort == "none" {
-            return buildDisableParams(apiType: apiType, modelId: lower, baseURL: baseURL ?? "")
+            return buildDisableLegacy(apiType: apiType, modelId: modelId, baseURL: baseURL ?? "")
         }
 
         switch apiType {
         case .anthropic:
-            return buildAnthropicParams(modelId: lower, effort: effort, budget: budget)
+            return buildAnthropicParams(modelId: modelId, effort: effort, budget: budget)
         case .gemini:
-            return buildGeminiParams(modelId: lower, effort: effort, budget: budget)
-        case .zhipu:
-            return buildDefaultOpenAIParams(effort: effort)
-        case .openAI, .openAIResponse:
+            return buildGeminiParams(modelId: modelId, effort: effort, budget: budget)
+        case .openAI:
             if isDeepSeek {
-                return buildDeepSeekParams(modelId: lower, effort: effort, budget: budget)
+                return buildDeepSeekParams(modelId: modelId, effort: effort, budget: budget)
             }
             if isQwen {
                 return buildQwenParams(effort: effort, budget: budget)
@@ -103,7 +174,7 @@ enum ReasoningConfigBuilder {
         return nil
     }
 
-    private static func buildDisableParams(apiType: APIType, modelId: String, baseURL: String) -> ReasoningParams {
+    private static func buildDisableLegacy(apiType: APIType, modelId: String, baseURL: String) -> ReasoningParams {
         if baseURL.contains("deepseek") {
             if modelId.range(of: "deepseek-(r1|v4)", options: .regularExpression) != nil {
                 return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
@@ -116,7 +187,7 @@ enum ReasoningConfigBuilder {
         if modelId.contains("gemini") && modelId.contains("flash") {
             return ReasoningParams(reasoning_effort: "none")
         }
-        if modelId.contains("glm") || apiType == .zhipu {
+        if modelId.contains("glm") {
             return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
         }
         return ReasoningParams(reasoning_effort: "none")

@@ -10,10 +10,8 @@ import SwiftData
 
 enum APIType: String, CaseIterable, Codable{
     case openAI = "OpenAI"
-    case openAIResponse = "OpenAI-Response"
-    case gemini = "Gemini"
     case anthropic = "Anthropic"
-    case zhipu = "Zhipu"
+    case gemini = "Gemini"
 }
 
 enum APISource: String, CaseIterable, Codable{
@@ -34,6 +32,7 @@ class APIKeys{
     var autoCapabilityProbe: Bool = true
     var cachedCapabilitiesJSON: String? = nil
     var selectedModelIDsJSON: String? = nil
+    var providerID: String? = nil
     private var apiTypeRawValue: String = APIType.openAI.rawValue
     private var apiSourceRawValue: String = APISource.system.rawValue
     
@@ -82,7 +81,8 @@ class APIKeys{
         timestamp: Date = Date(),
         autoCapabilityProbe: Bool = true,
         apiType: APIType = .openAI,
-        apiSource: APISource = .custom
+        apiSource: APISource = .custom,
+        providerID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -95,5 +95,6 @@ class APIKeys{
         self.autoCapabilityProbe = autoCapabilityProbe
         self.apiTypeRawValue = apiType.rawValue
         self.apiSourceRawValue = apiSource.rawValue
+        self.providerID = providerID
     }
 }

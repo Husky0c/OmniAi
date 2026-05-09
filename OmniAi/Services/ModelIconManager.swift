@@ -16,7 +16,7 @@ struct ModelIconManager {
         ("llama", "meta"),
         ("hunyuan", "hunyuan"),
         ("ernie", "baidu"),
-        ("glm|zhipu", "zhipu"),
+        ("glm|zhipu|zai", "zai"),
         ("moonshot", "moonshot"),
         ("minimax", "minimax"),
         ("yi-", "yi"),

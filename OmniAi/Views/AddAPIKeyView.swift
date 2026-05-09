@@ -137,8 +137,9 @@ struct AddAPIKeyView: View {
                     selectedModelIDs = existing.selectedModelIDs
                     
                     let matched = ProviderPreset.matching(existing.apiType,
-                        requestURL: existing.requestURL ?? "")
-                    selectedProviderID = matched?.id ?? "newapi"
+                        requestURL: existing.requestURL ?? "",
+                        providerId: existing.providerID)
+                    selectedProviderID = matched?.id ?? existing.providerID ?? "newapi"
                     if let matched {
                         requestURL = matched.defaultBaseURL
                     }
@@ -163,7 +164,7 @@ struct AddAPIKeyView: View {
         availableModels = []
         Task {
             do {
-                let models = try await LLMService.shared.fetchAvailableModels(apiKey: key, baseURL: requestURL, apiType: apiType)
+                let models = try await LLMService.shared.fetchAvailableModels(apiKey: key, baseURL: requestURL, apiType: apiType, providerId: selectedProviderID)
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
@@ -191,6 +192,7 @@ struct AddAPIKeyView: View {
             existing.key = key.isEmpty ? nil : key
             existing.requestURL = requestURL.isEmpty ? nil : requestURL
             existing.apiType = apiType
+            existing.providerID = selectedProviderID
             existing.autoCapabilityProbe = autoCapabilityProbe
             existing.selectedModelIDs = selectedModelIDs
             existing.timestamp = Date()
@@ -202,7 +204,8 @@ struct AddAPIKeyView: View {
                 requestURL: requestURL.isEmpty ? nil : requestURL,
                 invisible: false,
                 autoCapabilityProbe: autoCapabilityProbe,
-                apiType: apiType
+                apiType: apiType,
+                providerID: selectedProviderID
             )
             newKey.selectedModelIDs = selectedModelIDs
             modelContext.insert(newKey)

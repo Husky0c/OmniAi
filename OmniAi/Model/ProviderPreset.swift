@@ -8,58 +8,34 @@ struct ProviderPreset: Identifiable, Hashable {
 
     var isCustom: Bool { id == "newapi" }
 
-    static let all: [ProviderPreset] = [
-        ProviderPreset(
-            id: "openai",
-            name: "OpenAI",
-            apiType: .openAI,
-            defaultBaseURL: "https://api.openai.com/v1"
-        ),
-        ProviderPreset(
-            id: "deepseek",
-            name: "DeepSeek",
-            apiType: .openAI,
-            defaultBaseURL: "https://api.deepseek.com/v1"
-        ),
-        ProviderPreset(
-            id: "anthropic",
-            name: "Anthropic",
-            apiType: .anthropic,
-            defaultBaseURL: "https://api.anthropic.com/v1"
-        ),
-        ProviderPreset(
-            id: "gemini",
-            name: "Google Gemini",
-            apiType: .gemini,
-            defaultBaseURL: "https://generativelanguage.googleapis.com/v1beta"
-        ),
-        ProviderPreset(
-            id: "openrouter",
-            name: "OpenRouter",
-            apiType: .openAI,
-            defaultBaseURL: "https://openrouter.ai/api/v1"
-        ),
-        ProviderPreset(
-            id: "minimax",
-            name: "MiniMax",
-            apiType: .openAI,
-            defaultBaseURL: "https://api.minimaxi.com/v1"
-        ),
-        ProviderPreset(
-            id: "zhipu",
-            name: "Zhipu",
-            apiType: .zhipu,
-            defaultBaseURL: "https://open.bigmodel.cn/api/paas/v4"
-        ),
-        ProviderPreset(
+    static let all: [ProviderPreset] = {
+        let registry = ProviderRegistry.shared
+        var presets: [ProviderPreset] = []
+
+        for provider in registry.getAllProviders() {
+            let apiType = registry.getCategory(provider.id)
+            presets.append(ProviderPreset(
+                id: provider.id,
+                name: provider.name,
+                apiType: apiType,
+                defaultBaseURL: provider.defaultBaseURL
+            ))
+        }
+
+        presets.append(ProviderPreset(
             id: "newapi",
             name: "NewAPI",
             apiType: .openAI,
             defaultBaseURL: ""
-        ),
-    ]
+        ))
 
-    static func matching(_ apiType: APIType, requestURL: String) -> ProviderPreset? {
-        all.first { $0.apiType == apiType && !$0.isCustom && $0.defaultBaseURL == requestURL }
+        return presets
+    }()
+
+    static func matching(_ apiType: APIType, requestURL: String, providerId: String? = nil) -> ProviderPreset? {
+        if let pid = providerId {
+            return all.first { $0.id == pid }
+        }
+        return all.first { $0.apiType == apiType && !$0.isCustom && $0.defaultBaseURL == requestURL }
     }
 }
