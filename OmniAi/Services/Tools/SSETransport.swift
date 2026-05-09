@@ -9,7 +9,7 @@ final class SSETransport {
     private let authToken: String?
     let timeoutSeconds: Int
 
-    private var urlSession: URLSession?
+    private var urlSession: URLSessionProtocol?
     private var sseTask: Task<Void, Error>?
     private var sessionId: String?
     private(set) var isConnected: Bool = false
@@ -40,7 +40,7 @@ extension SSETransport: MCPTransport {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = Double(timeoutSeconds)
         config.timeoutIntervalForResource = Double(timeoutSeconds * 2)
-        let session = URLSession(configuration: config)
+        let session: URLSessionProtocol = URLSession(configuration: config)
         self.urlSession = session
 
         let initReq = MCPJSONRPC.Request(
@@ -164,7 +164,6 @@ extension SSETransport: MCPTransport {
     func disconnect() {
         sseTask?.cancel()
         sseTask = nil
-        urlSession?.invalidateAndCancel()
         urlSession = nil
         sessionId = nil
         isConnected = false
@@ -172,11 +171,11 @@ extension SSETransport: MCPTransport {
 }
 
 private extension SSETransport {
-    func readSSEStream(_ bytes: URLSession.AsyncBytes) async throws {
+    func readSSEStream(_ lines: AsyncThrowingStream<String, Error>) async throws {
         var currentEvent = "message"
         var currentData: [String] = []
 
-        for try await line in bytes.lines {
+        for try await line in lines {
             if Task.isCancelled { break }
 
             if line.hasPrefix("event: ") {

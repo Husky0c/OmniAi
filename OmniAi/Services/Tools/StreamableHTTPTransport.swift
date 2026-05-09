@@ -9,7 +9,7 @@ final class StreamableHTTPTransport {
     private let authToken: String?
     let timeoutSeconds: Int
 
-    private var urlSession: URLSession?
+    private var urlSession: URLSessionProtocol?
     private var sessionId: String?
     private(set) var isConnected: Bool = false
 
@@ -35,7 +35,7 @@ extension StreamableHTTPTransport: MCPTransport {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = Double(timeoutSeconds)
         config.timeoutIntervalForResource = Double(timeoutSeconds * 2)
-        let session = URLSession(configuration: config)
+        let session: URLSessionProtocol = URLSession(configuration: config)
         self.urlSession = session
 
         let initReq = MCPJSONRPC.Request(
@@ -120,16 +120,6 @@ extension StreamableHTTPTransport: MCPTransport {
     }
 
     func disconnect() {
-        if let sessionId, let url = URL(string: endpointURL), let urlSession {
-            var request = URLRequest(url: url)
-            request.httpMethod = "DELETE"
-            request.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-            if let token = authToken {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-            urlSession.dataTask(with: request).resume()
-        }
-        urlSession?.invalidateAndCancel()
         urlSession = nil
         sessionId = nil
         isConnected = false

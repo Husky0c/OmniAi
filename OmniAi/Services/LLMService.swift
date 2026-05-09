@@ -378,13 +378,13 @@ class LLMService: LLMServiceProtocol {
     
     private let logger = Logger(subsystem: "com.omniai.network", category: "LLMService")
     
-    private lazy var session: URLSession = {
+    var session: URLSessionProtocol = URLSession(configuration: {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 300
         config.timeoutIntervalForResource = 3600
         config.waitsForConnectivity = false
-        return URLSession(configuration: config)
-    }()
+        return config
+    }())
     
     func getBaseURL(customURL: String?) -> String {
         var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -520,7 +520,7 @@ class LLMService: LLMServiceProtocol {
                     
                     guard httpResponse.statusCode == 200 else {
                         var errorBody = ""
-                        for try await line in result.lines {
+                        for try await line in result {
                             errorBody += line + "\n"
                         }
                         
@@ -537,7 +537,7 @@ class LLMService: LLMServiceProtocol {
                     
                     let thinkTagParser = ThinkTagParser()
 
-                    for try await line in result.lines {
+                    for try await line in result {
                         try Task.checkCancellation()
                         let prefix = "data: "
                         guard line.hasPrefix(prefix) else { continue }
