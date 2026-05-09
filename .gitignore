@@ -70,3 +70,6 @@ Carthage/Checkouts/
 # Environment
 .env
 .env.local
+
+# Todo files
+plans/
