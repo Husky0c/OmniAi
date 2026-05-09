@@ -72,6 +72,8 @@ enum ReasoningConfigBuilder {
             return buildAnthropicParams(modelId: lower, effort: effort, budget: budget)
         case .gemini:
             return buildGeminiParams(modelId: lower, effort: effort, budget: budget)
+        case .zhipu:
+            return buildDefaultOpenAIParams(effort: effort)
         case .openAI, .openAIResponse:
             if isDeepSeek {
                 return buildDeepSeekParams(modelId: lower, effort: effort, budget: budget)
@@ -113,6 +115,9 @@ enum ReasoningConfigBuilder {
         }
         if modelId.contains("gemini") && modelId.contains("flash") {
             return ReasoningParams(reasoning_effort: "none")
+        }
+        if modelId.contains("glm") || apiType == .zhipu {
+            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
         }
         return ReasoningParams(reasoning_effort: "none")
     }

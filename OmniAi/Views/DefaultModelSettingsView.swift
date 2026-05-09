@@ -104,6 +104,7 @@ struct DefaultModelSettingsView: View {
                     channelName: channel.name,
                     apiKey: channel.key ?? "",
                     baseURL: channel.requestURL,
+                    apiType: channel.apiType,
                     selectedModel: $defaultModelId,
                     cachedCapabilities: channel.cachedCapabilities,
                     onSaveCap: { modelId, newCap in
@@ -120,6 +121,7 @@ struct DefaultModelSettingsView: View {
                     channelName: channel.name,
                     apiKey: channel.key ?? "",
                     baseURL: channel.requestURL,
+                    apiType: channel.apiType,
                     selectedModel: $autoRenameModelId,
                     cachedCapabilities: channel.cachedCapabilities,
                     onSaveCap: { modelId, newCap in
@@ -138,6 +140,7 @@ struct ModelSelectionSheetFromChannel: View {
     let channelName: String
     let apiKey: String
     let baseURL: String?
+    let apiType: APIType
     @Binding var selectedModel: String
     let cachedCapabilities: [String: ModelCapability]
     var onSaveCap: ((String, ModelCapability) -> Void)? = nil
@@ -198,7 +201,7 @@ struct ModelSelectionSheetFromChannel: View {
             }
             .task {
                 do {
-                    let fetched = try await LLMService.shared.fetchAvailableModels(apiKey: apiKey, baseURL: baseURL)
+                    let fetched = try await LLMService.shared.fetchAvailableModels(apiKey: apiKey, baseURL: baseURL, apiType: apiType)
                     await MainActor.run {
                         models = fetched
                         isFetching = false

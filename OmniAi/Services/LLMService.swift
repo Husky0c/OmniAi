@@ -386,10 +386,10 @@ class LLMService: LLMServiceProtocol {
         return config
     }())
     
-    func getBaseURL(customURL: String?) -> String {
+    func getBaseURL(customURL: String?, apiType: APIType = .openAI) -> String {
         var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if base.isEmpty {
-            return "https://api.openai.com/v1"
+            return apiType == .zhipu ? "https://open.bigmodel.cn/api/paas/v4" : "https://api.openai.com/v1"
         }
         while base.hasSuffix("/") {
             base.removeLast()
@@ -400,14 +400,15 @@ class LLMService: LLMServiceProtocol {
                 base.removeLast()
             }
         }
+        if apiType == .zhipu { return base }
         if !base.hasSuffix("/v1") {
             base.append("/v1")
         }
         return base
     }
     
-    func fetchAvailableModels(apiKey: String, baseURL: String?) async throws -> [ModelInfo] {
-        let urlString = "\(getBaseURL(customURL: baseURL))/models"
+    func fetchAvailableModels(apiKey: String, baseURL: String?, apiType: APIType = .openAI) async throws -> [ModelInfo] {
+        let urlString = "\(getBaseURL(customURL: baseURL, apiType: apiType))/models"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
@@ -453,18 +454,18 @@ class LLMService: LLMServiceProtocol {
     }
     
     func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil) -> AsyncThrowingStream<LLMStreamEvent, Error> {
-        let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
+        let urlString = "\(getBaseURL(customURL: baseURL, apiType: apiType))/chat/completions"
         guard let url = URL(string: urlString) else {
             return AsyncThrowingStream { continuation in
                 continuation.finish(throwing: URLError(.badURL))
             }
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        
+
         var chatRequest = OpenAIChatRequest(
             model: modelId,
             messages: messages,
@@ -596,9 +597,10 @@ class LLMService: LLMServiceProtocol {
         apiKey: String,
         baseURL: String?,
         modelId: String,
-        temperature: Double? = nil
+        temperature: Double? = nil,
+        apiType: APIType = .openAI
     ) async throws -> String {
-        let urlString = "\(getBaseURL(customURL: baseURL))/chat/completions"
+        let urlString = "\(getBaseURL(customURL: baseURL, apiType: apiType))/chat/completions"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }

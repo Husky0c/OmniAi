@@ -13,6 +13,7 @@ enum APIType: String, CaseIterable, Codable{
     case openAIResponse = "OpenAI-Response"
     case gemini = "Gemini"
     case anthropic = "Anthropic"
+    case zhipu = "Zhipu"
 }
 
 enum APISource: String, CaseIterable, Codable{

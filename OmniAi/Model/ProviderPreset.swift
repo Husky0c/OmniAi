@@ -46,6 +46,12 @@ struct ProviderPreset: Identifiable, Hashable {
             defaultBaseURL: "https://api.minimaxi.com/v1"
         ),
         ProviderPreset(
+            id: "zhipu",
+            name: "Zhipu",
+            apiType: .zhipu,
+            defaultBaseURL: "https://open.bigmodel.cn/api/paas/v4"
+        ),
+        ProviderPreset(
             id: "newapi",
             name: "NewAPI",
             apiType: .openAI,

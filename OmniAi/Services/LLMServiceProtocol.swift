@@ -17,11 +17,13 @@ protocol LLMServiceProtocol {
         apiKey: String,
         baseURL: String?,
         modelId: String,
-        temperature: Double?
+        temperature: Double?,
+        apiType: APIType
     ) async throws -> String
 
     func fetchAvailableModels(
         apiKey: String,
-        baseURL: String?
+        baseURL: String?,
+        apiType: APIType
     ) async throws -> [ModelInfo]
 }

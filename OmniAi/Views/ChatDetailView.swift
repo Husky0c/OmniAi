@@ -562,7 +562,8 @@ struct ChatDetailView: View {
                 apiKey: keyString,
                 baseURL: channel.requestURL,
                 modelId: modelId,
-                temperature: 0.3
+                temperature: 0.3,
+                apiType: channel.apiType
             )
             // Strip <think> tags from reasoning model outputs
             let stripped = raw.replacingOccurrences(

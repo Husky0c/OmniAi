@@ -163,7 +163,7 @@ struct AddAPIKeyView: View {
         availableModels = []
         Task {
             do {
-                let models = try await LLMService.shared.fetchAvailableModels(apiKey: key, baseURL: requestURL)
+                let models = try await LLMService.shared.fetchAvailableModels(apiKey: key, baseURL: requestURL, apiType: apiType)
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
