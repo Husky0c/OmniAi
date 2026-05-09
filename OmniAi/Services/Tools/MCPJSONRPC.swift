@@ -210,10 +210,10 @@ enum MCPJSONRPC {
     private static let idLock = NSLock()
 
     static func nextId() -> Int {
-        idLock.lock()
-        defer { idLock.unlock() }
-        _nextId += 1
-        return _nextId
+        idLock.withLock {
+            _nextId += 1
+            return _nextId
+        }
     }
 
     // MARK: - Line parsing

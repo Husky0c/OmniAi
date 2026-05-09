@@ -98,9 +98,7 @@ extension StdioTransport: MCPTransport {
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                pendingLock.lock()
-                pendingRequests[request.id] = continuation
-                pendingLock.unlock()
+                pendingLock.withLock { pendingRequests[request.id] = continuation }
 
                 queue.async {
                     stdin.fileHandleForWriting.write(line.data(using: .utf8)!)
@@ -109,14 +107,11 @@ extension StdioTransport: MCPTransport {
                 let timeoutNs = UInt64(timeoutSeconds) * 1_000_000_000
                 Task {
                     try await Task.sleep(nanoseconds: timeoutNs)
-                    pendingLock.lock()
-                    if let cont = pendingRequests.removeValue(forKey: request.id) {
-                        pendingLock.unlock()
+                    let cont = pendingLock.withLock { pendingRequests.removeValue(forKey: request.id) }
+                    if let cont {
                         cont.resume(throwing: MCPJSONRPC.MCPError(
                             code: -32000, message: "Request timed out after \(timeoutSeconds)s", data: nil
                         ))
-                    } else {
-                        pendingLock.unlock()
                     }
                 }
             }
@@ -128,10 +123,11 @@ extension StdioTransport: MCPTransport {
     }
 
     func disconnect() {
-        pendingLock.lock()
-        let pending = pendingRequests
-        pendingRequests.removeAll()
-        pendingLock.unlock()
+        let pending = pendingLock.withLock {
+            let result = pendingRequests
+            pendingRequests.removeAll()
+            return result
+        }
         for (_, cont) in pending {
             cont.resume(throwing: MCPJSONRPC.MCPError(code: -32000, message: "Disconnected", data: nil))
         }
@@ -171,9 +167,7 @@ private extension StdioTransport {
             do {
                 let response = try MCPJSONRPC.parseLine(trimmed)
                 guard let responseId = response.id else { continue }
-                pendingLock.lock()
-                let continuation = pendingRequests.removeValue(forKey: responseId)
-                pendingLock.unlock()
+                let continuation = pendingLock.withLock { pendingRequests.removeValue(forKey: responseId) }
                 if let continuation {
                     if let error = response.error {
                         continuation.resume(throwing: error)
@@ -192,10 +186,11 @@ private extension StdioTransport {
     }
 
     func failAllPending(error: Error) {
-        pendingLock.lock()
-        let pending = pendingRequests
-        pendingRequests.removeAll()
-        pendingLock.unlock()
+        let pending = pendingLock.withLock {
+            let result = pendingRequests
+            pendingRequests.removeAll()
+            return result
+        }
         for (_, cont) in pending {
             cont.resume(throwing: error)
         }

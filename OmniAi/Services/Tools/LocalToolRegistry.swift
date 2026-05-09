@@ -8,38 +8,29 @@ final class LocalToolRegistry {
     private let lock = NSLock()
 
     func register(name: String, handler: @escaping ToolHandler, definition: ToolDefinition) {
-        lock.lock()
-        handlers[name] = handler
-        definitions[name] = definition
-        lock.unlock()
+        lock.withLock {
+            handlers[name] = handler
+            definitions[name] = definition
+        }
     }
 
     func unregister(name: String) {
-        lock.lock()
-        handlers.removeValue(forKey: name)
-        definitions.removeValue(forKey: name)
-        lock.unlock()
+        lock.withLock {
+            handlers.removeValue(forKey: name)
+            definitions.removeValue(forKey: name)
+        }
     }
 
     func canHandle(name: String) -> Bool {
-        lock.lock()
-        let result = handlers[name] != nil
-        lock.unlock()
-        return result
+        lock.withLock { handlers[name] != nil }
     }
 
     func allDefinitions() -> [ToolDefinition] {
-        lock.lock()
-        let result = Array(definitions.values)
-        lock.unlock()
-        return result
+        lock.withLock { Array(definitions.values) }
     }
 
     func execute(name: String, argumentsJSON: String) async -> String {
-        let handler: ToolHandler?
-        lock.lock()
-        handler = handlers[name]
-        lock.unlock()
+        let handler = lock.withLock { handlers[name] }
         guard let handler else {
             return #"{"error": "Unknown local tool: \#(name)"}"#
         }

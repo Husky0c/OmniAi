@@ -88,10 +88,9 @@ extension SSETransport: MCPTransport {
                         throw CancellationError()
                     }
 
-                    stateLock.lock()
-                    let found = endpointFound
-                    let sid = capturedSid
-                    stateLock.unlock()
+                    let (found, sid) = stateLock.withLock {
+                        (endpointFound, capturedSid)
+                    }
 
                     if found, let sid {
                         self.sessionId = sid
@@ -195,10 +194,10 @@ private extension SSETransport {
                         } else {
                             sid = trimmed
                         }
-                        stateLock.lock()
-                        endpointFound = true
-                        capturedSid = sid
-                        stateLock.unlock()
+                        stateLock.withLock {
+                            endpointFound = true
+                            capturedSid = sid
+                        }
                     } else if endpointFound {
                         handleNotification(event: currentEvent, data: joined)
                     }

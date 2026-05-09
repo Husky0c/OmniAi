@@ -10,9 +10,7 @@ final class MCPConnectionManager {
     private let lock = NSLock()
 
     var activeServerCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return transports.count
+        lock.withLock { transports.count }
     }
 }
 
@@ -20,19 +18,14 @@ extension MCPConnectionManager {
     func connect(to config: MCPServerConfig) async throws {
         let serverId = config.id.uuidString
 
-        lock.lock()
-        if transports[serverId] != nil {
+        if lock.withLock({ transports[serverId] != nil }) {
             logger.debug("MCP server '\(config.name)' already connected, skipping")
-            lock.unlock()
             return
         }
-        lock.unlock()
 
         let transport: MCPTransport = try createTransport(from: config)
 
-        lock.lock()
-        transports[serverId] = transport
-        lock.unlock()
+        lock.withLock { transports[serverId] = transport }
 
         try await transport.connect()
 
@@ -42,36 +35,37 @@ extension MCPConnectionManager {
             registerTools(serverId: serverId, tools: tools)
         } catch {
             transport.disconnect()
-            lock.lock()
-            transports.removeValue(forKey: serverId)
-            lock.unlock()
+            _ = lock.withLock { transports.removeValue(forKey: serverId) }
             throw error
         }
     }
 
     func disconnect(serverId: String) async {
-        lock.lock()
-        let transport = transports.removeValue(forKey: serverId)
-        let serverTools = serverTools.removeValue(forKey: serverId) ?? []
-        let toolsToRemove = Set(serverTools.map { $0.name })
-        lock.unlock()
+        var transport: MCPTransport?
+        var toolsToRemove: Set<String> = []
+        lock.withLock {
+            transport = transports.removeValue(forKey: serverId)
+            let serverToolList = serverTools.removeValue(forKey: serverId) ?? []
+            toolsToRemove = Set(serverToolList.map { $0.name })
+        }
 
         transport?.disconnect()
 
-        lock.lock()
-        for toolName in toolsToRemove {
-            toolRouting.removeValue(forKey: toolName)
+        lock.withLock {
+            for toolName in toolsToRemove {
+                toolRouting.removeValue(forKey: toolName)
+            }
         }
-        lock.unlock()
     }
 
     func disconnectAll() async {
-        lock.lock()
-        let allTransports = transports
-        transports.removeAll()
-        serverTools.removeAll()
-        toolRouting.removeAll()
-        lock.unlock()
+        var allTransports: [String: MCPTransport] = [:]
+        lock.withLock {
+            allTransports = transports
+            transports.removeAll()
+            serverTools.removeAll()
+            toolRouting.removeAll()
+        }
 
         for (_, transport) in allTransports {
             transport.disconnect()
@@ -79,31 +73,25 @@ extension MCPConnectionManager {
     }
 
     func discoveredDefinitions() -> [ToolDefinition] {
-        lock.lock()
-        defer { lock.unlock() }
-
-        var result: [ToolDefinition] = []
-        for (_, tools) in serverTools {
-            for mcpTool in tools {
-                if let def = convertToToolDefinition(mcpTool) {
-                    result.append(def)
+        lock.withLock {
+            var result: [ToolDefinition] = []
+            for (_, tools) in serverTools {
+                for mcpTool in tools {
+                    if let def = convertToToolDefinition(mcpTool) {
+                        result.append(def)
+                    }
                 }
             }
+            return result
         }
-        return result
     }
 
     func canForward(toolName: String) -> Bool {
-        lock.lock()
-        let result = toolRouting[toolName] != nil
-        lock.unlock()
-        return result
+        lock.withLock { toolRouting[toolName] != nil }
     }
 
     func forward(toolName: String, argumentsJSON: String) async throws -> String {
-        lock.lock()
-        let serverId = toolRouting[toolName]
-        lock.unlock()
+        let serverId = lock.withLock { toolRouting[toolName] }
 
         guard let serverId, let transport = transports[serverId] else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "No server available for tool: \(toolName)", data: nil)
@@ -186,12 +174,12 @@ private extension MCPConnectionManager {
     }
 
     func registerTools(serverId: String, tools: [MCPJSONRPC.MCPToolDefinition]) {
-        lock.lock()
-        serverTools[serverId] = tools
-        for tool in tools {
-            toolRouting[tool.name] = serverId
+        lock.withLock {
+            serverTools[serverId] = tools
+            for tool in tools {
+                toolRouting[tool.name] = serverId
+            }
         }
-        lock.unlock()
     }
 
     func convertToToolDefinition(_ mcpTool: MCPJSONRPC.MCPToolDefinition) -> ToolDefinition? {
