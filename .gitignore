@@ -34,7 +34,6 @@ xcuserdata/
 xcuserdata
 *.moved-aside
 .swiftpm/
-*.xcodeproj
 *.xcworkspace
 
 # Swift Package Manager
