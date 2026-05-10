@@ -12,6 +12,10 @@ final class MCPConnectionManager {
     var activeServerCount: Int {
         lock.withLock { transports.count }
     }
+
+    func connectedServerIds() -> Set<String> {
+        lock.withLock { Set(transports.keys) }
+    }
 }
 
 extension MCPConnectionManager {
@@ -155,6 +159,10 @@ private extension MCPConnectionManager {
         }
 
         logger.debug("MCP handshake OK: \(result.serverInfo.name) v\(result.serverInfo.version)")
+
+        let notification = MCPJSONRPC.Notification(method: "notifications/initialized")
+        try await transport.send(notification: notification)
+        logger.debug("Sent notifications/initialized")
     }
 
     func discoverTools(_ transport: MCPTransport) async throws -> [MCPJSONRPC.MCPToolDefinition] {
@@ -189,7 +197,15 @@ private extension MCPConnectionManager {
             if let props = inputSchema.properties {
                 properties = [:]
                 for (key, value) in props {
-                    properties?[key] = PropertySchema(type: value.type, description: value.description)
+                    let resolvedType: String
+                    if let type = value.type {
+                        resolvedType = type
+                    } else if let anyOf = value.anyOf, let first = anyOf.first, let firstType = first.type {
+                        resolvedType = firstType
+                    } else {
+                        resolvedType = "string"
+                    }
+                    properties?[key] = PropertySchema(type: resolvedType, description: value.description)
                 }
             }
             schema = JSONSchema(

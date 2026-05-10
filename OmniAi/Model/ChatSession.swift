@@ -29,9 +29,19 @@ final class ChatSession {
     }
 
     func connectAssistantMCPServers(enabledConfigs: [MCPServerConfig]) async {
-        guard let assistant, assistant.mcpEnabled else { return }
+        guard let assistant, assistant.mcpEnabled else {
+            await toolService?.disconnectAllMCPServers()
+            return
+        }
         let service = ensureToolService()
-        for config in enabledConfigs where config.isEnabled {
+        let enabledIds = Set(enabledConfigs.filter { $0.isEnabled }.map { $0.id.uuidString })
+        let connectedIds = service.mcpManager.connectedServerIds()
+
+        for serverId in connectedIds where !enabledIds.contains(serverId) {
+            await service.disconnectMCPServer(serverId: serverId)
+        }
+
+        for config in enabledConfigs where config.isEnabled && !connectedIds.contains(config.id.uuidString) {
             do {
                 try await service.connectMCPServer(config: config)
             } catch {

@@ -28,43 +28,14 @@ final class StreamableHTTPTransport {
 extension StreamableHTTPTransport: MCPTransport {
     func connect() async throws {
         guard !isConnected else { return }
-        guard let url = URL(string: endpointURL) else {
+        guard URL(string: endpointURL) != nil else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid URL: \(endpointURL)", data: nil)
         }
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = Double(timeoutSeconds)
         config.timeoutIntervalForResource = Double(timeoutSeconds * 2)
-        let session: URLSessionProtocol = URLSession(configuration: config)
-        self.urlSession = session
-
-        let initReq = MCPJSONRPC.Request(
-            id: MCPJSONRPC.nextId(),
-            method: "initialize",
-            encodable: MCPJSONRPC.InitializeParams.current
-        )
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = try initReq.toJSONData()
-        request.timeoutInterval = Double(timeoutSeconds)
-
-        let (_, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid Streamable HTTP response", data: nil)
-        }
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw MCPJSONRPC.MCPError(
-                code: -32000, message: "Streamable HTTP server returned \(httpResponse.statusCode)", data: nil
-            )
-        }
-
-        sessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id")
+        urlSession = URLSession(configuration: config)
         isConnected = true
     }
 
@@ -119,6 +90,34 @@ extension StreamableHTTPTransport: MCPTransport {
         )
     }
 
+    func send(notification: MCPJSONRPC.Notification) async throws {
+        guard isConnected, let urlSession else {
+            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        }
+        guard let url = URL(string: endpointURL) else {
+            throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid URL: \(endpointURL)", data: nil)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let sessionId {
+            request.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
+        }
+        request.httpBody = try notification.toJSONData()
+        request.timeoutInterval = Double(timeoutSeconds)
+
+        let (_, response) = try await urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+        if let newSessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+            sessionId = newSessionId
+        }
+    }
+
     func disconnect() {
         urlSession = nil
         sessionId = nil
@@ -128,36 +127,58 @@ extension StreamableHTTPTransport: MCPTransport {
 
 private extension StreamableHTTPTransport {
     func parseSSEResponse(_ text: String, requestId: Int) throws -> MCPJSONRPC.Response {
-        var currentEvent = "message"
         var currentData: [String] = []
 
-        for line in text.components(separatedBy: "\n") {
-            if line.hasPrefix("event: ") {
-                currentEvent = String(line.dropFirst(7)).trimmingCharacters(in: .whitespaces)
-            } else if line.hasPrefix("data: ") {
+        let lines = text.components(separatedBy: "\n")
+        for line in lines {
+            if line.hasPrefix("data: ") {
                 let value = String(line.dropFirst(6))
                 currentData.append(value)
-            } else if line.isEmpty {
-                if !currentData.isEmpty, currentEvent == "message" || currentEvent == "result" {
-                    let json = currentData.joined(separator: "\n")
-                    if let jsonData = json.data(using: .utf8) {
-                        do {
-                            let response = try MCPJSONRPC.Response.parse(from: jsonData)
-                            if response.id == requestId {
-                                return response
-                            }
-                        } catch {
-                            logger.debug("Skipping non-JSON SSE data: \(error.localizedDescription)")
-                        }
-                    }
+            } else if line.isEmpty, !currentData.isEmpty {
+                if let response = try parseAndMatchResponse(from: currentData, requestId: requestId) {
+                    return response
                 }
-                currentEvent = "message"
                 currentData = []
+            }
+        }
+
+        if !currentData.isEmpty {
+            if let response = try parseAndMatchResponse(from: currentData, requestId: requestId) {
+                return response
             }
         }
 
         throw MCPJSONRPC.MCPError(
             code: -32000, message: "No response with matching request ID \(requestId) in SSE stream", data: nil
         )
+    }
+
+    func parseAndMatchResponse(from currentData: [String], requestId: Int) throws -> MCPJSONRPC.Response? {
+        let json = currentData.joined(separator: "\n")
+        guard let jsonData = json.data(using: .utf8) else { return nil }
+
+        if let array = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]] {
+            for item in array {
+                if let id = item["id"] as? Int, id == requestId {
+                    let response = MCPJSONRPC.Response(
+                        jsonrpc: item["jsonrpc"] as? String ?? "2.0",
+                        id: id,
+                        rawResult: item["result"],
+                        error: (item["error"] as? [String: Any]).map { MCPJSONRPC.MCPError(dict: $0) }
+                    )
+                    return response
+                }
+            }
+        }
+
+        do {
+            let response = try MCPJSONRPC.Response.parse(from: jsonData)
+            if response.id == requestId {
+                return response
+            }
+        } catch {
+            logger.debug("Skipping non-JSON SSE data: \(error.localizedDescription)")
+        }
+        return nil
     }
 }

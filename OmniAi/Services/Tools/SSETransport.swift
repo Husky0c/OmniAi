@@ -160,6 +160,40 @@ extension SSETransport: MCPTransport {
         return mcpResponse
     }
 
+    func send(notification: MCPJSONRPC.Notification) async throws {
+        guard isConnected, let urlSession else {
+            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        }
+
+        let messageURL: URL
+        if let sessionId, var components = URLComponents(string: baseURL) {
+            components.queryItems = [URLQueryItem(name: "sessionId", value: sessionId)]
+            guard let url = components.url else {
+                throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid message URL", data: nil)
+            }
+            messageURL = url
+        } else if let url = URL(string: baseURL) {
+            messageURL = url
+        } else {
+            throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid base URL: \(baseURL)", data: nil)
+        }
+
+        var urlRequest = URLRequest(url: messageURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = authToken {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        urlRequest.httpBody = try notification.toJSONData()
+        urlRequest.timeoutInterval = Double(timeoutSeconds)
+
+        let (_, response) = try await urlSession.data(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+        if let newSessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+            sessionId = newSessionId
+        }
+    }
+
     func disconnect() {
         sseTask?.cancel()
         sseTask = nil

@@ -181,10 +181,30 @@ struct MCPServerEditView: View {
                 }
 
                 try await transport.connect()
+
+                let initReq = MCPJSONRPC.Request(
+                    id: MCPJSONRPC.nextId(), method: "initialize",
+                    encodable: MCPJSONRPC.InitializeParams.current
+                )
+                let initResponse = try await transport.send(initReq)
+                if let error = initResponse.error { throw error }
+
+                let initNotification = MCPJSONRPC.Notification(method: "notifications/initialized")
+                try await transport.send(notification: initNotification)
+
+                let toolsReq = MCPJSONRPC.Request(id: MCPJSONRPC.nextId(), method: "tools/list")
+                let toolsResponse = try await transport.send(toolsReq)
+                if let error = toolsResponse.error { throw error }
+                guard let toolsResult: MCPJSONRPC.ToolsListResult = try toolsResponse.decodedResult(MCPJSONRPC.ToolsListResult.self) else {
+                    throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid tools/list response", data: nil)
+                }
+                let toolNames = toolsResult.tools.map { $0.name }.joined(separator: ", ")
+                let count = toolsResult.tools.count
+
                 transport.disconnect()
 
                 await MainActor.run {
-                    testResult = "✅ 连接成功"
+                    testResult = "✅ 连接成功（发现 \(count) 个工具：\(toolNames)）"
                     isTesting = false
                 }
             } catch {

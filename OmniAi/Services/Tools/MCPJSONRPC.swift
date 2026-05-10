@@ -171,8 +171,9 @@ enum MCPJSONRPC {
     }
 
     struct MCPPropertySchema: Codable {
-        let type: String
+        let type: String?
         let description: String?
+        let anyOf: [MCPPropertySchema]?
     }
 
     struct ToolsCallParams {

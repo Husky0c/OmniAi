@@ -122,6 +122,17 @@ extension StdioTransport: MCPTransport {
         }
     }
 
+    func send(notification: MCPJSONRPC.Notification) async throws {
+        guard isConnected, let stdin = stdinPipe else {
+            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        }
+        let data = try notification.toJSONData()
+        let line = String(data: data, encoding: .utf8)! + "\n"
+        queue.async {
+            stdin.fileHandleForWriting.write(line.data(using: .utf8)!)
+        }
+    }
+
     func disconnect() {
         let pending = pendingLock.withLock {
             let result = pendingRequests

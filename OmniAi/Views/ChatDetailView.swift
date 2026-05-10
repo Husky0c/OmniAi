@@ -20,6 +20,7 @@ struct ChatDetailView: View {
     @AppStorage("autoRenameAPIKeyID") private var autoRenameAPIKeyID: String = ""
     @AppStorage("autoRenamePrompt") private var autoRenamePrompt: String = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
+    @Query(sort: \MCPServerConfig.timestamp) private var mcpServers: [MCPServerConfig]
     
     @State private var sortedMessages: [ChatMessage] = []
 
@@ -134,9 +135,7 @@ struct ChatDetailView: View {
                     scrollProxy.scrollTo(lastID, anchor: .bottom)
                 }
                 Task {
-                    let descriptor = FetchDescriptor<MCPServerConfig>()
-                    let configs = (try? modelContext.fetch(descriptor)) ?? []
-                    await session.connectAssistantMCPServers(enabledConfigs: configs)
+                    await session.connectAssistantMCPServers(enabledConfigs: mcpServers)
                 }
             }
             .onChange(of: session.messages.count) { _, _ in
@@ -149,9 +148,12 @@ struct ChatDetailView: View {
             }
         }
         .task(id: session.id) {
-            let descriptor = FetchDescriptor<MCPServerConfig>()
-            let configs = (try? modelContext.fetch(descriptor)) ?? []
-            await session.connectAssistantMCPServers(enabledConfigs: configs)
+            await session.connectAssistantMCPServers(enabledConfigs: mcpServers)
+        }
+        .onChange(of: mcpServers) { _, newServers in
+            Task {
+                await session.connectAssistantMCPServers(enabledConfigs: newServers)
+            }
         }
         .safeAreaInset(edge: .bottom) {
             ChatInputBar(onSend: sendMessage, isGenerating: isGenerating, onStop: stopGeneration)
