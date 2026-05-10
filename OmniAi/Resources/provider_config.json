@@ -12,8 +12,8 @@
       "id": "deepseek",
       "name": "DeepSeek",
       "category": "openai",
-      "defaultBaseURL": "https://api.deepseek.com/v1",
-      "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+      "defaultBaseURL": "https://api.deepseek.com",
+      "urlNormalization": { "appendVersion": false, "versionPath": "" },
       "reasoning": { "strategy": "deepseek-hybrid" }
     },
     {
@@ -46,7 +46,17 @@
       "category": "openai",
       "defaultBaseURL": "https://api.minimaxi.com/v1",
       "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
-      "reasoning": { "strategy": "openai-standard" }
+      "reasoning": { "strategy": "openai-standard" },
+      "protocol": {
+        "request": {
+          "streamOptions": null,
+          "extraFields": { "reasoning_split": true }
+        },
+        "response": {
+          "terminationSignal": null,
+          "terminationFallback": "finishReason"
+        }
+      }
     },
     {
       "id": "zhipu",
@@ -85,6 +95,30 @@
       "disableAction": "thinking_disabled",
       "supportsBudget": true,
       "budgetField": "budget_tokens"
+    }
+  },
+  "protocolDefaults": {
+    "request": {
+      "stream": true,
+      "streamOptions": { "include_usage": true },
+      "temperatureRange": { "min": 0.0, "max": 2.0 }
+    },
+    "response": {
+      "streamLinePrefix": "data: ",
+      "terminationSignal": "[DONE]",
+      "terminationFallback": "finishReason",
+      "thinkingFields": ["reasoning_content", "thinking"],
+      "contentField": "content",
+      "toolCallsField": "tool_calls",
+      "inlineThinkingTags": [
+        { "open": "<think>", "close": "</think>" },
+        { "open": "<thought>", "close": "</thought>" }
+      ]
+    },
+    "messageAssembly": {
+      "preserveAssistantContentWhenToolCalls": true,
+      "includeReasoningContent": true,
+      "reasoningFieldName": "reasoning_content"
     }
   }
 }

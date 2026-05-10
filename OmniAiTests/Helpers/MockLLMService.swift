@@ -17,7 +17,8 @@ class MockLLMService: LLMServiceProtocol {
         temperature: Double?,
         reasoningEffort: String?,
         apiType: APIType,
-        tools: [ToolDefinition]?
+        tools: [ToolDefinition]?,
+        providerId: String?
     ) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             if let error = streamingError {
@@ -36,7 +37,9 @@ class MockLLMService: LLMServiceProtocol {
         apiKey: String,
         baseURL: String?,
         modelId: String,
-        temperature: Double?
+        temperature: Double?,
+        apiType: APIType,
+        providerId: String?
     ) async throws -> String {
         if let error = completionError { throw error }
         return completionResult
@@ -44,7 +47,9 @@ class MockLLMService: LLMServiceProtocol {
 
     func fetchAvailableModels(
         apiKey: String,
-        baseURL: String?
+        baseURL: String?,
+        apiType: APIType,
+        providerId: String?
     ) async throws -> [ModelInfo] {
         if let error = modelsError { throw error }
         return modelsResult

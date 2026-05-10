@@ -8,16 +8,16 @@ final class ThinkTagParser {
 
     private var state: State = .normal
     private var didYieldFirstChunk = false
+    private let tagPairs: [TagPair]
 
     private struct TagPair {
         let open: String
         let close: String
     }
 
-    private static let tagPairs: [TagPair] = [
-        TagPair(open: "<think>", close: "</think>"),
-        TagPair(open: "<thought>", close: "</thought>"),
-    ]
+    init(tagPairs: [ResponseParserConfig.TagPair]) {
+        self.tagPairs = tagPairs.map { TagPair(open: $0.open, close: $0.close) }
+    }
 
     func feed(_ raw: String) -> [LLMStreamEvent] {
         var remaining = raw
@@ -36,7 +36,7 @@ final class ThinkTagParser {
     }
 
     private func handleInsideThinking(_ remaining: inout String, events: inout [LLMStreamEvent]) {
-        for pair in Self.tagPairs {
+        for pair in tagPairs {
             if let endRange = remaining.range(of: pair.close) {
                 let thinking = String(remaining[remaining.startIndex..<endRange.lowerBound])
                 if !thinking.isEmpty {
@@ -60,7 +60,7 @@ final class ThinkTagParser {
     }
 
     private func handleNormal(_ remaining: inout String, events: inout [LLMStreamEvent]) {
-        for pair in Self.tagPairs {
+        for pair in tagPairs {
             if let startRange = remaining.range(of: pair.open) {
                 let before = String(remaining[remaining.startIndex..<startRange.lowerBound])
                 if !before.isEmpty {

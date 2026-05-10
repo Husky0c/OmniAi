@@ -61,17 +61,19 @@ struct PropertySchema: Codable {
 struct OpenAIChatRequest: Codable {
     let model: String
     let messages: [OpenAIMessage]
-    let stream: Bool
+    var stream: Bool
     let temperature: Double?
-    let stream_options: StreamOptions?
+    var stream_options: StreamOptions?
     var reasoning_effort: String?
     var thinking: ThinkingConfig?
     var enable_thinking: Bool?
     var thinking_budget: Int?
     var tools: [ToolDefinition]?
     var tool_choice: String?
-    
-    struct StreamOptions: Codable {
+    var reasoning_split: Bool?
+    var max_completion_tokens: Int?
+
+    struct StreamOptions: Codable, Equatable {
         let include_usage: Bool
     }
 }
@@ -129,6 +131,7 @@ struct OpenAIMessage: Codable {
     var tool_calls: [OpenAIToolCall]?
     var tool_call_id: String?
     var reasoning_content: String?
+    var thinking: String?
 
     enum CodingKeys: String, CodingKey {
         case role
@@ -136,14 +139,16 @@ struct OpenAIMessage: Codable {
         case tool_calls
         case tool_call_id
         case reasoning_content
+        case thinking
     }
 
-    init(role: String, content: MessageContent, tool_calls: [OpenAIToolCall]? = nil, tool_call_id: String? = nil, reasoning_content: String? = nil) {
+    init(role: String, content: MessageContent, tool_calls: [OpenAIToolCall]? = nil, tool_call_id: String? = nil, reasoning_content: String? = nil, thinking: String? = nil) {
         self.role = role
         self.content = content
         self.tool_calls = tool_calls
         self.tool_call_id = tool_call_id
         self.reasoning_content = reasoning_content
+        self.thinking = thinking
     }
 
     func encode(to encoder: Encoder) throws {
@@ -153,6 +158,7 @@ struct OpenAIMessage: Codable {
         try container.encodeIfPresent(tool_calls, forKey: .tool_calls)
         try container.encodeIfPresent(tool_call_id, forKey: .tool_call_id)
         try container.encodeIfPresent(reasoning_content, forKey: .reasoning_content)
+        try container.encodeIfPresent(thinking, forKey: .thinking)
     }
 }
 
@@ -476,12 +482,21 @@ class LLMService: LLMServiceProtocol {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
+        let protocolConfig = ProviderRegistry.shared.getProtocolConfig(for: providerId ?? "")
+        let requestConfig = protocolConfig.request
+        let responseConfig = protocolConfig.response
+
+        var finalTemperature = temperature
+        if let range = requestConfig?.temperatureRange {
+            finalTemperature = finalTemperature.map { max(range.min, min(range.max, $0)) }
+        }
+
         var chatRequest = OpenAIChatRequest(
             model: modelId,
             messages: messages,
-            stream: true,
-            temperature: temperature,
-            stream_options: OpenAIChatRequest.StreamOptions(include_usage: true)
+            stream: requestConfig?.stream ?? true,
+            temperature: finalTemperature,
+            stream_options: requestConfig?.streamOptions.map { OpenAIChatRequest.StreamOptions(include_usage: $0.include_usage) }
         )
         
         if let tools = tools, !tools.isEmpty {
@@ -502,7 +517,18 @@ class LLMService: LLMServiceProtocol {
         chatRequest.thinking_budget = reasoningParams.thinking_budget
         
         do {
-            request.httpBody = try JSONEncoder().encode(chatRequest)
+            var bodyData = try JSONEncoder().encode(chatRequest)
+
+            if let extraFields = requestConfig?.extraFields, !extraFields.isEmpty {
+                if var dict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
+                    for (key, anyCodable) in extraFields {
+                        dict[key] = anyCodable.value
+                    }
+                    bodyData = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
+                }
+            }
+
+            request.httpBody = bodyData
         } catch {
             logger.error("❌ 请求体编码失败: \(error.localizedDescription)")
         }
@@ -547,15 +573,17 @@ class LLMService: LLMServiceProtocol {
                         }
                     }
                     
-                    let thinkTagParser = ThinkTagParser()
+                    let thinkTagParser = ThinkTagParser(tagPairs: responseConfig?.inlineThinkingTags ?? [])
+                    let streamLinePrefix = responseConfig?.streamLinePrefix ?? "data: "
+                    let terminationSignal = responseConfig?.terminationSignal
 
                     for try await line in result {
                         try Task.checkCancellation()
-                        let prefix = "data: "
-                        guard line.hasPrefix(prefix) else { continue }
-                        let jsonStr = String(line.dropFirst(prefix.count))
+                        guard line.hasPrefix(streamLinePrefix) else { continue }
+                        let jsonStr = String(line.dropFirst(streamLinePrefix.count))
                         
-                        if jsonStr.trimmingCharacters(in: .whitespacesAndNewlines) == "[DONE]" {
+                        if let signal = terminationSignal,
+                           jsonStr.trimmingCharacters(in: .whitespacesAndNewlines) == signal {
                             continuation.finish()
                             return
                         }
@@ -581,12 +609,11 @@ class LLMService: LLMServiceProtocol {
                                         argumentsChunk: tc.function?.arguments ?? ""
                                     ))
                                 }
-                            } else if let thinking = streamResponse.choices?.first?.delta.reasoning_content
-                                       ?? streamResponse.choices?.first?.delta.thinking {
+                            } else if let thinking = extractThinkingContent(from: streamResponse.choices?.first?.delta, fields: responseConfig?.thinkingFields ?? []) {
                                 if !thinking.isEmpty {
                                     continuation.yield(.thinking(thinking))
                                 }
-                            } else if let rawContent = streamResponse.choices?.first?.delta.content {
+                            } else if let rawContent = extractContent(from: streamResponse.choices?.first?.delta, field: responseConfig?.contentField ?? "content") {
                                 for event in thinkTagParser.feed(rawContent) {
                                     continuation.yield(event)
                                 }
@@ -603,6 +630,23 @@ class LLMService: LLMServiceProtocol {
         }
     }
     
+    // MARK: - Protocol Config Helpers
+
+    private func extractThinkingContent(from delta: OpenAIStreamResponse.Delta?, fields: [String]) -> String? {
+        guard let delta = delta else { return nil }
+        for field in fields {
+            if let value = Mirror(reflecting: delta).children.first(where: { $0.label == field })?.value as? String {
+                if !value.isEmpty { return value }
+            }
+        }
+        return nil
+    }
+
+    private func extractContent(from delta: OpenAIStreamResponse.Delta?, field: String) -> String? {
+        guard let delta = delta else { return nil }
+        return Mirror(reflecting: delta).children.first(where: { $0.label == field })?.value as? String
+    }
+
     func sendMessageCompletion(
         messages: [OpenAIMessage],
         apiKey: String,

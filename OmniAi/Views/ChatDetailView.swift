@@ -304,6 +304,8 @@ struct ChatDetailView: View {
                 aiMessages.append(OpenAIMessage(role: "system", content: .text(assistant.systemPrompt)))
             }
             
+            let assemblyConfig = ProviderRegistry.shared.getProtocolConfig(for: activeKey.providerID ?? "").messageAssembly
+            
             for msg in allMessages {
                 let role = msg.role.rawValue
                 
@@ -318,13 +320,22 @@ struct ChatDetailView: View {
                 
                 if role == "assistant", let toolData = msg.toolCallsData,
                    let toolCalls = try? JSONDecoder().decode([OpenAIToolCall].self, from: toolData) {
-                    let content: MessageContent = .text(msg.content)
-                    aiMessages.append(OpenAIMessage(
+                    let preserveContent = assemblyConfig?.preserveAssistantContentWhenToolCalls ?? true
+                    var message = OpenAIMessage(
                         role: "assistant",
-                        content: content,
-                        tool_calls: toolCalls,
-                        reasoning_content: msg.thinkingContent
-                    ))
+                        content: preserveContent ? .text(msg.content) : .text(""),
+                        tool_calls: toolCalls
+                    )
+                    let includeReasoning = assemblyConfig?.includeReasoningContent ?? true
+                    if includeReasoning, let thinking = msg.thinkingContent {
+                        let reasoningField = assemblyConfig?.reasoningFieldName ?? "reasoning_content"
+                        if reasoningField == "reasoning_content" {
+                            message.reasoning_content = thinking
+                        } else {
+                            message.thinking = thinking
+                        }
+                    }
+                    aiMessages.append(message)
                     continue
                 }
                 
@@ -340,11 +351,17 @@ struct ChatDetailView: View {
                         }
                     }
                     if role == "assistant" {
-                        aiMessages.append(OpenAIMessage(
-                            role: role,
-                            content: .text(finalContent),
-                            reasoning_content: msg.thinkingContent
-                        ))
+                        var message = OpenAIMessage(role: role, content: .text(finalContent))
+                        let includeReasoning = assemblyConfig?.includeReasoningContent ?? true
+                        if includeReasoning, let thinking = msg.thinkingContent {
+                            let reasoningField = assemblyConfig?.reasoningFieldName ?? "reasoning_content"
+                            if reasoningField == "reasoning_content" {
+                                message.reasoning_content = thinking
+                            } else {
+                                message.thinking = thinking
+                            }
+                        }
+                        aiMessages.append(message)
                     } else {
                         aiMessages.append(OpenAIMessage(role: role, content: .text(finalContent)))
                     }

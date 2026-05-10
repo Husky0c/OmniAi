@@ -5,6 +5,78 @@ import Foundation
 struct ProviderConfigFile: Codable {
     let providers: [ProviderMetadata]
     let reasoningStrategies: [String: ReasoningStrategy]
+    let protocolDefaults: ProtocolConfig?
+}
+
+// MARK: - Protocol Config Models
+
+struct ProtocolConfig: Codable {
+    let request: RequestConfig?
+    let response: ResponseParserConfig?
+    let messageAssembly: MessageAssemblyConfig?
+}
+
+struct RequestConfig: Codable {
+    let stream: Bool?
+    let streamOptions: StreamOptions?
+    let temperatureRange: TemperatureRange?
+    let extraFields: [String: AnyCodable]?
+
+    struct StreamOptions: Codable {
+        let include_usage: Bool
+    }
+
+    struct TemperatureRange: Codable {
+        let min: Double
+        let max: Double
+    }
+}
+
+struct ResponseParserConfig: Codable {
+    let streamLinePrefix: String?
+    let terminationSignal: String?
+    let terminationFallback: String?
+    let thinkingFields: [String]?
+    let contentField: String?
+    let toolCallsField: String?
+    let inlineThinkingTags: [TagPair]?
+
+    struct TagPair: Codable, Equatable {
+        let open: String
+        let close: String
+    }
+}
+
+struct MessageAssemblyConfig: Codable {
+    let preserveAssistantContentWhenToolCalls: Bool?
+    let includeReasoningContent: Bool?
+    let reasoningFieldName: String?
+}
+
+// MARK: - AnyCodable
+
+struct AnyCodable: Codable {
+    let value: Any
+
+    init(_ value: Any) { self.value = value }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let intVal = try? container.decode(Int.self) { value = intVal }
+        else if let doubleVal = try? container.decode(Double.self) { value = doubleVal }
+        else if let boolVal = try? container.decode(Bool.self) { value = boolVal }
+        else if let stringVal = try? container.decode(String.self) { value = stringVal }
+        else { throw DecodingError.typeMismatch(Any.self, DecodingError.Context(codingPath: container.codingPath, debugDescription: "Unsupported type")) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let intVal = value as? Int { try container.encode(intVal) }
+        else if let doubleVal = value as? Double { try container.encode(doubleVal) }
+        else if let boolVal = value as? Bool { try container.encode(boolVal) }
+        else if let stringVal = value as? String { try container.encode(stringVal) }
+        else { throw EncodingError.invalidValue(value, .init(codingPath: container.codingPath, debugDescription: "Unsupported type")) }
+    }
 }
 
 struct ProviderMetadata: Codable, Identifiable {
@@ -14,6 +86,7 @@ struct ProviderMetadata: Codable, Identifiable {
     let defaultBaseURL: String
     let urlNormalization: URLNormalizationRule
     let reasoning: ReasoningConfig
+    let `protocol`: ProtocolConfig?
 }
 
 struct URLNormalizationRule: Codable {
@@ -40,6 +113,7 @@ class ProviderRegistry {
     private var providers: [ProviderMetadata] = []
     private var providerMap: [String: ProviderMetadata] = [:]
     private var strategies: [String: ReasoningStrategy] = [:]
+    private var protocolDefaults: ProtocolConfig?
 
     private init() {
         loadConfig()
@@ -55,6 +129,16 @@ class ProviderRegistry {
         providers = decoded.providers
         providerMap = Dictionary(uniqueKeysWithValues: decoded.providers.map { ($0.id, $0) })
         strategies = decoded.reasoningStrategies
+        protocolDefaults = decoded.protocolDefaults
+    }
+
+    func getProtocolConfig(for providerId: String) -> ProtocolConfig {
+        let providerConfig = getProvider(id: providerId)?.`protocol`
+        return ProtocolConfig(
+            request: providerConfig?.request ?? protocolDefaults?.request,
+            response: providerConfig?.response ?? protocolDefaults?.response,
+            messageAssembly: providerConfig?.messageAssembly ?? protocolDefaults?.messageAssembly
+        )
     }
 
     func getProvider(id: String?) -> ProviderMetadata? {
