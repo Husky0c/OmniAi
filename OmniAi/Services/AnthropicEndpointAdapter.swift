@@ -110,8 +110,20 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
         protocolConfig: ProtocolConfig,
         context: inout StreamParsingContext
     ) -> [LLMStreamEvent] {
-        guard let eventType = eventType,
-              let type = AnthropicStreamEventType(rawValue: eventType),
+        // Fallback: extract type from JSON if eventType not provided (DeepSeek compatibility)
+        let resolvedEventType: String?
+        if let et = eventType {
+            resolvedEventType = et
+        } else if let jsonData = data.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                  let type = json["type"] as? String {
+            resolvedEventType = type
+        } else {
+            resolvedEventType = nil
+        }
+
+        guard let typeStr = resolvedEventType,
+              let type = AnthropicStreamEventType(rawValue: typeStr),
               let jsonData = data.data(using: .utf8)
         else { return [] }
 
@@ -273,13 +285,8 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
         while base.hasSuffix("/") {
             base.removeLast()
         }
-        // Strip /messages if accidentally included
         if base.hasSuffix("/messages") {
             base = String(base.dropLast("/messages".count))
-        }
-        // Ensure it ends with /v1
-        if !base.hasSuffix("/v1") {
-            base += "/v1"
         }
         return base
     }
@@ -318,6 +325,12 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
             if msg.role == "assistant", let toolCalls = msg.tool_calls, !toolCalls.isEmpty {
                 // Assistant message with tool calls
                 var blocks: [AnthropicContentBlock] = []
+
+                // Add thinking content first if present (required by DeepSeek Anthropic endpoint)
+                let thinkingContent = msg.thinking ?? msg.reasoning_content
+                if let thinking = thinkingContent, !thinking.isEmpty {
+                    blocks.append(.thinking(thinking))
+                }
 
                 // Add text content if present
                 switch msg.content {

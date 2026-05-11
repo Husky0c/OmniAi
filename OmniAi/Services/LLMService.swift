@@ -715,8 +715,18 @@ class LLMService: LLMServiceProtocol {
             // Parse data line
             if trimmed.hasPrefix("data: ") {
                 let dataStr = String(trimmed.dropFirst("data: ".count))
+
+                // Fallback: if event type is missing (e.g. DeepSeek), infer from JSON "type" field
+                var resolvedEventType = currentEventType
+                if resolvedEventType == nil,
+                   let data = dataStr.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let type = json["type"] as? String {
+                    resolvedEventType = type
+                }
+
                 let events = adapter.parseStreamLine(
-                    eventType: currentEventType,
+                    eventType: resolvedEventType,
                     data: dataStr,
                     protocolConfig: protocolConfig,
                     context: &context

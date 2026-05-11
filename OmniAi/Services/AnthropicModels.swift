@@ -101,11 +101,12 @@ enum AnthropicMessageContent: Encodable {
 enum AnthropicContentBlock: Encodable {
     case text(String)
     case image(source: ImageSource)
+    case thinking(String)
     case toolUse(id: String, name: String, input: [String: Any])
     case toolResult(toolUseId: String, content: String)
 
     enum CodingKeys: String, CodingKey {
-        case type, text, source, id, name, input
+        case type, text, source, thinking, id, name, input
         case tool_use_id
         case content
     }
@@ -119,14 +120,14 @@ enum AnthropicContentBlock: Encodable {
         case .image(let source):
             try container.encode("image", forKey: .type)
             try container.encode(source, forKey: .source)
+        case .thinking(let thinking):
+            try container.encode("thinking", forKey: .type)
+            try container.encode(thinking, forKey: .thinking)
         case .toolUse(let id, let name, let input):
             try container.encode("tool_use", forKey: .type)
             try container.encode(id, forKey: .id)
             try container.encode(name, forKey: .name)
-            // Encode input as raw JSON
-            let data = try JSONSerialization.data(withJSONObject: input)
-            let json = try JSONSerialization.jsonObject(with: data)
-            try container.encode(AnyCodable(json), forKey: .input)
+            try container.encode(AnyCodable(input), forKey: .input)
         case .toolResult(let toolUseId, let content):
             try container.encode("tool_result", forKey: .type)
             try container.encode(toolUseId, forKey: .tool_use_id)
