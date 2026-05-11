@@ -420,6 +420,12 @@ class LLMService: LLMServiceProtocol {
                 base.removeLast()
             }
         }
+        if base.hasSuffix("/messages") {
+            base = String(base.dropLast("/messages".count))
+            while base.hasSuffix("/") {
+                base.removeLast()
+            }
+        }
         if let pid = providerId, let provider = ProviderRegistry.shared.getProvider(id: pid) {
             if provider.urlNormalization.appendVersion, !provider.urlNormalization.versionPath.isEmpty {
                 if !base.hasSuffix(provider.urlNormalization.versionPath) {
@@ -447,6 +453,17 @@ class LLMService: LLMServiceProtocol {
                 if let models = try? await fetchModelsWithOpenAI(
                     apiKey: apiKey,
                     openAIBaseURL: openAIBase,
+                    apiType: apiType,
+                    providerId: providerId
+                ) {
+                    return models
+                }
+            }
+            // For custom providers (NewAPI etc.), try the user's base URL
+            if let baseURL = baseURL, !baseURL.isEmpty {
+                if let models = try? await fetchModelsWithOpenAI(
+                    apiKey: apiKey,
+                    openAIBaseURL: baseURL,
                     apiType: apiType,
                     providerId: providerId
                 ) {

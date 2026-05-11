@@ -47,11 +47,12 @@ struct AddAPIKeyView: View {
                     .onChange(of: selectedProviderID) { _, newID in
                         if let preset = ProviderPreset.all.first(where: { $0.id == newID }) {
                             apiType = preset.apiType
-                            // Only auto-change endpoint type if the current one isn't supported
                             if !preset.supportsEndpointType(endpointType) {
                                 endpointType = preset.defaultEndpointType
                             }
-                            requestURL = preset.baseURL(for: endpointType)
+                            if !preset.isCustom {
+                                requestURL = preset.baseURL(for: endpointType)
+                            }
                             didJustSwitchProvider = true
                         }
                     }
@@ -87,7 +88,9 @@ struct AddAPIKeyView: View {
                             }
                         }
                         .onChange(of: endpointType) { _, newType in
-                            if !selectedPreset.isCustom {
+                            if selectedPreset.isCustom {
+                                requestURL = cleanEndpointURL(requestURL)
+                            } else {
                                 requestURL = selectedPreset.baseURL(for: newType)
                             }
                         }
@@ -266,5 +269,20 @@ struct AddAPIKeyView: View {
             modelContext.insert(newKey)
         }
         dismiss()
+    }
+
+    /// Strip known endpoint-specific suffixes from a base URL
+    private func cleanEndpointURL(_ url: String) -> String {
+        var cleaned = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        while cleaned.hasSuffix("/") {
+            cleaned.removeLast()
+        }
+        for suffix in ["/chat/completions", "/v1/chat/completions", "/messages", "/v1/messages"] {
+            if cleaned.hasSuffix(suffix) {
+                cleaned = String(cleaned.dropLast(suffix.count))
+                break
+            }
+        }
+        return cleaned
     }
 }
