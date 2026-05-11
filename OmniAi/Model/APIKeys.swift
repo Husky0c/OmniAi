@@ -14,6 +14,18 @@ enum APIType: String, CaseIterable, Codable{
     case gemini = "Gemini"
 }
 
+enum EndpointType: String, CaseIterable, Codable {
+    case openai = "openai"
+    case anthropic = "anthropic"
+
+    var displayName: String {
+        switch self {
+        case .openai: return "OpenAI"
+        case .anthropic: return "Anthropic"
+        }
+    }
+}
+
 enum APISource: String, CaseIterable, Codable{
     case system = "system"
     case custom = "custom"
@@ -35,7 +47,13 @@ class APIKeys{
     var providerID: String? = nil
     private var apiTypeRawValue: String = APIType.openAI.rawValue
     private var apiSourceRawValue: String = APISource.system.rawValue
-    
+    private var endpointTypeRawValue: String = EndpointType.openai.rawValue
+
+    var endpointType: EndpointType {
+        get { EndpointType(rawValue: endpointTypeRawValue) ?? .openai }
+        set { endpointTypeRawValue = newValue.rawValue }
+    }
+
     var apiType: APIType{
         get{ APIType(rawValue: apiTypeRawValue) ?? .openAI }
         set{ apiTypeRawValue = newValue.rawValue }

@@ -22,7 +22,29 @@
       "category": "anthropic",
       "defaultBaseURL": "https://api.anthropic.com/v1",
       "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
-      "reasoning": { "strategy": "anthropic-thinking" }
+      "reasoning": { "strategy": "anthropic-thinking" },
+      "supportedEndpointTypes": ["openai", "anthropic"],
+      "defaultEndpointType": "anthropic",
+      "protocol": {
+        "request": {
+          "stream": true,
+          "streamOptions": null,
+          "temperatureRange": { "min": 0.0, "max": 1.0 },
+          "extraFields": { "max_tokens": 4096 }
+        },
+        "response": {
+          "streamLinePrefix": "data: ",
+          "terminationSignal": null,
+          "terminationFallback": "message_stop",
+          "thinkingFields": ["thinking"],
+          "contentField": "text"
+        },
+        "messageAssembly": {
+          "preserveAssistantContentWhenToolCalls": true,
+          "includeReasoningContent": false,
+          "systemMessageHandling": "separate_parameter"
+        }
+      }
     },
     {
       "id": "gemini",

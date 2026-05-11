@@ -51,6 +51,7 @@ struct MessageAssemblyConfig: Codable {
     let preserveAssistantContentWhenToolCalls: Bool?
     let includeReasoningContent: Bool?
     let reasoningFieldName: String?
+    let systemMessageHandling: String?  // "inline" (default, OpenAI) or "separate_parameter" (Anthropic)
 }
 
 // MARK: - AnyCodable

@@ -192,17 +192,17 @@ struct OpenAIStreamResponse: Codable {
     let id: String?
     let choices: [Choice]?
     let usage: Usage?
-    
+
     struct Choice: Codable {
         let delta: Delta
         let finishReason: String?
-        
+
         enum CodingKeys: String, CodingKey {
             case delta
             case finishReason = "finish_reason"
         }
     }
-    
+
     struct Delta: Codable {
         let content: String?
         let role: String?
@@ -210,24 +210,24 @@ struct OpenAIStreamResponse: Codable {
         let thinking: String?
         let tool_calls: [StreamToolCall]?
     }
-    
+
     struct StreamToolCall: Codable {
         let index: Int
         let id: String?
         let type: String?
         let function: StreamToolCallFunction?
     }
-    
+
     struct StreamToolCallFunction: Codable {
         let name: String?
         let arguments: String?
     }
-    
+
     struct Usage: Codable {
         let promptTokens: Int?
         let completionTokens: Int?
         let totalTokens: Int?
-        
+
         enum CodingKeys: String, CodingKey {
             case promptTokens = "prompt_tokens"
             case completionTokens = "completion_tokens"
@@ -238,7 +238,7 @@ struct OpenAIStreamResponse: Codable {
 
 struct OpenAIErrorResponse: Codable {
     let error: ErrorDetail
-    
+
     struct ErrorDetail: Codable {
         let message: String
         let type: String?
@@ -276,7 +276,7 @@ struct ModelCapability: Codable, Hashable {
     var reasoning: Bool = false
     var toolCalling: Bool = false
     var vision: Bool = false
-    
+
     static func parse(capabilities: [String]?, endpointTypes: [String]?) -> ModelCapability {
         let set = Set((capabilities ?? []).map { $0.lowercased() })
         let types = Set((endpointTypes ?? []).map { $0.lowercased() })
@@ -287,12 +287,12 @@ struct ModelCapability: Codable, Hashable {
             vision: set.contains("vision") || types.contains("vision")
         )
     }
-    
+
     static func effective(for modelId: String, cached: [String: ModelCapability]) -> ModelCapability {
         if let override = cached[modelId] { return override }
         return infer(from: modelId)
     }
-    
+
     var symbols: [String] {
         var result: [String] = []
         if webSearch { result.append("globe") }
@@ -301,25 +301,25 @@ struct ModelCapability: Codable, Hashable {
         if vision { result.append("eye") }
         return result
     }
-    
+
     var hasAny: Bool { webSearch || reasoning || toolCalling || vision }
-    
+
     static let defaultRules: [CapabilityKey: [String]] = [
         .reasoning: ["o1|o3|o4|reasoning|thinks|thinking|r1|qwq|grok|deep-think|deepseek|claude-3[.-]|claude-4|gemini-2\\.5"],
         .vision: ["vision|gpt-4o|claude-3[.-]|gemini.*(flash|pro|vision)|qwen-vl|pixtral|llava|cogvlm|phi-*vision|mistral.*vision"],
         .toolCalling: ["gpt|claude|qwen|gemini|deepseek|mistral|llama|command|yi-|glm|ministral|phi|grok|ernie|hunyuan|moonshot|step-|abab|minimax"],
         .webSearch: ["search-preview|gemini|sonar|perplexity|search"],
     ]
-    
+
     enum CapabilityKey: String, Codable, CaseIterable {
         case reasoning
         case vision
         case toolCalling
         case webSearch
     }
-    
+
     private static var loadedRules: [CapabilityKey: [String]]?
-    
+
     private static func rules() -> [CapabilityKey: [String]] {
         if let cached = loadedRules { return cached }
         if let url = Bundle.main.url(forResource: "model_capability_rules", withExtension: "json"),
@@ -337,12 +337,12 @@ struct ModelCapability: Codable, Hashable {
         loadedRules = defaultRules
         return defaultRules
     }
-    
+
     static func infer(from modelId: String) -> ModelCapability {
         let lower = modelId.lowercased()
         var cap = ModelCapability()
         let rules = rules()
-        
+
         if let patterns = rules[.reasoning] {
             for p in patterns {
                 if lower.range(of: p, options: .regularExpression) != nil {
@@ -381,9 +381,9 @@ struct ModelCapability: Codable, Hashable {
 
 class LLMService: LLMServiceProtocol {
     static let shared = LLMService()
-    
+
     private let logger = Logger(subsystem: "com.omniai.network", category: "LLMService")
-    
+
     var session: URLSessionProtocol = URLSession(configuration: {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 300
@@ -391,7 +391,18 @@ class LLMService: LLMServiceProtocol {
         config.waitsForConnectivity = false
         return config
     }())
-    
+
+    // MARK: - Adapter Selection
+
+    private func getAdapter(for endpointType: EndpointType) -> EndpointAdapter {
+        switch endpointType {
+        case .openai: return OpenAIEndpointAdapter()
+        case .anthropic: return AnthropicEndpointAdapter()
+        }
+    }
+
+    // MARK: - Base URL
+
     func getBaseURL(customURL: String?, providerId: String? = nil, apiType: APIType = .openAI) -> String {
         var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if base.isEmpty {
@@ -422,37 +433,47 @@ class LLMService: LLMServiceProtocol {
         }
         return base
     }
-    
-    func fetchAvailableModels(apiKey: String, baseURL: String?, apiType: APIType = .openAI, providerId: String? = nil) async throws -> [ModelInfo] {
+
+    // MARK: - Fetch Models
+
+    func fetchAvailableModels(apiKey: String, baseURL: String?, apiType: APIType = .openAI, providerId: String? = nil, endpointType: EndpointType = .openai) async throws -> [ModelInfo] {
+        // For Anthropic native endpoint, model listing is not supported via their API,
+        // so we fall back to OpenAI-compatible /models endpoint
         let urlString = "\(getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType))/models"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.addValue("application/json", forHTTPHeaderField: "Accept")
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        
-        logger.debug("🚀 尝试获取模型列表: \(urlString)")
-        
+
+        if endpointType == .anthropic {
+            request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+            request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        } else {
+            request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        logger.debug("Fetching model list: \(urlString)")
+
         let (data, response) = try await session.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                logger.error("❌ 模型列表获取失败 [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
+                logger.error("Model list fetch failed [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
                 throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
             } else {
-                let raw = String(data: data, encoding: .utf8) ?? "无法读取响应体"
-                logger.error("❌ 模型列表获取失败 [\(httpResponse.statusCode)]: \(raw)")
+                let raw = String(data: data, encoding: .utf8) ?? "Unable to read response"
+                logger.error("Model list fetch failed [\(httpResponse.statusCode)]: \(raw)")
                 throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: raw])
             }
         }
-        
+
         do {
             let listResponse = try JSONDecoder().decode(OpenAIModelListResponse.self, from: data)
             let models = listResponse.data.map { item in
@@ -460,50 +481,25 @@ class LLMService: LLMServiceProtocol {
                 let caps = parsed.hasAny ? parsed : ModelCapability.infer(from: item.id)
                 return ModelInfo(id: item.id, capabilities: caps)
             }.sorted { $0.id < $1.id }
-            logger.debug("✅ 成功获取 \(models.count) 个模型")
+            logger.debug("Successfully fetched \(models.count) models")
             return models
         } catch {
-            let raw = String(data: data, encoding: .utf8) ?? "无法解析响应体"
-            logger.error("❌ 模型列表解析失败，原始返回: \(raw.prefix(500))")
-            throw NSError(domain: "LLMService", code: 0, userInfo: [NSLocalizedDescriptionKey: "模型列表格式异常: \(raw.prefix(200))"])
+            let raw = String(data: data, encoding: .utf8) ?? "Unable to parse response"
+            logger.error("Model list parse failed: \(raw.prefix(500))")
+            throw NSError(domain: "LLMService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Model list format error: \(raw.prefix(200))"])
         }
     }
-    
-    func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil, providerId: String? = nil) -> AsyncThrowingStream<LLMStreamEvent, Error> {
-        let urlString = "\(getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType))/chat/completions"
-        guard let url = URL(string: urlString) else {
-            return AsyncThrowingStream { continuation in
-                continuation.finish(throwing: URLError(.badURL))
-            }
-        }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    // MARK: - Stream Message
 
+    func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil, providerId: String? = nil, endpointType: EndpointType = .openai) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+
+        let adapter = getAdapter(for: endpointType)
         let protocolConfig = ProviderRegistry.shared.getProtocolConfig(for: providerId ?? "")
-        let requestConfig = protocolConfig.request
         let responseConfig = protocolConfig.response
 
-        var finalTemperature = temperature
-        if let range = requestConfig?.temperatureRange {
-            finalTemperature = finalTemperature.map { max(range.min, min(range.max, $0)) }
-        }
+        let resolvedBaseURL = getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType)
 
-        var chatRequest = OpenAIChatRequest(
-            model: modelId,
-            messages: messages,
-            stream: requestConfig?.stream ?? true,
-            temperature: finalTemperature,
-            stream_options: requestConfig?.streamOptions.map { OpenAIChatRequest.StreamOptions(include_usage: $0.include_usage) }
-        )
-        
-        if let tools = tools, !tools.isEmpty {
-            chatRequest.tools = tools
-            chatRequest.tool_choice = "auto"
-        }
-        
         let reasoningParams = ReasoningConfigBuilder.build(
             providerId: providerId,
             apiType: apiType,
@@ -511,141 +507,184 @@ class LLMService: LLMServiceProtocol {
             modelId: modelId,
             effort: reasoningEffort
         )
-        chatRequest.reasoning_effort = reasoningParams.reasoning_effort
-        chatRequest.thinking = reasoningParams.thinking
-        chatRequest.enable_thinking = reasoningParams.enable_thinking
-        chatRequest.thinking_budget = reasoningParams.thinking_budget
-        
+
+        let request: URLRequest
         do {
-            var bodyData = try JSONEncoder().encode(chatRequest)
-
-            if let extraFields = requestConfig?.extraFields, !extraFields.isEmpty {
-                if var dict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
-                    for (key, anyCodable) in extraFields {
-                        dict[key] = anyCodable.value
-                    }
-                    bodyData = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
-                }
-            }
-
-            request.httpBody = bodyData
+            request = try adapter.buildRequest(
+                baseURL: resolvedBaseURL,
+                apiKey: apiKey,
+                messages: messages,
+                modelId: modelId,
+                temperature: temperature,
+                reasoningParams: reasoningParams,
+                tools: tools,
+                protocolConfig: protocolConfig
+            )
         } catch {
-            logger.error("❌ 请求体编码失败: \(error.localizedDescription)")
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: error)
+            }
         }
-        
+
         if let body = request.httpBody,
            let jsonString = String(data: body, encoding: .utf8) {
-            logger.debug("🚀 流式请求至: \(urlString)")
-            logger.debug("📝 模型: \(modelId)")
+            logger.debug("Stream request to: \(request.url?.absoluteString ?? "nil")")
+            logger.debug("Model: \(modelId), EndpointType: \(endpointType.rawValue)")
             if let prettyData = try? JSONSerialization.data(withJSONObject: try JSONSerialization.jsonObject(with: body), options: [.prettyPrinted, .sortedKeys]),
                let prettyString = String(data: prettyData, encoding: .utf8) {
-                logger.debug("📦 请求体 JSON:\n\(prettyString)")
+                logger.debug("Request body:\n\(prettyString)")
             } else {
-                logger.debug("📦 请求体 JSON: \(jsonString)")
+                logger.debug("Request body: \(jsonString)")
             }
         }
-        
+
         return AsyncThrowingStream { continuation in
             Task {
                 do {
                     let (result, response) = try await session.bytes(for: request)
-                    
+
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw URLError(.badServerResponse)
                     }
-                    
-                    logger.info("📡 收到响应状态码: \(httpResponse.statusCode)")
-                    
+
+                    logger.info("Response status: \(httpResponse.statusCode)")
+
+                    // Handle rate limiting
+                    if httpResponse.statusCode == 429 {
+                        let retryAfter = httpResponse.value(forHTTPHeaderField: "retry-after").flatMap { Int($0) }
+                        throw LLMServiceError.rateLimitExceeded(retryAfter: retryAfter)
+                    }
+
+                    // Handle auth errors
+                    if httpResponse.statusCode == 401 {
+                        throw LLMServiceError.authenticationFailed
+                    }
+
                     guard httpResponse.statusCode == 200 else {
                         var errorBody = ""
                         for try await line in result {
                             errorBody += line + "\n"
                         }
-                        
+
                         if let data = errorBody.data(using: .utf8),
                            let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                            logger.error("❌ 流式请求失败 [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
+                            logger.error("Stream request failed [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
                             throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
                         } else {
-                            let fallbackMessage = errorBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "服务器返回 HTTP 错误码: \(httpResponse.statusCode) (503通常代表中转服务器宕机或配置错误)" : errorBody
-                            logger.error("❌ 流式请求失败 [\(httpResponse.statusCode)]: \(fallbackMessage)")
+                            // Try Anthropic error format
+                            if let data = errorBody.data(using: .utf8),
+                               let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                               let err = parsed["error"] as? [String: Any],
+                               let message = err["message"] as? String {
+                                logger.error("Stream request failed [\(httpResponse.statusCode)]: \(message)")
+                                throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+                            }
+                            let fallbackMessage = errorBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "HTTP error: \(httpResponse.statusCode)" : errorBody
+                            logger.error("Stream request failed [\(httpResponse.statusCode)]: \(fallbackMessage)")
                             throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: fallbackMessage])
                         }
                     }
-                    
-                    let thinkTagParser = ThinkTagParser(tagPairs: responseConfig?.inlineThinkingTags ?? [])
-                    let streamLinePrefix = responseConfig?.streamLinePrefix ?? "data: "
-                    let terminationSignal = responseConfig?.terminationSignal
 
-                    for try await line in result {
-                        try Task.checkCancellation()
-                        guard line.hasPrefix(streamLinePrefix) else { continue }
-                        let jsonStr = String(line.dropFirst(streamLinePrefix.count))
-                        
-                        if let signal = terminationSignal,
-                           jsonStr.trimmingCharacters(in: .whitespacesAndNewlines) == signal {
-                            continuation.finish()
-                            return
-                        }
-                        
-                        if let data = jsonStr.data(using: .utf8),
-                           let streamResponse = try? JSONDecoder().decode(OpenAIStreamResponse.self, from: data) {
-                            
-                            if let finishReason = streamResponse.choices?.first?.finishReason {
-                                continuation.yield(.finishReason(finishReason))
-                            }
-                            
-                            if let usage = streamResponse.usage,
-                               let prompt = usage.promptTokens,
-                               let completion = usage.completionTokens,
-                               let total = usage.totalTokens {
-                                continuation.yield(.usage(promptTokens: prompt, completionTokens: completion, totalTokens: total))
-                            } else if let toolCalls = streamResponse.choices?.first?.delta.tool_calls {
-                                for tc in toolCalls {
-                                    continuation.yield(.toolCallDelta(
-                                        index: tc.index,
-                                        id: tc.id,
-                                        name: tc.function?.name,
-                                        argumentsChunk: tc.function?.arguments ?? ""
-                                    ))
-                                }
-                            } else if let thinking = extractThinkingContent(from: streamResponse.choices?.first?.delta, fields: responseConfig?.thinkingFields ?? []) {
-                                if !thinking.isEmpty {
-                                    continuation.yield(.thinking(thinking))
-                                }
-                            } else if let rawContent = extractContent(from: streamResponse.choices?.first?.delta, field: responseConfig?.contentField ?? "content") {
-                                for event in thinkTagParser.feed(rawContent) {
-                                    continuation.yield(event)
-                                }
-                            }
-                        }
+                    // Parse stream based on adapter type
+                    if adapter.usesTwoLineSSE {
+                        // Anthropic two-line SSE format: event: <type>\ndata: <json>
+                        try await parseAnthropicSSE(result: result, adapter: adapter, protocolConfig: protocolConfig, continuation: continuation)
+                    } else {
+                        // OpenAI single-line SSE format: data: <json>
+                        try await parseOpenAISSE(result: result, adapter: adapter, protocolConfig: protocolConfig, responseConfig: responseConfig, continuation: continuation)
                     }
-                    logger.debug("✅ 流式请求完成")
+
+                    logger.debug("Stream request completed")
                     continuation.finish()
                 } catch {
-                    logger.error("❌ 流式请求异常: \(error.localizedDescription)")
+                    logger.error("Stream request error: \(error.localizedDescription)")
                     continuation.finish(throwing: error)
                 }
             }
         }
     }
-    
-    // MARK: - Protocol Config Helpers
 
-    private func extractThinkingContent(from delta: OpenAIStreamResponse.Delta?, fields: [String]) -> String? {
-        guard let delta = delta else { return nil }
-        for field in fields {
-            if let value = Mirror(reflecting: delta).children.first(where: { $0.label == field })?.value as? String {
-                if !value.isEmpty { return value }
+    // MARK: - SSE Parsing
+
+    private func parseOpenAISSE(
+        result: AsyncThrowingStream<String, Error>,
+        adapter: EndpointAdapter,
+        protocolConfig: ProtocolConfig,
+        responseConfig: ResponseParserConfig?,
+        continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
+    ) async throws {
+        let thinkTagParser = ThinkTagParser(tagPairs: responseConfig?.inlineThinkingTags ?? [])
+        let streamLinePrefix = responseConfig?.streamLinePrefix ?? "data: "
+        let terminationSignal = responseConfig?.terminationSignal
+        var context = StreamParsingContext()
+
+        for try await line in result {
+            try Task.checkCancellation()
+            guard line.hasPrefix(streamLinePrefix) else { continue }
+            let jsonStr = String(line.dropFirst(streamLinePrefix.count))
+
+            if let signal = terminationSignal,
+               jsonStr.trimmingCharacters(in: .whitespacesAndNewlines) == signal {
+                continuation.finish()
+                return
+            }
+
+            let events = adapter.parseStreamLine(eventType: nil, data: jsonStr, protocolConfig: protocolConfig, context: &context)
+            for event in events {
+                switch event {
+                case .chunk(let text):
+                    for parsed in thinkTagParser.feed(text) {
+                        continuation.yield(parsed)
+                    }
+                default:
+                    continuation.yield(event)
+                }
             }
         }
-        return nil
     }
 
-    private func extractContent(from delta: OpenAIStreamResponse.Delta?, field: String) -> String? {
-        guard let delta = delta else { return nil }
-        return Mirror(reflecting: delta).children.first(where: { $0.label == field })?.value as? String
+    private func parseAnthropicSSE(
+        result: AsyncThrowingStream<String, Error>,
+        adapter: EndpointAdapter,
+        protocolConfig: ProtocolConfig,
+        continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
+    ) async throws {
+        var context = StreamParsingContext()
+        var currentEventType: String? = nil
+
+        for try await line in result {
+            try Task.checkCancellation()
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Skip empty lines (SSE block separators)
+            if trimmed.isEmpty {
+                currentEventType = nil
+                continue
+            }
+
+            // Parse event type line
+            if trimmed.hasPrefix("event: ") {
+                currentEventType = String(trimmed.dropFirst("event: ".count))
+                continue
+            }
+
+            // Parse data line
+            if trimmed.hasPrefix("data: ") {
+                let dataStr = String(trimmed.dropFirst("data: ".count))
+                let events = adapter.parseStreamLine(
+                    eventType: currentEventType,
+                    data: dataStr,
+                    protocolConfig: protocolConfig,
+                    context: &context
+                )
+                for event in events {
+                    continuation.yield(event)
+                }
+            }
+        }
     }
+
+    // MARK: - Completion (Non-streaming)
 
     func sendMessageCompletion(
         messages: [OpenAIMessage],
@@ -654,18 +693,37 @@ class LLMService: LLMServiceProtocol {
         modelId: String,
         temperature: Double? = nil,
         apiType: APIType = .openAI,
-        providerId: String? = nil
+        providerId: String? = nil,
+        endpointType: EndpointType = .openai
     ) async throws -> String {
-        let urlString = "\(getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType))/chat/completions"
+        let adapter = getAdapter(for: endpointType)
+        let protocolConfig = ProviderRegistry.shared.getProtocolConfig(for: providerId ?? "")
+        let resolvedBaseURL = getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType)
+
+        // For non-streaming, we build request but use the OpenAI adapter path
+        // since Anthropic also supports non-streaming via stream: false
+        if endpointType == .anthropic {
+            return try await sendAnthropicCompletion(
+                messages: messages,
+                apiKey: apiKey,
+                baseURL: resolvedBaseURL,
+                modelId: modelId,
+                temperature: temperature,
+                protocolConfig: protocolConfig
+            )
+        }
+
+        // OpenAI path
+        let urlString = "\(resolvedBaseURL)/chat/completions"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        
+
         let chatRequest = OpenAIChatRequest(
             model: modelId,
             messages: messages,
@@ -673,41 +731,88 @@ class LLMService: LLMServiceProtocol {
             temperature: temperature,
             stream_options: nil
         )
-        
+
         do {
             request.httpBody = try JSONEncoder().encode(chatRequest)
         } catch {
-            logger.error("❌ 请求体编码失败: \(error.localizedDescription)")
+            logger.error("Request encode failed: \(error.localizedDescription)")
             throw error
         }
-        
+
         if let body = request.httpBody,
            let jsonString = String(data: body, encoding: .utf8) {
-            logger.debug("🚀 一次性请求至: \(urlString)")
-            logger.debug("📝 模型: \(modelId)")
+            logger.debug("Completion request to: \(urlString)")
+            logger.debug("Model: \(modelId)")
             if let prettyData = try? JSONSerialization.data(withJSONObject: try JSONSerialization.jsonObject(with: body), options: [.prettyPrinted, .sortedKeys]),
                let prettyString = String(data: prettyData, encoding: .utf8) {
-                logger.debug("📦 请求体 JSON:\n\(prettyString)")
+                logger.debug("Request body:\n\(prettyString)")
             } else {
-                logger.debug("📦 请求体 JSON: \(jsonString)")
+                logger.debug("Request body: \(jsonString)")
             }
         }
-        
+
         let (data, response) = try await session.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                logger.error("❌ 一次性请求失败 [\(statusCode)]: \(errorResponse.error.message)")
+                logger.error("Completion request failed [\(statusCode)]: \(errorResponse.error.message)")
                 throw NSError(domain: "LLMService", code: statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
             }
-            let raw = String(data: data, encoding: .utf8) ?? "空响应"
-            logger.error("❌ 一次性请求失败 [\(statusCode)]: \(raw)")
+            let raw = String(data: data, encoding: .utf8) ?? "Empty response"
+            logger.error("Completion request failed [\(statusCode)]: \(raw)")
             throw URLError(.badServerResponse)
         }
-        
-        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
-        logger.debug("✅ 一次性请求成功，完成")
-        return chatResponse.choices.first?.message.content ?? ""
+
+        let result = try adapter.parseCompletionResponse(data: data)
+        logger.debug("Completion request successful")
+        return result
+    }
+
+    /// Non-streaming completion via Anthropic native API
+    private func sendAnthropicCompletion(
+        messages: [OpenAIMessage],
+        apiKey: String,
+        baseURL: String,
+        modelId: String,
+        temperature: Double?,
+        protocolConfig: ProtocolConfig
+    ) async throws -> String {
+        let adapter = AnthropicEndpointAdapter()
+
+        // Build a streaming request first, then modify to non-streaming
+        var request = try adapter.buildRequest(
+            baseURL: baseURL,
+            apiKey: apiKey,
+            messages: messages,
+            modelId: modelId,
+            temperature: temperature,
+            reasoningParams: ReasoningParams(),
+            tools: nil,
+            protocolConfig: protocolConfig
+        )
+
+        // Modify the body to set stream: false
+        if let bodyData = request.httpBody,
+           var dict = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
+            dict["stream"] = false
+            request.httpBody = try JSONSerialization.data(withJSONObject: dict)
+        }
+
+        logger.debug("Anthropic completion request to: \(request.url?.absoluteString ?? "nil")")
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let err = parsed["error"] as? [String: Any],
+               let message = err["message"] as? String {
+                throw NSError(domain: "LLMService", code: statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+            }
+            throw URLError(.badServerResponse)
+        }
+
+        return try adapter.parseCompletionResponse(data: data)
     }
 }

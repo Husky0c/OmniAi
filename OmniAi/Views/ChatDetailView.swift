@@ -409,7 +409,8 @@ struct ChatDetailView: View {
                 reasoningEffort: session.assistant?.reasoningEffort,
                 apiType: activeKey.apiType,
                 tools: toolDefinitions,
-                providerId: activeKey.providerID
+                providerId: activeKey.providerID,
+                endpointType: activeKey.endpointType
             )
             
             var toolCallAccumulators: [Int: (id: String?, name: String?, arguments: String)] = [:]
@@ -584,7 +585,8 @@ struct ChatDetailView: View {
                 modelId: modelId,
                 temperature: 0.3,
                 apiType: channel.apiType,
-                providerId: channel.providerID
+                providerId: channel.providerID,
+                endpointType: channel.endpointType
             )
             // Strip <think> tags from reasoning model outputs
             let stripped = raw.replacingOccurrences(

@@ -10,7 +10,8 @@ protocol LLMServiceProtocol {
         reasoningEffort: String?,
         apiType: APIType,
         tools: [ToolDefinition]?,
-        providerId: String?
+        providerId: String?,
+        endpointType: EndpointType
     ) -> AsyncThrowingStream<LLMStreamEvent, Error>
 
     func sendMessageCompletion(
@@ -20,13 +21,15 @@ protocol LLMServiceProtocol {
         modelId: String,
         temperature: Double?,
         apiType: APIType,
-        providerId: String?
+        providerId: String?,
+        endpointType: EndpointType
     ) async throws -> String
 
     func fetchAvailableModels(
         apiKey: String,
         baseURL: String?,
         apiType: APIType,
-        providerId: String?
+        providerId: String?,
+        endpointType: EndpointType
     ) async throws -> [ModelInfo]
 }

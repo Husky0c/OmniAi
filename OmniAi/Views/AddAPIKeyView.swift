@@ -13,6 +13,7 @@ struct AddAPIKeyView: View {
     @State private var apiType: APIType = .openAI
     @State private var selectedProviderID: String = "openai"
     @State private var autoCapabilityProbe: Bool = true
+    @State private var endpointType: EndpointType = .openai
     
     @State private var selectedModelIDs: [String] = []
     @State private var availableModels: [ModelInfo] = []
@@ -41,6 +42,12 @@ struct AddAPIKeyView: View {
                             if !preset.isCustom {
                                 requestURL = preset.defaultBaseURL
                             }
+                            // Auto-recommend endpoint type
+                            if preset.apiType == .anthropic {
+                                endpointType = .anthropic
+                            } else {
+                                endpointType = .openai
+                            }
                         }
                     }
                 }
@@ -67,6 +74,12 @@ struct AddAPIKeyView: View {
                     }
                     
                     SecureField("API Key", text: $key)
+
+                    Picker("端点格式", selection: $endpointType) {
+                        ForEach(EndpointType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
                 }
                 
                 Section(header: Text("能力探测")) {
@@ -135,7 +148,14 @@ struct AddAPIKeyView: View {
                     apiType = existing.apiType
                     autoCapabilityProbe = existing.autoCapabilityProbe
                     selectedModelIDs = existing.selectedModelIDs
-                    
+                    endpointType = existing.endpointType
+
+                    // Auto-migrate: if Anthropic provider but using OpenAI endpoint, switch
+                    if existing.apiType == .anthropic && existing.endpointType == .openai {
+                        endpointType = .anthropic
+                        existing.endpointType = .anthropic
+                    }
+
                     let matched = ProviderPreset.matching(existing.apiType,
                         requestURL: existing.requestURL ?? "",
                         providerId: existing.providerID)
@@ -143,7 +163,7 @@ struct AddAPIKeyView: View {
                     if let matched {
                         requestURL = matched.defaultBaseURL
                     }
-                    
+
                     fetchModels()
                 }
             }
@@ -164,7 +184,7 @@ struct AddAPIKeyView: View {
         availableModels = []
         Task {
             do {
-                let models = try await LLMService.shared.fetchAvailableModels(apiKey: key, baseURL: requestURL, apiType: apiType, providerId: selectedProviderID)
+                let models = try await LLMService.shared.fetchAvailableModels(apiKey: key, baseURL: requestURL, apiType: apiType, providerId: selectedProviderID, endpointType: endpointType)
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
@@ -195,6 +215,7 @@ struct AddAPIKeyView: View {
             existing.providerID = selectedProviderID
             existing.autoCapabilityProbe = autoCapabilityProbe
             existing.selectedModelIDs = selectedModelIDs
+            existing.endpointType = endpointType
             existing.timestamp = Date()
         } else {
             let newKey = APIKeys(
@@ -208,6 +229,7 @@ struct AddAPIKeyView: View {
                 providerID: selectedProviderID
             )
             newKey.selectedModelIDs = selectedModelIDs
+            newKey.endpointType = endpointType
             modelContext.insert(newKey)
         }
         dismiss()

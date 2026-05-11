@@ -18,7 +18,8 @@ class MockLLMService: LLMServiceProtocol {
         reasoningEffort: String?,
         apiType: APIType,
         tools: [ToolDefinition]?,
-        providerId: String?
+        providerId: String?,
+        endpointType: EndpointType
     ) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             if let error = streamingError {
@@ -39,7 +40,8 @@ class MockLLMService: LLMServiceProtocol {
         modelId: String,
         temperature: Double?,
         apiType: APIType,
-        providerId: String?
+        providerId: String?,
+        endpointType: EndpointType
     ) async throws -> String {
         if let error = completionError { throw error }
         return completionResult
@@ -49,7 +51,8 @@ class MockLLMService: LLMServiceProtocol {
         apiKey: String,
         baseURL: String?,
         apiType: APIType,
-        providerId: String?
+        providerId: String?,
+        endpointType: EndpointType
     ) async throws -> [ModelInfo] {
         if let error = modelsError { throw error }
         return modelsResult
