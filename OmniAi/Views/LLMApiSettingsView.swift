@@ -23,7 +23,7 @@ struct LLMApiSettingsView: View {
                                 Text(apiKey.name)
                                     .font(.headline)
                                     .foregroundStyle(.primary)
-                                Text(apiKey.apiType.rawValue)
+                                Text(apiKey.endpointType.displayName)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

@@ -14,7 +14,13 @@
       "category": "openai",
       "defaultBaseURL": "https://api.deepseek.com",
       "urlNormalization": { "appendVersion": false, "versionPath": "" },
-      "reasoning": { "strategy": "deepseek-hybrid" }
+      "reasoning": { "strategy": "deepseek-hybrid" },
+      "supportedEndpointTypes": ["openai", "anthropic"],
+      "defaultEndpointType": "openai",
+      "endpointURLs": {
+        "openai": "https://api.deepseek.com",
+        "anthropic": "https://api.deepseek.com/anthropic"
+      }
     },
     {
       "id": "anthropic",

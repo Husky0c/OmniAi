@@ -4,9 +4,9 @@ import SwiftData
 struct AddAPIKeyView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    
+
     var editingKey: APIKeys? = nil
-    
+
     @State private var name: String = ""
     @State private var key: String = ""
     @State private var requestURL: String = ""
@@ -14,23 +14,31 @@ struct AddAPIKeyView: View {
     @State private var selectedProviderID: String = "openai"
     @State private var autoCapabilityProbe: Bool = true
     @State private var endpointType: EndpointType = .openai
-    
+
     @State private var selectedModelIDs: [String] = []
     @State private var availableModels: [ModelInfo] = []
     @State private var isFetchingModels = false
     @State private var showCapEdit = false
     @State private var capEditModelId = ""
-    
+
+    /// Track whether we just switched providers (to avoid re-applying defaults incorrectly)
+    @State private var didJustSwitchProvider = false
+
     private var selectedPreset: ProviderPreset {
         ProviderPreset.all.first { $0.id == selectedProviderID } ?? ProviderPreset.all[0]
     }
-    
+
+    /// Endpoint types supported by the currently selected provider
+    private var availableEndpointTypes: [EndpointType] {
+        selectedPreset.supportedEndpointTypes
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section(header: Text("基本信息")) {
                     TextField("渠道名称 (如: 我的 OpenAI)", text: $name)
-                    
+
                     Picker("提供商", selection: $selectedProviderID) {
                         ForEach(ProviderPreset.all) { preset in
                             Text(preset.name).tag(preset.id)
@@ -39,19 +47,16 @@ struct AddAPIKeyView: View {
                     .onChange(of: selectedProviderID) { _, newID in
                         if let preset = ProviderPreset.all.first(where: { $0.id == newID }) {
                             apiType = preset.apiType
-                            if !preset.isCustom {
-                                requestURL = preset.defaultBaseURL
+                            // Only auto-change endpoint type if the current one isn't supported
+                            if !preset.supportsEndpointType(endpointType) {
+                                endpointType = preset.defaultEndpointType
                             }
-                            // Auto-recommend endpoint type
-                            if preset.apiType == .anthropic {
-                                endpointType = .anthropic
-                            } else {
-                                endpointType = .openai
-                            }
+                            requestURL = preset.baseURL(for: endpointType)
+                            didJustSwitchProvider = true
                         }
                     }
                 }
-                
+
                 Section(header: Text("API 配置")) {
                     if selectedPreset.isCustom {
 #if os(iOS)
@@ -67,26 +72,41 @@ struct AddAPIKeyView: View {
                         HStack {
                             Text("Base URL")
                             Spacer()
-                            Text(selectedPreset.defaultBaseURL)
+                            Text(requestURL)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                     }
-                    
+
                     SecureField("API Key", text: $key)
 
-                    Picker("端点格式", selection: $endpointType) {
-                        ForEach(EndpointType.allCases, id: \.self) { type in
-                            Text(type.displayName).tag(type)
+                    if availableEndpointTypes.count > 1 {
+                        Picker("端点格式", selection: $endpointType) {
+                            ForEach(availableEndpointTypes, id: \.self) { type in
+                                Text(type.displayName).tag(type)
+                            }
+                        }
+                        .onChange(of: endpointType) { _, newType in
+                            if !selectedPreset.isCustom {
+                                requestURL = selectedPreset.baseURL(for: newType)
+                            }
+                        }
+                    } else {
+                        // Show read-only info when only one endpoint type is available
+                        HStack {
+                            Text("端点格式")
+                            Spacer()
+                            Text(availableEndpointTypes.first?.displayName ?? "OpenAI")
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-                
+
                 Section(header: Text("能力探测")) {
                     Toggle("自动获取模型能力标识", isOn: $autoCapabilityProbe)
                         .font(.subheadline)
                 }
-                
+
                 if editingKey != nil {
                     Section(header: Text("已选模型")) {
                         if isFetchingModels {
@@ -132,7 +152,7 @@ struct AddAPIKeyView: View {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         saveAPIKey()
@@ -141,31 +161,44 @@ struct AddAPIKeyView: View {
                 }
             }
             .onAppear {
-                if let existing = editingKey {
-                    name = existing.name
-                    key = existing.key ?? ""
-                    requestURL = existing.requestURL ?? ""
-                    apiType = existing.apiType
-                    autoCapabilityProbe = existing.autoCapabilityProbe
-                    selectedModelIDs = existing.selectedModelIDs
-                    endpointType = existing.endpointType
+                guard let existing = editingKey else { return }
+                name = existing.name
+                key = existing.key ?? ""
+                requestURL = existing.requestURL ?? ""
+                apiType = existing.apiType
+                autoCapabilityProbe = existing.autoCapabilityProbe
+                selectedModelIDs = existing.selectedModelIDs
 
-                    // Auto-migrate: if Anthropic provider but using OpenAI endpoint, switch
-                    if existing.apiType == .anthropic && existing.endpointType == .openai {
-                        endpointType = .anthropic
-                        existing.endpointType = .anthropic
-                    }
+                // Restore saved endpoint type BEFORE setting selectedProviderID,
+                // so onChange(of: selectedProviderID) can make the correct decision
+                endpointType = existing.endpointType
 
-                    let matched = ProviderPreset.matching(existing.apiType,
-                        requestURL: existing.requestURL ?? "",
-                        providerId: existing.providerID)
-                    selectedProviderID = matched?.id ?? existing.providerID ?? "newapi"
-                    if let matched {
-                        requestURL = matched.defaultBaseURL
-                    }
-
-                    fetchModels()
+                // Auto-migrate: if Anthropic provider but using OpenAI endpoint, switch
+                if existing.apiType == .anthropic && existing.endpointType == .openai {
+                    endpointType = .anthropic
+                    existing.endpointType = .anthropic
                 }
+
+                let matched = ProviderPreset.matching(existing.apiType,
+                    requestURL: existing.requestURL ?? "",
+                    providerId: existing.providerID)
+                let pid = matched?.id ?? existing.providerID ?? "newapi"
+                let preset = ProviderPreset.all.first { $0.id == pid }
+                selectedProviderID = pid
+
+                // Ensure the restored endpointType is supported by the matched provider
+                if let preset, !preset.supportsEndpointType(endpointType) {
+                    endpointType = preset.defaultEndpointType
+                }
+
+                // Use the saved requestURL if custom, otherwise resolve from preset
+                if let preset, !preset.isCustom {
+                    requestURL = preset.baseURL(for: endpointType)
+                } else {
+                    requestURL = existing.requestURL ?? ""
+                }
+
+                fetchModels()
             }
             .sheet(isPresented: $showCapEdit) {
                 CapabilityEditSheet(
@@ -177,7 +210,7 @@ struct AddAPIKeyView: View {
             }
         }
     }
-    
+
     private func fetchModels() {
         guard !requestURL.isEmpty, !key.isEmpty else { return }
         isFetchingModels = true
@@ -196,7 +229,7 @@ struct AddAPIKeyView: View {
             }
         }
     }
-    
+
     private func toggleModelSelection(_ modelID: String) {
         if let idx = selectedModelIDs.firstIndex(of: modelID) {
             selectedModelIDs.remove(at: idx)
@@ -204,7 +237,7 @@ struct AddAPIKeyView: View {
             selectedModelIDs.append(modelID)
         }
     }
-    
+
     private func saveAPIKey() {
         if let existing = editingKey {
             existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)

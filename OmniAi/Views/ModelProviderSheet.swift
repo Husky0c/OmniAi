@@ -40,7 +40,7 @@ struct ModelProviderSheet: View {
                                     VStack(alignment: .leading) {
                                         Text(key.name)
                                             .foregroundStyle(.primary)
-                                        Text(key.apiType.rawValue)
+                                        Text(key.endpointType.displayName)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }

@@ -437,9 +437,38 @@ class LLMService: LLMServiceProtocol {
     // MARK: - Fetch Models
 
     func fetchAvailableModels(apiKey: String, baseURL: String?, apiType: APIType = .openAI, providerId: String? = nil, endpointType: EndpointType = .openai) async throws -> [ModelInfo] {
-        // For Anthropic native endpoint, model listing is not supported via their API,
-        // so we fall back to OpenAI-compatible /models endpoint
-        let urlString = "\(getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType))/models"
+        // Anthropic native API has no /models endpoint. Try a fallback strategy.
+        if endpointType == .anthropic {
+            // If provider also supports an OpenAI endpoint, use that for model listing
+            if let pid = providerId,
+               let provider = ProviderRegistry.shared.getProvider(id: pid),
+               provider.supportsEndpointType(.openai) {
+                let openAIBase = provider.baseURL(for: .openai)
+                if let models = try? await fetchModelsWithOpenAI(
+                    apiKey: apiKey,
+                    openAIBaseURL: openAIBase,
+                    apiType: apiType,
+                    providerId: providerId
+                ) {
+                    return models
+                }
+            }
+            // Fallback: return known Anthropic-compatible models
+            return Self.anthropicKnownModels()
+        }
+
+        return try await fetchModelsWithOpenAI(
+            apiKey: apiKey,
+            openAIBaseURL: baseURL ?? "",
+            apiType: apiType,
+            providerId: providerId
+        )
+    }
+
+    /// Fetch models via OpenAI-compatible /models endpoint
+    private func fetchModelsWithOpenAI(apiKey: String, openAIBaseURL: String, apiType: APIType, providerId: String?) async throws -> [ModelInfo] {
+        let resolvedURL = getBaseURL(customURL: openAIBaseURL, providerId: providerId, apiType: apiType)
+        let urlString = "\(resolvedURL)/models"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
@@ -447,13 +476,7 @@ class LLMService: LLMServiceProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        if endpointType == .anthropic {
-            request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
-            request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        } else {
-            request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
         logger.debug("Fetching model list: \(urlString)")
 
@@ -487,6 +510,27 @@ class LLMService: LLMServiceProtocol {
             let raw = String(data: data, encoding: .utf8) ?? "Unable to parse response"
             logger.error("Model list parse failed: \(raw.prefix(500))")
             throw NSError(domain: "LLMService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Model list format error: \(raw.prefix(200))"])
+        }
+    }
+
+    /// Known Anthropic model IDs when no /models endpoint is available
+    static func anthropicKnownModels() -> [ModelInfo] {
+        let modelIDs = [
+            "claude-opus-4-7-20250624",
+            "claude-sonnet-4-6-20251113",
+            "claude-sonnet-4-5-20250929",
+            "claude-haiku-4-5-20251001",
+            "claude-opus-4-5-20251101",
+            "claude-opus-4-1-20250805",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-haiku-20241022",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-opus-20240229",
+            "claude-3-haiku-20240307",
+        ]
+        return modelIDs.map { id in
+            ModelInfo(id: id, capabilities: ModelCapability.infer(from: id))
         }
     }
 

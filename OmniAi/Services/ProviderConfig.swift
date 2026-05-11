@@ -88,6 +88,37 @@ struct ProviderMetadata: Codable, Identifiable {
     let urlNormalization: URLNormalizationRule
     let reasoning: ReasoningConfig
     let `protocol`: ProtocolConfig?
+    let supportedEndpointTypes: [String]?
+    let defaultEndpointType: String?
+    let endpointURLs: [String: String]?
+
+    /// Resolve the base URL for a given endpoint type.
+    /// Falls back to defaultBaseURL if no mapping exists.
+    func baseURL(for endpointType: EndpointType) -> String {
+        if let urls = endpointURLs, let mapped = urls[endpointType.rawValue] {
+            return mapped
+        }
+        return defaultBaseURL
+    }
+
+    /// Check if this provider supports a given endpoint type.
+    func supportsEndpointType(_ type: EndpointType) -> Bool {
+        if let supported = supportedEndpointTypes {
+            return supported.contains(type.rawValue)
+        }
+        // Default: all providers support openai, only anthropic-category providers support anthropic
+        switch type {
+        case .openai: return true
+        case .anthropic: return category == "anthropic"
+        }
+    }
+
+    var resolvedDefaultEndpointType: EndpointType {
+        guard let raw = defaultEndpointType else {
+            return category == "anthropic" ? .anthropic : .openai
+        }
+        return EndpointType(rawValue: raw) ?? .openai
+    }
 }
 
 struct URLNormalizationRule: Codable {
