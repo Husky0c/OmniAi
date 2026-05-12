@@ -10,7 +10,7 @@ final class ChatEngineTests: XCTestCase {
             .thinking("reasoning"),
             .usage(promptTokens: 2, completionTokens: 3, totalTokens: 5)
         ]
-        let engine = ChatEngine(llmService: mock)
+        let engine = ChatEngine(llmService: mock, providerRegistry: MockProviderRegistry())
 
         let response = engine.streamResponse(request: makeRequest())
 
@@ -49,7 +49,7 @@ final class ChatEngineTests: XCTestCase {
             .toolCallDelta(index: 0, id: nil, name: nil, argumentsChunk: #"1+1"}"#),
             .finishReason("tool_calls")
         ]
-        let engine = ChatEngine(llmService: mock)
+        let engine = ChatEngine(llmService: mock, providerRegistry: MockProviderRegistry())
 
         let response = engine.streamResponse(request: makeRequest())
 
@@ -82,7 +82,7 @@ final class ChatEngineTests: XCTestCase {
     func testCompleteUsesLLMServiceCompletion() async throws {
         let mock = MockLLMService()
         mock.completionResult = "Generated title"
-        let engine = ChatEngine(llmService: mock)
+        let engine = ChatEngine(llmService: mock, providerRegistry: MockProviderRegistry())
 
         let result = try await engine.complete(
             request: ChatCompletionRequest(

@@ -5,12 +5,12 @@ struct DefaultModelSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
-    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
-    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
-    @AppStorage("autoRenameInterval") private var autoRenameInterval: Int = 2
-    @AppStorage("autoRenameModelId") private var autoRenameModelId: String = ""
-    @AppStorage("autoRenameAPIKeyID") private var autoRenameAPIKeyID: String = ""
-    @AppStorage("autoRenamePrompt") private var autoRenamePrompt: String = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
+    @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
+    @AppStorage(AppSettings.Keys.defaultModelId) private var defaultModelId: String = AppSettings.Defaults.defaultModelId
+    @AppStorage(AppSettings.Keys.autoRenameInterval) private var autoRenameInterval: Int = AppSettings.Defaults.autoRenameInterval
+    @AppStorage(AppSettings.Keys.autoRenameModelId) private var autoRenameModelId: String = AppSettings.Defaults.autoRenameModelId
+    @AppStorage(AppSettings.Keys.autoRenameAPIKeyID) private var autoRenameAPIKeyID: String = AppSettings.Defaults.autoRenameAPIKeyID
+    @AppStorage(AppSettings.Keys.autoRenamePrompt) private var autoRenamePrompt: String = AppSettings.Defaults.autoRenamePrompt
     
     @State private var showRenameModelSheet = false
     @State private var showDefaultModelSheet = false

@@ -4,8 +4,8 @@ import SwiftData
 struct AssistantSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
-    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
+    @AppStorage(AppSettings.Keys.defaultModelId) private var defaultModelId: String = AppSettings.Defaults.defaultModelId
+    @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
     @Bindable var assistant: Assistant

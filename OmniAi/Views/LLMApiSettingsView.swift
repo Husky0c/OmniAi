@@ -5,7 +5,7 @@ struct LLMApiSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
-    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
+    @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
     
     @State private var showingAddKeySheet = false
     @State private var editingKey: APIKeys? = nil

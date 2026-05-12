@@ -13,7 +13,7 @@ struct MessageBubbleView: View {
     @State private var showStats = false
     @State private var showActionMenu = false
     @State private var userAvatar: UIImage? = nil
-    @AppStorage("userName") private var userName: String = "用户"
+    @AppStorage(AppSettings.Keys.userName) private var userName: String = AppSettings.Defaults.userName
 
     var isUser: Bool {
         message.role == .user

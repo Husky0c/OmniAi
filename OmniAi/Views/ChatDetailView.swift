@@ -6,16 +6,17 @@ import UIKit
 
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appServices) private var appServices
     var session: ChatSession
     var onToggleSidebar: (() -> Void)? = nil
     var onOpenSettings: (() -> Void)? = nil
     
-    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
-    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
-    @AppStorage("autoRenameInterval") private var autoRenameInterval: Int = 2
-    @AppStorage("autoRenameModelId") private var autoRenameModelId: String = ""
-    @AppStorage("autoRenameAPIKeyID") private var autoRenameAPIKeyID: String = ""
-    @AppStorage("autoRenamePrompt") private var autoRenamePrompt: String = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
+    @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
+    @AppStorage(AppSettings.Keys.defaultModelId) private var defaultModelId: String = AppSettings.Defaults.defaultModelId
+    @AppStorage(AppSettings.Keys.autoRenameInterval) private var autoRenameInterval: Int = AppSettings.Defaults.autoRenameInterval
+    @AppStorage(AppSettings.Keys.autoRenameModelId) private var autoRenameModelId: String = AppSettings.Defaults.autoRenameModelId
+    @AppStorage(AppSettings.Keys.autoRenameAPIKeyID) private var autoRenameAPIKeyID: String = AppSettings.Defaults.autoRenameAPIKeyID
+    @AppStorage(AppSettings.Keys.autoRenamePrompt) private var autoRenamePrompt: String = AppSettings.Defaults.autoRenamePrompt
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     @Query(sort: \MCPServerConfig.timestamp) private var mcpServers: [MCPServerConfig]
     
@@ -283,12 +284,13 @@ struct ChatDetailView: View {
         isGenerating = true
 
         guard let activeKey = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId }),
-              let apiKeyString = activeKey.key, !apiKeyString.isEmpty else {
+              let apiKeyString = appServices.keyStore.apiKeyString(for: activeKey), !apiKeyString.isEmpty else {
             assistantMessage.content = "⚠️ 错误：\(ChatEngineError.missingAPIKey.localizedDescription)"
             isGenerating = false
             return
         }
 
+        let chatEngine = appServices.chatEngine()
         let assistantSnapshot = ChatAssistantSnapshot(
             systemPrompt: session.assistant?.systemPrompt,
             contextCount: session.assistant?.contextCount,
@@ -305,7 +307,7 @@ struct ChatDetailView: View {
             endpointType: activeKey.endpointType,
             cachedCapabilities: activeKey.cachedCapabilities
         )
-        let assemblyConfig = ProviderRegistry.shared.getProtocolConfig(for: channelSnapshot.providerId ?? "").messageAssembly
+        let assemblyConfig = chatEngine.messageAssemblyConfig(for: channelSnapshot.providerId)
         var messageSnapshots = session.messages
             .sorted { $0.createdAt < $1.createdAt }
             .filter { $0.id != assistantMessage.id }
@@ -329,11 +331,10 @@ struct ChatDetailView: View {
             let modelId = assistantSnapshot.modelId
             
             let caps = ModelCapability.effective(for: modelId, cached: channelSnapshot.cachedCapabilities)
-            let toolService = session.ensureToolService()
+            let toolService = appServices.toolServiceFactory.toolService(for: session)
             let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
             
-            let engine = ChatEngine()
-            let response = engine.streamResponse(
+            let response = chatEngine.streamResponse(
                 request: ChatEngineRequest(
                     messages: aiMessages,
                     apiKey: channelSnapshot.apiKey,
@@ -415,7 +416,7 @@ struct ChatDetailView: View {
                     guard let name = toolCall.function?.name, let args = toolCall.function?.arguments else {
                         continue
                     }
-                    let result = await session.ensureToolService().execute(name: name, argumentsJSON: args)
+                    let result = await appServices.toolServiceFactory.toolService(for: session).execute(name: name, argumentsJSON: args)
                     let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: modelId)
                     toolMessage.toolCallId = toolCall.id
                     await MainActor.run {
@@ -457,11 +458,11 @@ struct ChatDetailView: View {
             channel = effective
         } else {
             guard let rename = apiKeys.first(where: { $0.id.uuidString == autoRenameAPIKeyID }),
-                  let _ = rename.key, !rename.key!.isEmpty else { return }
+                  let renameKey = appServices.keyStore.apiKeyString(for: rename), !renameKey.isEmpty else { return }
             channel = rename
         }
         
-        guard let keyString = channel.key, !keyString.isEmpty else { return }
+        guard let keyString = appServices.keyStore.apiKeyString(for: channel), !keyString.isEmpty else { return }
         
         let recent = session.messages
             .filter { $0.role == .user || $0.role == .assistant }
@@ -479,7 +480,7 @@ struct ChatDetailView: View {
         let modelId = autoRenameModelId.isEmpty ? effectiveModelId : autoRenameModelId
         
         do {
-            let raw = try await ChatEngine().complete(
+            let raw = try await appServices.chatEngine().complete(
                 request: ChatCompletionRequest(
                     messages: messages,
                     apiKey: keyString,

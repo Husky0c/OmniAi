@@ -4,7 +4,7 @@ import PhotosUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
-    @AppStorage("userName") private var userName: String = "用户"
+    @AppStorage(AppSettings.Keys.userName) private var userName: String = AppSettings.Defaults.userName
     @State private var avatarImage: UIImage? = nil
     @State private var photoItem: PhotosPickerItem? = nil
     

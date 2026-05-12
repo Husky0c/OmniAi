@@ -4,8 +4,8 @@ import SwiftData
 struct NewAssistantView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("activeAPIKeyID") private var activeAPIKeyID: String = ""
-    @AppStorage("defaultModelId") private var defaultModelId: String = "gpt-4o"
+    @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
+    @AppStorage(AppSettings.Keys.defaultModelId) private var defaultModelId: String = AppSettings.Defaults.defaultModelId
     
     @State private var name: String = ""
     

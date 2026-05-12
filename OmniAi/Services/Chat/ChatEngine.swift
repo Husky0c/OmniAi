@@ -72,9 +72,15 @@ struct ChatEngineResponse {
 
 final class ChatEngine {
     private let llmService: LLMServiceProtocol
+    private let providerRegistry: ProviderRegistryProtocol
 
-    init(llmService: LLMServiceProtocol = LLMService.shared) {
+    init(llmService: LLMServiceProtocol, providerRegistry: ProviderRegistryProtocol) {
         self.llmService = llmService
+        self.providerRegistry = providerRegistry
+    }
+
+    func messageAssemblyConfig(for providerId: String?) -> MessageAssemblyConfig? {
+        providerRegistry.getProtocolConfig(for: providerId ?? "").messageAssembly
     }
 
     func streamResponse(request: ChatEngineRequest) -> ChatEngineResponse {
