@@ -12,8 +12,10 @@ struct AssistantSettingsView: View {
     @State private var showDeleteConfirmation: Bool = false
     @State private var showContextInput = false
     @State private var showTempInput = false
+    @State private var showMaxToolRoundsInput = false
     @State private var contextInputText = ""
     @State private var tempInputText = ""
+    @State private var maxToolRoundsInputText = ""
     @State private var showModelProviderSheet = false
     
     private var effectiveChannelId: String {
@@ -119,6 +121,33 @@ struct AssistantSettingsView: View {
                     
                     Section(header: Text("MCP 工具")) {
                         Toggle("MCP 工具调用", isOn: $assistant.mcpEnabled)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("最大工具调用轮数")
+                                Spacer()
+                                Button(action: {
+                                    maxToolRoundsInputText = String(assistant.maxToolCallRounds)
+                                    showMaxToolRoundsInput = true
+                                }) {
+                                    Text("\(assistant.maxToolCallRounds)")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Slider(value: Binding<Double>(
+                                get: { Double(assistant.maxToolCallRounds) },
+                                set: { assistant.maxToolCallRounds = Assistant.clampedMaxToolCallRounds(Int($0)) }
+                            ), in: Double(ChatRuntimeDefaults.minToolCallRounds)...Double(ChatRuntimeDefaults.maxToolCallRounds), step: 1)
+                            HStack(spacing: 0) {
+                                ForEach([3, 15, 25, 50], id: \.self) { tick in
+                                    Text("\(tick)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                    if tick != 50 { Spacer(minLength: 0) }
+                                }
+                            }
+                        }
                     }
 
                     Section {
@@ -163,6 +192,18 @@ struct AssistantSettingsView: View {
                 Button("确定") {
                     if let v = Double(tempInputText), v >= 0.0, v <= 2.0 {
                         assistant.temperature = v
+                    }
+                }
+            }
+            .alert("最大工具调用轮数", isPresented: $showMaxToolRoundsInput) {
+                TextField("\(ChatRuntimeDefaults.minToolCallRounds)-\(ChatRuntimeDefaults.maxToolCallRounds)", text: $maxToolRoundsInputText)
+#if os(iOS)
+                    .keyboardType(.numberPad)
+#endif
+                Button("取消", role: .cancel) { }
+                Button("确定") {
+                    if let v = Int(maxToolRoundsInputText) {
+                        assistant.maxToolCallRounds = Assistant.clampedMaxToolCallRounds(v)
                     }
                 }
             }

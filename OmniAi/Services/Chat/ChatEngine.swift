@@ -40,6 +40,7 @@ struct ChatAssistantSnapshot {
     let temperature: Double?
     let reasoningEffort: String?
     let modelId: String
+    let maxToolCallRounds: Int
 }
 
 enum ChatEngineError: LocalizedError {

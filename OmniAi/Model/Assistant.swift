@@ -15,6 +15,7 @@ final class Assistant {
     var modelId: String? = nil
     var reasoningEffort: String = "default"
     var mcpEnabled: Bool = false
+    var maxToolCallRounds: Int = ChatRuntimeDefaults.defaultMaxToolCallRounds
     
     @Relationship(deleteRule: .cascade)
     var sessions: [ChatSession] = []
@@ -27,7 +28,8 @@ final class Assistant {
         temperature: Double = 1.0,
         isBuiltIn: Bool = false,
         channelId: String? = nil,
-        modelId: String? = nil
+        modelId: String? = nil,
+        maxToolCallRounds: Int = ChatRuntimeDefaults.defaultMaxToolCallRounds
     ) {
         self.id = UUID()
         self.name = name
@@ -39,5 +41,10 @@ final class Assistant {
         self.isBuiltIn = isBuiltIn
         self.channelId = channelId
         self.modelId = modelId
+        self.maxToolCallRounds = Self.clampedMaxToolCallRounds(maxToolCallRounds)
+    }
+
+    static func clampedMaxToolCallRounds(_ value: Int) -> Int {
+        min(ChatRuntimeDefaults.maxToolCallRounds, max(ChatRuntimeDefaults.minToolCallRounds, value))
     }
 }

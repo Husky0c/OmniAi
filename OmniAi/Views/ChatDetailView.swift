@@ -302,7 +302,8 @@ struct ChatDetailView: View {
             contextCount: session.assistant?.contextCount,
             temperature: session.assistant?.temperature,
             reasoningEffort: session.assistant?.reasoningEffort,
-            modelId: effectiveModelId
+            modelId: effectiveModelId,
+            maxToolCallRounds: session.assistant?.maxToolCallRounds ?? ChatRuntimeDefaults.defaultMaxToolCallRounds
         )
         let channelSnapshot = ChatChannelSnapshot(
             id: activeKey.id.uuidString,
@@ -399,9 +400,9 @@ struct ChatDetailView: View {
             let toolCalls = await response.toolCalls()
             let shouldReenter = await response.needsToolReentry()
             if shouldReenter, !toolCalls.isEmpty {
-                guard ChatEngine.canRunToolRound(toolRound, maxRounds: ChatRuntimeDefaults.maxToolCallRounds) else {
+                guard ChatEngine.canRunToolRound(toolRound, maxRounds: assistantSnapshot.maxToolCallRounds) else {
                     await MainActor.run {
-                        assistantMessage.content += "\n[Error: \(ChatEngineError.toolCallLimitExceeded(maxRounds: ChatRuntimeDefaults.maxToolCallRounds).localizedDescription)]"
+                        assistantMessage.content += "\n[Error: \(ChatEngineError.toolCallLimitExceeded(maxRounds: assistantSnapshot.maxToolCallRounds).localizedDescription)]"
                         isGenerating = false
                         session.lastModified = Date()
                     }
