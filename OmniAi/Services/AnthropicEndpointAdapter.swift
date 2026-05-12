@@ -109,7 +109,7 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
         data: String,
         protocolConfig: ProtocolConfig,
         context: inout StreamParsingContext
-    ) -> [LLMStreamEvent] {
+    ) throws -> [LLMStreamEvent] {
         // Fallback: extract type from JSON if eventType not provided (DeepSeek compatibility)
         let resolvedEventType: String?
         if let et = eventType {
@@ -125,7 +125,9 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
         guard let typeStr = resolvedEventType,
               let type = AnthropicStreamEventType(rawValue: typeStr),
               let jsonData = data.data(using: .utf8)
-        else { return [] }
+        else {
+            throw LLMServiceError.streamParseFailure(snippet: String(data.prefix(200)))
+        }
 
         var events: [LLMStreamEvent] = []
 
@@ -136,8 +138,7 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
                let message = parsed["message"] as? [String: Any],
                let usage = message["usage"] as? [String: Any],
                let inputTokens = usage["input_tokens"] as? Int {
-                // We'll update usage on message_delta which has output_tokens
-                _ = inputTokens // Store for later if needed
+                context.inputTokens = inputTokens
             }
 
         case .contentBlockStart:
@@ -225,7 +226,7 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
                 // Extract usage info
                 if let usage = parsed["usage"] as? [String: Any],
                    let outputTokens = usage["output_tokens"] as? Int {
-                    let inputTokens = usage["input_tokens"] as? Int ?? 0
+                    let inputTokens = usage["input_tokens"] as? Int ?? context.inputTokens ?? 0
                     let total = inputTokens + outputTokens
                     events.append(.usage(promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: total))
                 }
@@ -244,7 +245,9 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
                let error = parsed["error"] as? [String: Any],
                let message = error["message"] as? String {
                 logger.error("Anthropic stream error: \(message)")
+                throw LLMServiceError.streamParseFailure(snippet: message)
             }
+            throw LLMServiceError.streamParseFailure(snippet: String(data.prefix(200)))
         }
 
         return events

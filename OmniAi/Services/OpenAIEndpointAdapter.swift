@@ -76,10 +76,17 @@ struct OpenAIEndpointAdapter: EndpointAdapter {
         data: String,
         protocolConfig: ProtocolConfig,
         context: inout StreamParsingContext
-    ) -> [LLMStreamEvent] {
-        guard let jsonData = data.data(using: .utf8),
-              let streamResponse = try? JSONDecoder().decode(OpenAIStreamResponse.self, from: jsonData)
-        else { return [] }
+    ) throws -> [LLMStreamEvent] {
+        guard let jsonData = data.data(using: .utf8) else {
+            throw LLMServiceError.streamParseFailure(snippet: String(data.prefix(200)))
+        }
+
+        let streamResponse: OpenAIStreamResponse
+        do {
+            streamResponse = try JSONDecoder().decode(OpenAIStreamResponse.self, from: jsonData)
+        } catch {
+            throw LLMServiceError.streamParseFailure(snippet: String(data.prefix(200)))
+        }
 
         var events: [LLMStreamEvent] = []
 

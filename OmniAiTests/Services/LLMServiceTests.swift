@@ -130,10 +130,12 @@ final class LLMServiceTests: XCTestCase {
         do {
             for try await _ in stream { }
             XCTFail("Expected error")
+        } catch let error as AppError {
+            XCTAssertEqual(error.localizedDescription, "认证失败，请检查 API Key")
+            XCTAssertTrue(error.logDescription.contains("status=401"))
+            XCTAssertTrue(error.logDescription.contains("phase=stream"))
         } catch {
-            guard case LLMServiceError.authenticationFailed = error else {
-                return XCTFail("Expected authenticationFailed, got \(error)")
-            }
+            XCTFail("Expected AppError, got \(error)")
         }
     }
 
@@ -207,9 +209,43 @@ final class LLMServiceTests: XCTestCase {
         do {
             _ = try await service.fetchAvailableModels(apiKey: "bad-key", baseURL: "https://test.com/v1")
             XCTFail("Expected error")
+        } catch let error as AppError {
+            XCTAssertEqual(error.localizedDescription, "Unauthorized")
+            XCTAssertTrue(error.logDescription.contains("status=403"))
+            XCTAssertTrue(error.logDescription.contains("phase=modelCatalog"))
         } catch {
-            let nsError = error as NSError
-            XCTAssertEqual(nsError.code, 403)
+            XCTFail("Expected AppError, got \(error)")
+        }
+    }
+
+    func testStreamMalformedJSONThrowsParseFailureWithContext() async {
+        mockSession.mockLines = ["data: {not-json"]
+        mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/chat/completions")!, statusCode: 200, httpVersion: nil, headerFields: nil)
+
+        let stream = service.sendMessageStream(
+            messages: [OpenAIMessage(role: "user", content: .text("hi"))],
+            apiKey: "test-key",
+            baseURL: "https://test.com/v1",
+            modelId: "gpt-4o",
+            temperature: nil,
+            reasoningEffort: nil,
+            apiType: .openAI,
+            tools: nil,
+            providerId: "openai",
+            endpointType: .openai
+        )
+
+        do {
+            for try await _ in stream { }
+            XCTFail("Expected parse failure")
+        } catch let error as AppError {
+            XCTAssertEqual(error.localizedDescription, "响应解析失败，请检查当前服务商是否兼容所选端点。")
+            XCTAssertTrue(error.logDescription.contains("provider=openai"))
+            XCTAssertTrue(error.logDescription.contains("endpoint=openai"))
+            XCTAssertTrue(error.logDescription.contains("model=gpt-4o"))
+            XCTAssertTrue(error.logDescription.contains("phase=streamParse"))
+        } catch {
+            XCTFail("Expected AppError, got \(error)")
         }
     }
 }

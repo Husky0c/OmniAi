@@ -6,6 +6,7 @@ struct StreamParser {
         adapter: EndpointAdapter,
         protocolConfig: ProtocolConfig,
         responseConfig: ResponseParserConfig?,
+        requestContext: LLMRequestContext,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
     ) async throws {
         let thinkTagParser = ThinkTagParser(tagPairs: responseConfig?.inlineThinkingTags ?? [])
@@ -24,12 +25,23 @@ struct StreamParser {
                 return
             }
 
-            let events = adapter.parseStreamLine(
-                eventType: nil,
-                data: jsonStr,
-                protocolConfig: protocolConfig,
-                context: &context
-            )
+            let events: [LLMStreamEvent]
+            do {
+                events = try adapter.parseStreamLine(
+                    eventType: nil,
+                    data: jsonStr,
+                    protocolConfig: protocolConfig,
+                    context: &context
+                )
+            } catch let error as AppError {
+                throw error
+            } catch {
+                throw AppError.streamParseFailure(
+                    context: requestContext,
+                    snippet: String(jsonStr.prefix(200)),
+                    underlying: error
+                )
+            }
             for event in events {
                 switch event {
                 case .chunk(let text):
@@ -47,6 +59,7 @@ struct StreamParser {
         result: AsyncThrowingStream<String, Error>,
         adapter: EndpointAdapter,
         protocolConfig: ProtocolConfig,
+        requestContext: LLMRequestContext,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
     ) async throws {
         var context = StreamParsingContext()
@@ -77,12 +90,23 @@ struct StreamParser {
                     resolvedEventType = type
                 }
 
-                let events = adapter.parseStreamLine(
-                    eventType: resolvedEventType,
-                    data: dataStr,
-                    protocolConfig: protocolConfig,
-                    context: &context
-                )
+                let events: [LLMStreamEvent]
+                do {
+                    events = try adapter.parseStreamLine(
+                        eventType: resolvedEventType,
+                        data: dataStr,
+                        protocolConfig: protocolConfig,
+                        context: &context
+                    )
+                } catch let error as AppError {
+                    throw error
+                } catch {
+                    throw AppError.streamParseFailure(
+                        context: requestContext,
+                        snippet: String(dataStr.prefix(200)),
+                        underlying: error
+                    )
+                }
                 for event in events {
                     continuation.yield(event)
                 }

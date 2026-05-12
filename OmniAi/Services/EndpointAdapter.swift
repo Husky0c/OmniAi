@@ -14,6 +14,7 @@ enum LLMServiceError: LocalizedError {
     case invalidResponse(requestId: String?)
     case authenticationFailed
     case invalidURL(String)
+    case streamParseFailure(snippet: String)
 
     var errorDescription: String? {
         switch self {
@@ -35,6 +36,8 @@ enum LLMServiceError: LocalizedError {
             return "认证失败，请检查 API Key"
         case .invalidURL(let url):
             return "无效的 URL: \(url)"
+        case .streamParseFailure:
+            return "响应解析失败，请检查当前服务商是否兼容所选端点。"
         }
     }
 }
@@ -59,7 +62,7 @@ protocol EndpointAdapter {
         data: String,
         protocolConfig: ProtocolConfig,
         context: inout StreamParsingContext
-    ) -> [LLMStreamEvent]
+    ) throws -> [LLMStreamEvent]
 
     /// Parse a non-streaming completion response
     func parseCompletionResponse(data: Data) throws -> String
@@ -89,4 +92,6 @@ struct StreamParsingContext {
     var toolInputBuffers: [Int: String] = [:]
     /// Tool use block metadata (id, name)
     var toolUseBlocks: [Int: (id: String, name: String)] = [:]
+    /// Anthropic reports input token usage on message_start and output tokens later.
+    var inputTokens: Int?
 }

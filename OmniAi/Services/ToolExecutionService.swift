@@ -32,8 +32,9 @@ final class ToolExecutionService {
             do {
                 return try await mcpManager.forward(toolName: name, argumentsJSON: argumentsJSON)
             } catch {
-                logger.error("MCP tool '\(name)' failed: \(error.localizedDescription)")
-                return #"{"error": "Tool '\#(name)' failed: \#(error.localizedDescription)"}"#
+                let appError = AppError.toolExecutionFailure(toolName: name, underlying: error)
+                logger.error("\(appError.logDescription)")
+                return #"{"error": "\#(appError.localizedDescription)"}"#
             }
         }
 

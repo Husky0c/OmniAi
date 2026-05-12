@@ -60,6 +60,18 @@ class LLMService: LLMServiceProtocol {
         let adapter = getAdapter(for: contract, endpointType: endpointType)
         let protocolConfig = contract.protocolConfig
         let responseConfig = protocolConfig.response
+        let streamContext = LLMRequestContext(
+            providerId: providerId,
+            endpointType: endpointType,
+            modelId: modelId,
+            phase: .stream
+        )
+        let requestBuildContext = LLMRequestContext(
+            providerId: providerId,
+            endpointType: endpointType,
+            modelId: modelId,
+            phase: .requestBuild
+        )
 
         let resolvedBaseURL = baseURLResolver.resolve(customURL: baseURL, providerId: providerId, apiType: apiType, endpointType: endpointType)
 
@@ -86,14 +98,16 @@ class LLMService: LLMServiceProtocol {
             )
         } catch {
             return AsyncThrowingStream { continuation in
-                continuation.finish(throwing: error)
+                let appError = AppError.requestBuildFailure(context: requestBuildContext, underlying: error)
+                logger.error("\(appError.logDescription)")
+                continuation.finish(throwing: appError)
             }
         }
 
         if let body = request.httpBody,
            let jsonString = String(data: body, encoding: .utf8) {
             logger.debug("Stream request to: \(request.url?.absoluteString ?? "nil")")
-            logger.debug("Model: \(modelId), EndpointType: \(endpointType.rawValue)")
+            logger.debug("\(streamContext.logDescription)")
             if let prettyData = try? JSONSerialization.data(withJSONObject: try JSONSerialization.jsonObject(with: body), options: [.prettyPrinted, .sortedKeys]),
                let prettyString = String(data: prettyData, encoding: .utf8) {
                 logger.debug("Request body:\n\(prettyString)")
@@ -108,20 +122,28 @@ class LLMService: LLMServiceProtocol {
                     let (result, response) = try await session.bytes(for: request)
 
                     guard let httpResponse = response as? HTTPURLResponse else {
-                        throw URLError(.badServerResponse)
+                        throw AppError.invalidResponse(context: streamContext, message: "无效响应")
                     }
 
-                    logger.info("Response status: \(httpResponse.statusCode)")
+                    logger.info("Response status: \(httpResponse.statusCode), \(streamContext.logDescription)")
 
                     // Handle rate limiting
                     if httpResponse.statusCode == 429 {
                         let retryAfter = httpResponse.value(forHTTPHeaderField: "retry-after").flatMap { Int($0) }
-                        throw LLMServiceError.rateLimitExceeded(retryAfter: retryAfter)
+                        throw AppError.serverFailure(
+                            statusCode: httpResponse.statusCode,
+                            message: LLMServiceError.rateLimitExceeded(retryAfter: retryAfter).localizedDescription,
+                            context: streamContext
+                        )
                     }
 
                     // Handle auth errors
                     if httpResponse.statusCode == 401 {
-                        throw LLMServiceError.authenticationFailed
+                        throw AppError.serverFailure(
+                            statusCode: httpResponse.statusCode,
+                            message: LLMServiceError.authenticationFailed.localizedDescription,
+                            context: streamContext
+                        )
                     }
 
                     guard httpResponse.statusCode == 200 else {
@@ -132,20 +154,23 @@ class LLMService: LLMServiceProtocol {
 
                         if let data = errorBody.data(using: .utf8),
                            let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                            logger.error("Stream request failed [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
-                            throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message])
+                            let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: errorResponse.error.message, context: streamContext)
+                            logger.error("\(appError.logDescription)")
+                            throw appError
                         } else {
                             // Try Anthropic error format
                             if let data = errorBody.data(using: .utf8),
                                let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                                let err = parsed["error"] as? [String: Any],
                                let message = err["message"] as? String {
-                                logger.error("Stream request failed [\(httpResponse.statusCode)]: \(message)")
-                                throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+                                let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: message, context: streamContext)
+                                logger.error("\(appError.logDescription)")
+                                throw appError
                             }
                             let fallbackMessage = errorBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "HTTP error: \(httpResponse.statusCode)" : errorBody
-                            logger.error("Stream request failed [\(httpResponse.statusCode)]: \(fallbackMessage)")
-                            throw NSError(domain: "LLMService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: fallbackMessage])
+                            let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: fallbackMessage, context: streamContext)
+                            logger.error("\(appError.logDescription)")
+                            throw appError
                         }
                     }
 
@@ -156,6 +181,12 @@ class LLMService: LLMServiceProtocol {
                             result: result,
                             adapter: adapter,
                             protocolConfig: protocolConfig,
+                            requestContext: LLMRequestContext(
+                                providerId: providerId,
+                                endpointType: endpointType,
+                                modelId: modelId,
+                                phase: .streamParse
+                            ),
                             continuation: continuation
                         )
                     } else {
@@ -165,15 +196,25 @@ class LLMService: LLMServiceProtocol {
                             adapter: adapter,
                             protocolConfig: protocolConfig,
                             responseConfig: responseConfig,
+                            requestContext: LLMRequestContext(
+                                providerId: providerId,
+                                endpointType: endpointType,
+                                modelId: modelId,
+                                phase: .streamParse
+                            ),
                             continuation: continuation
                         )
                     }
 
                     logger.debug("Stream request completed")
                     continuation.finish()
-                } catch {
-                    logger.error("Stream request error: \(error.localizedDescription)")
+                } catch let error as AppError {
+                    logger.error("\(error.logDescription)")
                     continuation.finish(throwing: error)
+                } catch {
+                    let appError = AppError.transportFailure(context: streamContext, underlying: error)
+                    logger.error("\(appError.logDescription)")
+                    continuation.finish(throwing: appError)
                 }
             }
         }
@@ -194,6 +235,12 @@ class LLMService: LLMServiceProtocol {
         let contract = ProviderRegistry.shared.getContract(for: providerId)
         let protocolConfig = contract.protocolConfig
         let resolvedBaseURL = baseURLResolver.resolve(customURL: baseURL, providerId: providerId, apiType: apiType, endpointType: endpointType)
+        let context = LLMRequestContext(
+            providerId: providerId,
+            endpointType: endpointType,
+            modelId: modelId,
+            phase: .completion
+        )
         return try await LLMCompletionClient(session: session).sendMessageCompletion(
             messages: messages,
             apiKey: apiKey,
@@ -201,7 +248,8 @@ class LLMService: LLMServiceProtocol {
             modelId: modelId,
             temperature: temperature,
             endpointType: endpointType,
-            protocolConfig: protocolConfig
+            protocolConfig: protocolConfig,
+            requestContext: context
         )
     }
 

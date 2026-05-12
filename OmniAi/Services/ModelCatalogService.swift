@@ -68,10 +68,16 @@ final class ModelCatalogService {
         providerId: String?,
         capabilityStrategy: CapabilityInferenceStrategy
     ) async throws -> [ModelInfo] {
+        let context = LLMRequestContext(
+            providerId: providerId,
+            endpointType: .openai,
+            modelId: nil,
+            phase: .modelCatalog
+        )
         let resolvedURL = baseURLResolver.resolve(customURL: openAIBaseURL, providerId: providerId, apiType: apiType, endpointType: .openai)
         let urlString = "\(resolvedURL)/models"
         guard let url = URL(string: urlString) else {
-            throw URLError(.badURL)
+            throw AppError.requestBuildFailure(context: context, underlying: LLMServiceError.invalidURL(urlString))
         }
 
         var request = URLRequest(url: url)
@@ -79,30 +85,30 @@ final class ModelCatalogService {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        logger.debug("Fetching model list: \(urlString)")
+        logger.debug("Fetching model list: \(urlString), \(context.logDescription)")
 
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw AppError.transportFailure(context: context, underlying: error)
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+            throw AppError.invalidResponse(context: context, message: "无效响应")
         }
 
         guard httpResponse.statusCode == 200 else {
             if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                logger.error("Model list fetch failed [\(httpResponse.statusCode)]: \(errorResponse.error.message)")
-                throw NSError(
-                    domain: "LLMService",
-                    code: httpResponse.statusCode,
-                    userInfo: [NSLocalizedDescriptionKey: errorResponse.error.message]
-                )
+                let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: errorResponse.error.message, context: context)
+                logger.error("\(appError.logDescription)")
+                throw appError
             } else {
                 let raw = String(data: data, encoding: .utf8) ?? "Unable to read response"
-                logger.error("Model list fetch failed [\(httpResponse.statusCode)]: \(raw)")
-                throw NSError(
-                    domain: "LLMService",
-                    code: httpResponse.statusCode,
-                    userInfo: [NSLocalizedDescriptionKey: raw]
-                )
+                let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: raw, context: context)
+                logger.error("\(appError.logDescription)")
+                throw appError
             }
         }
 
@@ -119,12 +125,9 @@ final class ModelCatalogService {
             return models
         } catch {
             let raw = String(data: data, encoding: .utf8) ?? "Unable to parse response"
-            logger.error("Model list parse failed: \(raw.prefix(500))")
-            throw NSError(
-                domain: "LLMService",
-                code: 0,
-                userInfo: [NSLocalizedDescriptionKey: "Model list format error: \(raw.prefix(200))"]
-            )
+            let appError = AppError.invalidResponse(context: context, message: "模型列表格式错误：\(raw.prefix(200))")
+            logger.error("\(appError.logDescription)")
+            throw appError
         }
     }
 

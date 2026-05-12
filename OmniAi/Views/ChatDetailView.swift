@@ -3,8 +3,11 @@ import SwiftData
 import MarkdownUI
 import Combine
 import UIKit
+import OSLog
 
 struct ChatDetailView: View {
+    private static let logger = Logger(subsystem: "com.omniai.chat", category: "ChatDetailView")
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appServices) private var appServices
     var session: ChatSession
@@ -291,7 +294,7 @@ struct ChatDetailView: View {
 
         guard let activeKey = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId }),
               let apiKeyString = appServices.keyStore.apiKeyString(for: activeKey), !apiKeyString.isEmpty else {
-            assistantMessage.content = "⚠️ 错误：\(ChatEngineError.missingAPIKey.localizedDescription)"
+            assistantMessage.content = ChatErrorFormatter.render(.missingAPIKey, existingContent: assistantMessage.content)
             isGenerating = false
             return
         }
@@ -387,13 +390,20 @@ struct ChatDetailView: View {
                         }
                     case .finishReason:
                         break
+                    case .failed(let error):
+                        await MainActor.run {
+                            assistantMessage.content = ChatErrorFormatter.render(error, existingContent: assistantMessage.content)
+                        }
                     }
                 }
             } catch is CancellationError {
                 // 用户主动打断，保留已生成内容
             } catch {
+                let chatError = ChatEngineError.from(error)
                 await MainActor.run {
-                    assistantMessage.content += "\n[Error: \(error.localizedDescription)]"
+                    if !assistantMessage.content.contains(chatError.localizedDescription) {
+                        assistantMessage.content = ChatErrorFormatter.render(chatError, existingContent: assistantMessage.content)
+                    }
                 }
             }
 
@@ -402,7 +412,10 @@ struct ChatDetailView: View {
             if shouldReenter, !toolCalls.isEmpty {
                 guard ChatEngine.canRunToolRound(toolRound, maxRounds: assistantSnapshot.maxToolCallRounds) else {
                     await MainActor.run {
-                        assistantMessage.content += "\n[Error: \(ChatEngineError.toolCallLimitExceeded(maxRounds: assistantSnapshot.maxToolCallRounds).localizedDescription)]"
+                        assistantMessage.content = ChatErrorFormatter.render(
+                            .toolCallLimitExceeded(maxRounds: assistantSnapshot.maxToolCallRounds),
+                            existingContent: assistantMessage.content
+                        )
                         isGenerating = false
                         session.lastModified = Date()
                     }
@@ -522,6 +535,14 @@ struct ChatDetailView: View {
                 }
             }
         } catch {
+            let context = LLMRequestContext(
+                providerId: channel.providerID,
+                endpointType: channel.endpointType,
+                modelId: modelId,
+                phase: .autoTitle
+            )
+            let appError = AppError.autoTitleFailure(context: context, underlying: error)
+            Self.logger.error("\(appError.logDescription)")
         }
     }
 }

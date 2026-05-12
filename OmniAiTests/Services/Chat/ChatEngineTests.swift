@@ -27,6 +27,8 @@ final class ChatEngineTests: XCTestCase {
                 usage.append((promptTokens, completionTokens, totalTokens))
             case .toolCallName, .finishReason:
                 XCTFail("Unexpected tool call name")
+            case .failed(let error):
+                XCTFail("Unexpected failure: \(error.localizedDescription)")
             }
         }
 
@@ -100,6 +102,29 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(result, "Generated title")
     }
 
+    func testStreamErrorEmitsFailedEventBeforeThrowing() async {
+        let mock = MockLLMService()
+        let context = LLMRequestContext(providerId: "openai", endpointType: .openai, modelId: "gpt-4o", phase: .streamParse)
+        mock.streamingError = AppError.streamParseFailure(context: context, snippet: "not-json", underlying: nil)
+        let engine = ChatEngine(llmService: mock, providerRegistry: MockProviderRegistry())
+
+        let response = engine.streamResponse(request: makeRequest())
+
+        var failedError: ChatEngineError?
+        do {
+            for try await event in response.events {
+                if case .failed(let error) = event {
+                    failedError = error
+                }
+            }
+            XCTFail("Expected stream to throw")
+        } catch {
+            // Expected. The failed event is emitted before the throwing finish.
+        }
+
+        XCTAssertEqual(failedError?.localizedDescription, "响应解析失败，请检查当前服务商是否兼容所选端点。")
+    }
+
     func testToolCallLimitExceededHasUserVisibleDescription() {
         let error = ChatEngineError.toolCallLimitExceeded(maxRounds: 6)
 
@@ -110,6 +135,53 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertTrue(ChatEngine.canRunToolRound(0, maxRounds: 6))
         XCTAssertTrue(ChatEngine.canRunToolRound(5, maxRounds: 6))
         XCTAssertFalse(ChatEngine.canRunToolRound(6, maxRounds: 6))
+    }
+
+    func testChatErrorFormatterUsesChineseWarningFormat() {
+        let empty = ChatErrorFormatter.render(.missingAPIKey, existingContent: "")
+        let appended = ChatErrorFormatter.render(.toolCallLimitExceeded(maxRounds: 2), existingContent: "partial")
+
+        XCTAssertEqual(empty, "⚠️ 配置错误：未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。")
+        XCTAssertEqual(appended, "partial\n\n⚠️ 工具错误：工具调用轮次超过上限（2 轮），已停止继续执行。")
+    }
+
+    func testChatErrorFormatterDistinguishesNetworkRelatedCategories() {
+        let request = ChatErrorFormatter.render(.requestBuildFailure("请求构建失败"), existingContent: "")
+        let parse = ChatErrorFormatter.render(.streamParseFailure("响应解析失败"), existingContent: "")
+        let server = ChatErrorFormatter.render(.serverFailure("上游 500"), existingContent: "")
+        let transport = ChatErrorFormatter.render(.transportFailure("网络断开"), existingContent: "")
+        let invalid = ChatErrorFormatter.render(.invalidResponse("格式错误"), existingContent: "")
+        let unknown = ChatErrorFormatter.render(.unknown("未知原因"), existingContent: "")
+
+        XCTAssertEqual(request, "⚠️ 请求错误：无法构建请求。请求构建失败")
+        XCTAssertEqual(parse, "⚠️ 响应错误：无法解析服务商返回内容。响应解析失败")
+        XCTAssertEqual(server, "⚠️ 服务商错误：服务商返回错误。上游 500")
+        XCTAssertEqual(transport, "⚠️ 网络连接错误：请求未能完成。网络断开")
+        XCTAssertEqual(invalid, "⚠️ 响应错误：服务商返回了无法识别的响应。格式错误")
+        XCTAssertEqual(unknown, "⚠️ 未知错误：发生未分类错误。未知原因")
+    }
+
+    func testChatEngineErrorMapsAllAppErrorCategories() {
+        let context = LLMRequestContext(providerId: "openai", endpointType: .openai, modelId: "gpt-4o", phase: .stream)
+        let providerError = ProviderConfigError.duplicateProviderId("openai")
+        let underlying = NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "底层错误"])
+
+        let cases: [(AppError, (ChatEngineError) -> Bool)] = [
+            (.missingAPIChannel, { if case .missingAPIKey = $0 { true } else { false } }),
+            (.missingAPIKey(channelID: "channel"), { if case .missingAPIKey = $0 { true } else { false } }),
+            (.requestBuildFailure(context: context, underlying: underlying), { if case .requestBuildFailure = $0 { true } else { false } }),
+            (.streamParseFailure(context: context, snippet: "bad", underlying: underlying), { if case .streamParseFailure = $0 { true } else { false } }),
+            (.providerConfigFailure(providerError), { if case .providerConfigFailure = $0 { true } else { false } }),
+            (.toolExecutionFailure(toolName: "calculator", underlying: underlying), { if case .toolExecutionFailure = $0 { true } else { false } }),
+            (.autoTitleFailure(context: context, underlying: underlying), { if case .autoTitleFailure = $0 { true } else { false } }),
+            (.serverFailure(statusCode: 500, message: "server failed", context: context), { if case .serverFailure = $0 { true } else { false } }),
+            (.transportFailure(context: context, underlying: underlying), { if case .transportFailure = $0 { true } else { false } }),
+            (.invalidResponse(context: context, message: "bad response"), { if case .invalidResponse = $0 { true } else { false } })
+        ]
+
+        for (appError, matcher) in cases {
+            XCTAssertTrue(matcher(ChatEngineError.from(appError)), "Unexpected mapping for \(appError)")
+        }
     }
 
     private func makeRequest() -> ChatEngineRequest {

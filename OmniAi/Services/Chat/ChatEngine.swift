@@ -46,6 +46,15 @@ struct ChatAssistantSnapshot {
 enum ChatEngineError: LocalizedError {
     case missingAPIKey
     case toolCallLimitExceeded(maxRounds: Int)
+    case requestBuildFailure(String)
+    case streamParseFailure(String)
+    case providerConfigFailure(String)
+    case toolExecutionFailure(String)
+    case autoTitleFailure(String)
+    case serverFailure(String)
+    case transportFailure(String)
+    case invalidResponse(String)
+    case unknown(String)
 
     var errorDescription: String? {
         switch self {
@@ -53,7 +62,54 @@ enum ChatEngineError: LocalizedError {
             return "未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。"
         case .toolCallLimitExceeded(let maxRounds):
             return "工具调用轮次超过上限（\(maxRounds) 轮），已停止继续执行。"
+        case .requestBuildFailure(let message):
+            return message
+        case .streamParseFailure(let message):
+            return message
+        case .providerConfigFailure(let message):
+            return message
+        case .toolExecutionFailure(let message):
+            return message
+        case .autoTitleFailure(let message):
+            return message
+        case .serverFailure(let message):
+            return message
+        case .transportFailure(let message):
+            return message
+        case .invalidResponse(let message):
+            return message
+        case .unknown(let message):
+            return message
         }
+    }
+
+    static func from(_ error: Error) -> ChatEngineError {
+        if let chatError = error as? ChatEngineError {
+            return chatError
+        }
+        if let appError = error as? AppError {
+            switch appError {
+            case .missingAPIChannel, .missingAPIKey:
+                return .missingAPIKey
+            case .requestBuildFailure:
+                return .requestBuildFailure(appError.localizedDescription)
+            case .streamParseFailure:
+                return .streamParseFailure(appError.localizedDescription)
+            case .providerConfigFailure:
+                return .providerConfigFailure(appError.localizedDescription)
+            case .toolExecutionFailure:
+                return .toolExecutionFailure(appError.localizedDescription)
+            case .autoTitleFailure:
+                return .autoTitleFailure(appError.localizedDescription)
+            case .serverFailure:
+                return .serverFailure(appError.localizedDescription)
+            case .transportFailure:
+                return .transportFailure(appError.localizedDescription)
+            case .invalidResponse:
+                return .invalidResponse(appError.localizedDescription)
+            }
+        }
+        return .unknown(error.localizedDescription)
     }
 }
 
@@ -63,6 +119,7 @@ enum ChatEngineEvent {
     case usage(promptTokens: Int, completionTokens: Int, totalTokens: Int)
     case toolCallName(String)
     case finishReason(String?)
+    case failed(ChatEngineError)
 }
 
 struct ChatEngineResponse {
@@ -137,6 +194,7 @@ final class ChatEngine {
                     }
                     continuation.finish()
                 } catch {
+                    continuation.yield(.failed(ChatEngineError.from(error)))
                     continuation.finish(throwing: error)
                 }
             }
