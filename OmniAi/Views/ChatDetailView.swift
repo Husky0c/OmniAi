@@ -3,9 +3,6 @@ import SwiftData
 import MarkdownUI
 import Combine
 import UIKit
-#if canImport(PDFKit)
-import PDFKit
-#endif
 
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -29,6 +26,8 @@ struct ChatDetailView: View {
     @State private var showModelProviderSheet: Bool = false
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
+
+    private let maxToolCallRounds: Int = 6
 
     private var effectiveChannelId: String {
         session.assistant?.channelId ?? activeAPIKeyID
@@ -280,144 +279,77 @@ struct ChatDetailView: View {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    private func fetchAIResponse(for assistantMessage: ChatMessage) {
+    private func fetchAIResponse(for assistantMessage: ChatMessage, toolRound: Int = 0) {
         isGenerating = true
 
         guard let activeKey = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId }),
               let apiKeyString = activeKey.key, !apiKeyString.isEmpty else {
-            assistantMessage.content = "⚠️ 错误：未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。"
+            assistantMessage.content = "⚠️ 错误：\(ChatEngineError.missingAPIKey.localizedDescription)"
             isGenerating = false
             return
         }
 
+        let assistantSnapshot = ChatAssistantSnapshot(
+            systemPrompt: session.assistant?.systemPrompt,
+            contextCount: session.assistant?.contextCount,
+            temperature: session.assistant?.temperature,
+            reasoningEffort: session.assistant?.reasoningEffort,
+            modelId: effectiveModelId
+        )
+        let channelSnapshot = ChatChannelSnapshot(
+            id: activeKey.id.uuidString,
+            apiKey: apiKeyString,
+            requestURL: activeKey.requestURL,
+            apiType: activeKey.apiType,
+            providerId: activeKey.providerID,
+            endpointType: activeKey.endpointType,
+            cachedCapabilities: activeKey.cachedCapabilities
+        )
+        let assemblyConfig = ProviderRegistry.shared.getProtocolConfig(for: channelSnapshot.providerId ?? "").messageAssembly
+        var messageSnapshots = session.messages
+            .sorted { $0.createdAt < $1.createdAt }
+            .filter { $0.id != assistantMessage.id }
+            .map { ChatMessageAssembler.makeSnapshot(from: $0) }
+
+        if let contextCount = assistantSnapshot.contextCount, contextCount < messageSnapshots.count {
+            messageSnapshots = Array(messageSnapshots.suffix(contextCount))
+        }
+
         currentGenerationTask?.cancel()
         currentGenerationTask = Task { [session] in
-            var allMessages = session.messages
-                .sorted { $0.createdAt < $1.createdAt }
-                .filter { $0.id != assistantMessage.id }
+            let aiMessages = ChatMessageAssembler.assemble(
+                messages: messageSnapshots,
+                systemPrompt: assistantSnapshot.systemPrompt,
+                assemblyConfig: assemblyConfig
+            )
             
-            if let assistant = session.assistant, assistant.contextCount < allMessages.count {
-                allMessages = Array(allMessages.suffix(assistant.contextCount))
-            }
-            
-            var aiMessages: [OpenAIMessage] = []
-            
-            if let assistant = session.assistant, !assistant.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                aiMessages.append(OpenAIMessage(role: "system", content: .text(assistant.systemPrompt)))
-            }
-            
-            let assemblyConfig = ProviderRegistry.shared.getProtocolConfig(for: activeKey.providerID ?? "").messageAssembly
-            
-            for msg in allMessages {
-                let role = msg.role.rawValue
-                
-                if role == "tool" {
-                    aiMessages.append(OpenAIMessage(
-                        role: "tool",
-                        content: .text(msg.content),
-                        tool_call_id: msg.toolCallId
-                    ))
-                    continue
-                }
-                
-                if role == "assistant", let toolData = msg.toolCallsData,
-                   let toolCalls = try? JSONDecoder().decode([OpenAIToolCall].self, from: toolData) {
-                    let preserveContent = assemblyConfig?.preserveAssistantContentWhenToolCalls ?? true
-                    var message = OpenAIMessage(
-                        role: "assistant",
-                        content: preserveContent ? .text(msg.content) : .text(""),
-                        tool_calls: toolCalls
-                    )
-                    let includeReasoning = assemblyConfig?.includeReasoningContent ?? true
-                    if includeReasoning, let thinking = msg.thinkingContent {
-                        let reasoningField = assemblyConfig?.reasoningFieldName ?? "reasoning_content"
-                        if reasoningField == "reasoning_content" {
-                            message.reasoning_content = thinking
-                        } else {
-                            message.thinking = thinking
-                        }
-                    }
-                    aiMessages.append(message)
-                    continue
-                }
-                
-                let atts = msg.attachments ?? []
-                let imageAttachments = atts.filter { $0.type == .image }
-                let nonImageAttachments = atts.filter { $0.type != .image }
-                
-                if imageAttachments.isEmpty {
-                    var finalContent = msg.content
-                    for attachment in nonImageAttachments {
-                        if let extracted = extractText(from: attachment) {
-                            finalContent = "[\(attachment.name)]\n\(extracted)\n\n" + finalContent
-                        }
-                    }
-                    if role == "assistant" {
-                        var message = OpenAIMessage(role: role, content: .text(finalContent))
-                        let includeReasoning = assemblyConfig?.includeReasoningContent ?? true
-                        if includeReasoning, let thinking = msg.thinkingContent {
-                            let reasoningField = assemblyConfig?.reasoningFieldName ?? "reasoning_content"
-                            if reasoningField == "reasoning_content" {
-                                message.reasoning_content = thinking
-                            } else {
-                                message.thinking = thinking
-                            }
-                        }
-                        aiMessages.append(message)
-                    } else {
-                        aiMessages.append(OpenAIMessage(role: role, content: .text(finalContent)))
-                    }
-                } else {
-                    var parts: [ContentPart] = []
-                    var textContent = msg.content
-                    for attachment in nonImageAttachments {
-                        if let extracted = extractText(from: attachment) {
-                            textContent = "[文件: \(attachment.name)]\n\(extracted)\n\n" + textContent
-                        }
-                    }
-                    if !textContent.isEmpty {
-                        parts.append(.text(textContent))
-                    }
-                    for attachment in imageAttachments {
-                        if let data = attachment.data {
-                            let base64 = data.base64EncodedString()
-                            let ext = URL(fileURLWithPath: attachment.name).pathExtension.lowercased()
-                            let mimeType = ext == "png" ? "image/png" : "image/jpeg"
-                            let url = "data:\(mimeType);base64,\(base64)"
-                            parts.append(.image(url: url, detail: "auto"))
-                        }
-                    }
-                    aiMessages.append(OpenAIMessage(role: role, content: .parts(parts)))
-                }
-            }
-            
-            let temperature = session.assistant?.temperature
+            let temperature = assistantSnapshot.temperature
             let startTime = Date()
             var hasReceivedFirstChunk = false
-            let modelId = effectiveModelId
+            let modelId = assistantSnapshot.modelId
             
-            let caps = ModelCapability.effective(for: modelId, cached: activeKey.cachedCapabilities)
+            let caps = ModelCapability.effective(for: modelId, cached: channelSnapshot.cachedCapabilities)
             let toolService = session.ensureToolService()
             let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
             
-            let stream = LLMService.shared.sendMessageStream(
-                messages: aiMessages,
-                apiKey: apiKeyString,
-                baseURL: activeKey.requestURL,
-                modelId: modelId,
-                temperature: temperature,
-                reasoningEffort: session.assistant?.reasoningEffort,
-                apiType: activeKey.apiType,
-                tools: toolDefinitions,
-                providerId: activeKey.providerID,
-                endpointType: activeKey.endpointType
+            let engine = ChatEngine()
+            let response = engine.streamResponse(
+                request: ChatEngineRequest(
+                    messages: aiMessages,
+                    apiKey: channelSnapshot.apiKey,
+                    baseURL: channelSnapshot.requestURL,
+                    modelId: modelId,
+                    temperature: temperature,
+                    reasoningEffort: assistantSnapshot.reasoningEffort,
+                    apiType: channelSnapshot.apiType,
+                    tools: toolDefinitions,
+                    providerId: channelSnapshot.providerId,
+                    endpointType: channelSnapshot.endpointType
+                )
             )
             
-            var toolCallAccumulators: [Int: (id: String?, name: String?, arguments: String)] = [:]
-            var shouldReenter = false
-            
             do {
-                for try await event in stream {
+                for try await event in response.events {
                     switch event {
                     case .chunk(let text):
                         await MainActor.run {
@@ -437,25 +369,16 @@ struct ChatDetailView: View {
                             assistantMessage.completionTokens = completionTokens
                             assistantMessage.totalTokens = totalTokens
                         }
-                    case .toolCallDelta(let index, let id, let name, let argumentsChunk):
-                        var acc = toolCallAccumulators[index] ?? (id: nil, name: nil, arguments: "")
-                        if let newId = id { acc.id = newId }
-                        if let newName = name { acc.name = newName }
-                        acc.arguments += argumentsChunk
-                        toolCallAccumulators[index] = acc
+                    case .toolCallName(let toolName):
                         await MainActor.run {
-                            if let toolName = name ?? toolCallAccumulators[index]?.name {
-                                if !hasReceivedFirstChunk {
-                                    hasReceivedFirstChunk = true
-                                    assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
-                                }
-                                assistantMessage.toolCallName = toolName
+                            if !hasReceivedFirstChunk {
+                                hasReceivedFirstChunk = true
+                                assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
                             }
+                            assistantMessage.toolCallName = toolName
                         }
-                    case .finishReason(let reason):
-                        if reason == "tool_calls" {
-                            shouldReenter = true
-                        }
+                    case .finishReason:
+                        break
                     }
                 }
             } catch is CancellationError {
@@ -466,15 +389,18 @@ struct ChatDetailView: View {
                 }
             }
 
-            if shouldReenter, !toolCallAccumulators.isEmpty {
-                let toolCalls: [OpenAIToolCall] = toolCallAccumulators.sorted { $0.key < $1.key }.map { _, acc in
-                    OpenAIToolCall(
-                        id: acc.id,
-                        type: "function",
-                        function: OpenAIToolCallFunction(name: acc.name, arguments: acc.arguments)
-                    )
+            let toolCalls = await response.toolCalls()
+            let shouldReenter = await response.needsToolReentry()
+            if shouldReenter, !toolCalls.isEmpty {
+                guard toolRound < maxToolCallRounds else {
+                    await MainActor.run {
+                        assistantMessage.content += "\n[Error: \(ChatEngineError.toolCallLimitExceeded(maxRounds: maxToolCallRounds).localizedDescription)]"
+                        isGenerating = false
+                        session.lastModified = Date()
+                    }
+                    return
                 }
-                
+
                 if let toolData = try? JSONEncoder().encode(toolCalls) {
                     await MainActor.run {
                         assistantMessage.toolCallsData = toolData
@@ -506,7 +432,7 @@ struct ChatDetailView: View {
                     isGenerating = false
                 }
                 
-                fetchAIResponse(for: newAssistantMsg)
+                fetchAIResponse(for: newAssistantMsg, toolRound: toolRound + 1)
                 return
             }
             
@@ -524,31 +450,6 @@ struct ChatDetailView: View {
         }
     }
     
-    private func extractText(from attachment: MessageAttachment) -> String? {
-        guard let data = attachment.data else { return nil }
-        switch attachment.type {
-        case .text:
-            return String(data: data, encoding: .utf8)
-        case .pdf:
-#if canImport(PDFKit)
-            let doc = PDFDocument(data: data)
-            return doc?.string
-#else
-            return nil
-#endif
-        case .document:
-            if let attrStr = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil) {
-                return attrStr.string
-            }
-            if let attrStr = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.rtfd], documentAttributes: nil) {
-                return attrStr.string
-            }
-            return String(data: data, encoding: .utf8)
-        default:
-            return nil
-        }
-    }
-
     private func autoTitle() async {
         let channel: APIKeys
         if autoRenameAPIKeyID.isEmpty {
@@ -578,15 +479,17 @@ struct ChatDetailView: View {
         let modelId = autoRenameModelId.isEmpty ? effectiveModelId : autoRenameModelId
         
         do {
-            let raw = try await LLMService.shared.sendMessageCompletion(
-                messages: messages,
-                apiKey: keyString,
-                baseURL: channel.requestURL,
-                modelId: modelId,
-                temperature: 0.3,
-                apiType: channel.apiType,
-                providerId: channel.providerID,
-                endpointType: channel.endpointType
+            let raw = try await ChatEngine().complete(
+                request: ChatCompletionRequest(
+                    messages: messages,
+                    apiKey: keyString,
+                    baseURL: channel.requestURL,
+                    modelId: modelId,
+                    temperature: 0.3,
+                    apiType: channel.apiType,
+                    providerId: channel.providerID,
+                    endpointType: channel.endpointType
+                )
             )
             // Strip <think> tags from reasoning model outputs
             let stripped = raw.replacingOccurrences(
@@ -614,4 +517,3 @@ struct ChatDetailView: View {
         }
     }
 }
-

@@ -201,7 +201,8 @@ final class ProviderConfigTests: XCTestCase {
             messageAssembly: MessageAssemblyConfig(
                 preserveAssistantContentWhenToolCalls: true,
                 includeReasoningContent: true,
-                reasoningFieldName: "reasoning_content"
+                reasoningFieldName: "reasoning_content",
+                systemMessageHandling: nil
             )
         )
 
