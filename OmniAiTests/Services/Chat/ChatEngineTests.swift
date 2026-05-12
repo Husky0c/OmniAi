@@ -100,6 +100,18 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(result, "Generated title")
     }
 
+    func testToolCallLimitExceededHasUserVisibleDescription() {
+        let error = ChatEngineError.toolCallLimitExceeded(maxRounds: 6)
+
+        XCTAssertEqual(error.localizedDescription, "工具调用轮次超过上限（6 轮），已停止继续执行。")
+    }
+
+    func testToolCallRoundLimitAllowsRoundsBelowMaximum() {
+        XCTAssertTrue(ChatEngine.canRunToolRound(0, maxRounds: 6))
+        XCTAssertTrue(ChatEngine.canRunToolRound(5, maxRounds: 6))
+        XCTAssertFalse(ChatEngine.canRunToolRound(6, maxRounds: 6))
+    }
+
     private func makeRequest() -> ChatEngineRequest {
         ChatEngineRequest(
             messages: [OpenAIMessage(role: "user", content: .text("Hi"))],

@@ -142,10 +142,14 @@ struct ChatSidebarView: View {
         let sorted = assistant.sessions.sorted { $0.lastModified > $1.lastModified }
         for index in offsets {
             let session = sorted[index]
+            let sessionId = session.id
             if selectedSession == session {
                 selectedSession = nil
             }
             modelContext.delete(session)
+            Task {
+                await ToolSessionStore.shared.releaseService(for: sessionId)
+            }
         }
     }
 }

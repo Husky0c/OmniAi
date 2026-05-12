@@ -1,12 +1,19 @@
 import SwiftUI
 
 protocol ToolServiceFactory {
+    func toolService(for sessionId: UUID) -> ToolExecutionService
     func toolService(for session: ChatSession) -> ToolExecutionService
 }
 
 struct DefaultToolServiceFactory: ToolServiceFactory {
+    private let store = ToolSessionStore.shared
+
+    func toolService(for sessionId: UUID) -> ToolExecutionService {
+        store.toolService(for: sessionId)
+    }
+
     func toolService(for session: ChatSession) -> ToolExecutionService {
-        session.ensureToolService()
+        store.toolService(for: session.id)
     }
 }
 

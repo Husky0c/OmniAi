@@ -28,8 +28,6 @@ struct ChatDetailView: View {
     @State private var editingMessage: ChatMessage?
     @State private var editingText: String = ""
 
-    private let maxToolCallRounds: Int = 6
-
     private var effectiveChannelId: String {
         session.assistant?.channelId ?? activeAPIKeyID
     }
@@ -135,7 +133,7 @@ struct ChatDetailView: View {
                     scrollProxy.scrollTo(lastID, anchor: .bottom)
                 }
                 Task {
-                    await session.connectAssistantMCPServers(enabledConfigs: mcpServers)
+                    await connectAssistantMCPServers(enabledConfigs: mcpServers)
                 }
             }
             .onChange(of: session.messages.count) { _, _ in
@@ -148,11 +146,11 @@ struct ChatDetailView: View {
             }
         }
         .task(id: session.id) {
-            await session.connectAssistantMCPServers(enabledConfigs: mcpServers)
+            await connectAssistantMCPServers(enabledConfigs: mcpServers)
         }
         .onChange(of: mcpServers) { _, newServers in
             Task {
-                await session.connectAssistantMCPServers(enabledConfigs: newServers)
+                await connectAssistantMCPServers(enabledConfigs: newServers)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -280,6 +278,14 @@ struct ChatDetailView: View {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
+    private func connectAssistantMCPServers(enabledConfigs: [MCPServerConfig]) async {
+        await ToolSessionStore.shared.connectAssistantMCPServers(
+            for: session.id,
+            assistant: session.assistant,
+            enabledConfigs: enabledConfigs
+        )
+    }
+
     private func fetchAIResponse(for assistantMessage: ChatMessage, toolRound: Int = 0) {
         isGenerating = true
 
@@ -331,7 +337,7 @@ struct ChatDetailView: View {
             let modelId = assistantSnapshot.modelId
             
             let caps = ModelCapability.effective(for: modelId, cached: channelSnapshot.cachedCapabilities)
-            let toolService = appServices.toolServiceFactory.toolService(for: session)
+            let toolService = appServices.toolServiceFactory.toolService(for: session.id)
             let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
             
             let response = chatEngine.streamResponse(
@@ -393,9 +399,9 @@ struct ChatDetailView: View {
             let toolCalls = await response.toolCalls()
             let shouldReenter = await response.needsToolReentry()
             if shouldReenter, !toolCalls.isEmpty {
-                guard toolRound < maxToolCallRounds else {
+                guard ChatEngine.canRunToolRound(toolRound, maxRounds: ChatRuntimeDefaults.maxToolCallRounds) else {
                     await MainActor.run {
-                        assistantMessage.content += "\n[Error: \(ChatEngineError.toolCallLimitExceeded(maxRounds: maxToolCallRounds).localizedDescription)]"
+                        assistantMessage.content += "\n[Error: \(ChatEngineError.toolCallLimitExceeded(maxRounds: ChatRuntimeDefaults.maxToolCallRounds).localizedDescription)]"
                         isGenerating = false
                         session.lastModified = Date()
                     }
@@ -416,7 +422,7 @@ struct ChatDetailView: View {
                     guard let name = toolCall.function?.name, let args = toolCall.function?.arguments else {
                         continue
                     }
-                    let result = await appServices.toolServiceFactory.toolService(for: session).execute(name: name, argumentsJSON: args)
+                    let result = await appServices.toolServiceFactory.toolService(for: session.id).execute(name: name, argumentsJSON: args)
                     let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: modelId)
                     toolMessage.toolCallId = toolCall.id
                     await MainActor.run {

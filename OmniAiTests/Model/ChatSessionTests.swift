@@ -61,16 +61,6 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertEqual(session.title, "Updated")
     }
 
-    func testEnsureToolServiceCreatesService() {
-        let session = ChatSession(title: "Test")
-        let service = session.ensureToolService()
-        XCTAssertNotNil(service)
-
-        // Calling again returns the same instance
-        let service2 = session.ensureToolService()
-        XCTAssertTrue(service === service2)
-    }
-
     func testCascadeDeleteMessages() throws {
         let session = ChatSession(title: "Test")
         context.insert(session)

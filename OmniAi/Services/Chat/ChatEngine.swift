@@ -83,6 +83,10 @@ final class ChatEngine {
         providerRegistry.getProtocolConfig(for: providerId ?? "").messageAssembly
     }
 
+    static func canRunToolRound(_ currentRound: Int, maxRounds: Int) -> Bool {
+        currentRound < maxRounds
+    }
+
     func streamResponse(request: ChatEngineRequest) -> ChatEngineResponse {
         let state = ChatEngineStreamState()
         let llmStream = llmService.sendMessageStream(
