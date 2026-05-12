@@ -8,8 +8,9 @@ struct ProviderPreset: Identifiable, Hashable {
     let supportedEndpointTypes: [EndpointType]
     let defaultEndpointType: EndpointType
     let endpointURLs: [EndpointType: String]
+    let custom: Bool
 
-    var isCustom: Bool { id == "newapi" }
+    var isCustom: Bool { custom }
 
     /// Resolve the base URL for a given endpoint type.
     func baseURL(for endpointType: EndpointType) -> String {
@@ -25,37 +26,23 @@ struct ProviderPreset: Identifiable, Hashable {
 
     static let all: [ProviderPreset] = {
         let registry = ProviderRegistry.shared
-        var presets: [ProviderPreset] = []
-
-        for provider in registry.getAllProviders() {
-            let apiType = registry.getCategory(provider.id)
-            let endpointTypes: [EndpointType] = EndpointType.allCases.filter { provider.supportsEndpointType($0) }
+        return registry.getAllContracts().map { contract in
+            let endpointTypes = EndpointType.allCases.filter { contract.supportsEndpointType($0) }
             var urls: [EndpointType: String] = [:]
             for et in endpointTypes {
-                urls[et] = provider.baseURL(for: et)
+                urls[et] = contract.endpoint(et).defaultBaseURL
             }
-            presets.append(ProviderPreset(
-                id: provider.id,
-                name: provider.name,
-                apiType: apiType,
-                defaultBaseURL: provider.defaultBaseURL,
+            return ProviderPreset(
+                id: contract.id,
+                name: contract.name,
+                apiType: contract.category,
+                defaultBaseURL: contract.defaultBaseURL,
                 supportedEndpointTypes: endpointTypes,
-                defaultEndpointType: provider.resolvedDefaultEndpointType,
-                endpointURLs: urls
-            ))
+                defaultEndpointType: contract.defaultEndpointType,
+                endpointURLs: urls,
+                custom: contract.isCustom
+            )
         }
-
-        presets.append(ProviderPreset(
-            id: "newapi",
-            name: "NewAPI",
-            apiType: .openAI,
-            defaultBaseURL: "",
-            supportedEndpointTypes: EndpointType.allCases,
-            defaultEndpointType: .openai,
-            endpointURLs: [:]
-        ))
-
-        return presets
     }()
 
     static func matching(_ apiType: APIType, requestURL: String, providerId: String? = nil) -> ProviderPreset? {

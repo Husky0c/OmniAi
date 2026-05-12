@@ -24,16 +24,16 @@ final class ModelCatalogService {
         providerId: String? = nil,
         endpointType: EndpointType = .openai
     ) async throws -> [ModelInfo] {
+        let contract = providerRegistry.getContract(for: providerId)
         if endpointType == .anthropic {
-            if let pid = providerId,
-               let provider = providerRegistry.getProvider(id: pid),
-               provider.supportsEndpointType(.openai) {
-                let openAIBase = provider.baseURL(for: .openai)
+            if contract.supportsEndpointType(.openai) {
+                let openAIBase = contract.endpoint(.openai).defaultBaseURL
                 if let models = try? await fetchModelsWithOpenAI(
                     apiKey: apiKey,
                     openAIBaseURL: openAIBase,
                     apiType: apiType,
-                    providerId: providerId
+                    providerId: providerId,
+                    capabilityStrategy: contract.capability.strategy
                 ) {
                     return models
                 }
@@ -43,7 +43,8 @@ final class ModelCatalogService {
                     apiKey: apiKey,
                     openAIBaseURL: baseURL,
                     apiType: apiType,
-                    providerId: providerId
+                    providerId: providerId,
+                    capabilityStrategy: contract.capability.strategy
                 ) {
                     return models
                 }
@@ -55,7 +56,8 @@ final class ModelCatalogService {
             apiKey: apiKey,
             openAIBaseURL: baseURL ?? "",
             apiType: apiType,
-            providerId: providerId
+            providerId: providerId,
+            capabilityStrategy: contract.capability.strategy
         )
     }
 
@@ -63,9 +65,10 @@ final class ModelCatalogService {
         apiKey: String,
         openAIBaseURL: String,
         apiType: APIType,
-        providerId: String?
+        providerId: String?,
+        capabilityStrategy: CapabilityInferenceStrategy
     ) async throws -> [ModelInfo] {
-        let resolvedURL = baseURLResolver.resolve(customURL: openAIBaseURL, providerId: providerId, apiType: apiType)
+        let resolvedURL = baseURLResolver.resolve(customURL: openAIBaseURL, providerId: providerId, apiType: apiType, endpointType: .openai)
         let urlString = "\(resolvedURL)/models"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
@@ -106,11 +109,10 @@ final class ModelCatalogService {
         do {
             let listResponse = try JSONDecoder().decode(OpenAIModelListResponse.self, from: data)
             let models = listResponse.data.map { item in
-                let parsed = ModelCapability.parse(
-                    capabilities: item.capabilities,
-                    endpointTypes: item.supported_endpoint_types
+                let caps = Self.capabilities(
+                    for: item,
+                    strategy: capabilityStrategy
                 )
-                let caps = parsed.hasAny ? parsed : ModelCapability.infer(from: item.id)
                 return ModelInfo(id: item.id, capabilities: caps)
             }.sorted { $0.id < $1.id }
             logger.debug("Successfully fetched \(models.count) models")
@@ -123,6 +125,24 @@ final class ModelCatalogService {
                 code: 0,
                 userInfo: [NSLocalizedDescriptionKey: "Model list format error: \(raw.prefix(200))"]
             )
+        }
+    }
+
+    private static func capabilities(
+        for item: OpenAIModelItem,
+        strategy: CapabilityInferenceStrategy
+    ) -> ModelCapability {
+        switch strategy {
+        case .apiDeclaredThenRules:
+            let parsed = ModelCapability.parse(
+                capabilities: item.capabilities,
+                endpointTypes: item.supported_endpoint_types
+            )
+            return parsed.hasAny ? parsed : ModelCapability.infer(from: item.id)
+        case .rulesOnly:
+            return ModelCapability.infer(from: item.id)
+        case .none:
+            return ModelCapability()
         }
     }
 

@@ -10,7 +10,7 @@ struct StreamParser {
     ) async throws {
         let thinkTagParser = ThinkTagParser(tagPairs: responseConfig?.inlineThinkingTags ?? [])
         let streamLinePrefix = responseConfig?.streamLinePrefix ?? "data: "
-        let terminationSignal = responseConfig?.terminationSignal
+        let terminationSignal = responseConfig?.terminationSignal?.value
         var context = StreamParsingContext()
 
         for try await line in result {

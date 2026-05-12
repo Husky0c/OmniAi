@@ -74,7 +74,7 @@ final class ProviderConfigTests: XCTestCase {
         let request = try XCTUnwrap(providerProtocol.request)
         XCTAssertEqual(request.stream, false)
         let streamOpts = try XCTUnwrap(request.streamOptions)
-        XCTAssertEqual(streamOpts.include_usage, false)
+        XCTAssertEqual(streamOpts.value?.include_usage, false)
         let tempRange = try XCTUnwrap(request.temperatureRange)
         XCTAssertEqual(tempRange.min, 0.0)
         XCTAssertEqual(tempRange.max, 1.0)
@@ -127,7 +127,7 @@ final class ProviderConfigTests: XCTestCase {
         XCTAssertEqual(value, true)
 
         let response = try XCTUnwrap(config.response)
-        XCTAssertNil(response.terminationSignal)
+        XCTAssertEqual(response.terminationSignal?.isNull, true)
         XCTAssertEqual(response.terminationFallback, "finishReason")
     }
 
@@ -138,14 +138,14 @@ final class ProviderConfigTests: XCTestCase {
         let request = config.request
         XCTAssertEqual(request?.stream, true)
         let streamOpts = request?.streamOptions
-        XCTAssertEqual(streamOpts?.include_usage, true)
+        XCTAssertEqual(streamOpts?.value?.include_usage, true)
         let tempRange = request?.temperatureRange
         XCTAssertEqual(tempRange?.min, 0.0)
         XCTAssertEqual(tempRange?.max, 2.0)
 
         let response = config.response
         XCTAssertEqual(response?.streamLinePrefix, "data: ")
-        XCTAssertEqual(response?.terminationSignal, "[DONE]")
+        XCTAssertEqual(response?.terminationSignal?.value, "[DONE]")
         XCTAssertEqual(response?.thinkingFields, ["reasoning_content", "thinking"])
         XCTAssertEqual(response?.contentField, "content")
 
@@ -158,13 +158,15 @@ final class ProviderConfigTests: XCTestCase {
     func testMiniMaxProtocolOverride() {
         let config = ProviderRegistry.shared.getProtocolConfig(for: "minimax")
         let request = config.request
-        XCTAssertNil(request?.streamOptions, "MiniMax should have null streamOptions")
+        XCTAssertEqual(request?.streamOptions?.isNull, true, "MiniMax should have null streamOptions")
+        XCTAssertEqual(request?.stream, true, "MiniMax should inherit default stream flag")
+        XCTAssertEqual(request?.temperatureRange?.max, 2.0, "MiniMax should inherit default temperature range")
         let extraFields = request?.extraFields
         let reasoningSplit = extraFields?["reasoning_split"]
         XCTAssertEqual(reasoningSplit?.value as? Bool, true)
 
         let response = config.response
-        XCTAssertNil(response?.terminationSignal, "MiniMax should have null terminationSignal")
+        XCTAssertEqual(response?.terminationSignal?.isNull, true, "MiniMax should have null terminationSignal")
         XCTAssertEqual(response?.terminationFallback, "finishReason")
         XCTAssertEqual(response?.streamLinePrefix, "data: ", "Should fall through to default")
     }
@@ -183,13 +185,13 @@ final class ProviderConfigTests: XCTestCase {
         let defaults = ProtocolConfig(
             request: RequestConfig(
                 stream: true,
-                streamOptions: RequestConfig.StreamOptions(include_usage: true),
+                streamOptions: .value(RequestConfig.StreamOptions(include_usage: true)),
                 temperatureRange: RequestConfig.TemperatureRange(min: 0.0, max: 2.0),
                 extraFields: nil
             ),
             response: ResponseParserConfig(
                 streamLinePrefix: "data: ",
-                terminationSignal: "[DONE]",
+                terminationSignal: .value("[DONE]"),
                 terminationFallback: "finishReason",
                 thinkingFields: ["reasoning_content", "thinking"],
                 contentField: "content",
@@ -210,12 +212,12 @@ final class ProviderConfigTests: XCTestCase {
         let decoded = try JSONDecoder().decode(ProtocolConfig.self, from: encoded)
 
         XCTAssertEqual(decoded.request?.stream, true)
-        XCTAssertEqual(decoded.request?.streamOptions?.include_usage, true)
+        XCTAssertEqual(decoded.request?.streamOptions?.value?.include_usage, true)
         XCTAssertEqual(decoded.request?.temperatureRange?.min, 0.0)
         XCTAssertEqual(decoded.request?.temperatureRange?.max, 2.0)
 
         XCTAssertEqual(decoded.response?.streamLinePrefix, "data: ")
-        XCTAssertEqual(decoded.response?.terminationSignal, "[DONE]")
+        XCTAssertEqual(decoded.response?.terminationSignal?.value, "[DONE]")
         XCTAssertEqual(decoded.response?.terminationFallback, "finishReason")
         XCTAssertEqual(decoded.response?.thinkingFields, ["reasoning_content", "thinking"])
         XCTAssertEqual(decoded.response?.contentField, "content")
@@ -237,7 +239,23 @@ final class ProviderConfigTests: XCTestCase {
         """
         let data = try XCTUnwrap(json.data(using: .utf8))
         let config = try JSONDecoder().decode(ProtocolConfig.self, from: data)
-        XCTAssertNil(config.request?.streamOptions)
+        XCTAssertEqual(config.request?.streamOptions?.isNull, true)
+    }
+
+    func testNewAPIIsResolvedAsProviderContract() {
+        let contract = ProviderRegistry.shared.getContract(for: "newapi")
+
+        XCTAssertEqual(contract.id, "newapi")
+        XCTAssertTrue(contract.isCustom)
+        XCTAssertTrue(contract.supportsEndpointType(.openai))
+        XCTAssertTrue(contract.supportsEndpointType(.anthropic))
+    }
+
+    func testAllProviderContractsIncludesNewAPI() {
+        let ids = ProviderRegistry.shared.getAllContracts().map(\.id)
+
+        XCTAssertTrue(ids.contains("openai"))
+        XCTAssertTrue(ids.contains("newapi"))
     }
 
     func testTagPairEquality() {

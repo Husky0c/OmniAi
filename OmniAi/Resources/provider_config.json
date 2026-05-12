@@ -101,6 +101,17 @@
       "defaultBaseURL": "https://api.z.ai/api/paas/v4",
       "urlNormalization": { "appendVersion": false, "versionPath": "" },
       "reasoning": { "strategy": "openai-standard" }
+    },
+    {
+      "id": "newapi",
+      "name": "NewAPI",
+      "category": "openai",
+      "defaultBaseURL": "",
+      "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+      "reasoning": { "strategy": "openai-standard" },
+      "isCustom": true,
+      "supportedEndpointTypes": ["openai", "anthropic"],
+      "defaultEndpointType": "openai"
     }
   ],
   "reasoningStrategies": {
@@ -112,17 +123,28 @@
       "enableParams": ["thinking"],
       "disableAction": "thinking_disabled",
       "supportsBudget": true,
-      "budgetField": "budget_tokens"
+      "budgetField": "budget_tokens",
+      "disableOverrides": [
+        { "pattern": "claude", "action": "thinking_disabled" }
+      ]
     },
     "gemini-hybrid": {
       "enableParams": ["reasoning_effort", "thinking_budget"],
-      "disableAction": "reasoning_effort_none"
+      "disableAction": "reasoning_effort_none",
+      "disableOverrides": [
+        { "pattern": "gemini.*flash", "action": "reasoning_effort_none" },
+        { "pattern": "glm", "action": "thinking_disabled" }
+      ]
     },
     "deepseek-hybrid": {
       "enableParams": ["reasoning_effort", "thinking", "enable_thinking"],
       "disableAction": "thinking_disabled",
       "supportsBudget": true,
-      "budgetField": "budget_tokens"
+      "budgetField": "budget_tokens",
+      "disableOverrides": [
+        { "pattern": "deepseek-(r1|v4)", "action": "thinking_disabled" },
+        { "pattern": "deepseek", "action": "enable_thinking_false" }
+      ]
     }
   },
   "protocolDefaults": {

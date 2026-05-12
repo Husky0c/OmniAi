@@ -8,10 +8,33 @@ final class MockProviderRegistry: ProviderRegistryProtocol {
         messageAssembly: nil
     )
     var requestedProviderIds: [String] = []
+    var lastLoadError: ProviderConfigError?
 
     func getProtocolConfig(for providerId: String) -> ProtocolConfig {
         requestedProviderIds.append(providerId)
         return protocolConfig
+    }
+
+    func getContract(for providerId: String?) -> ProviderContract {
+        var contract = ProviderContract.openAICompatibleDefault
+        if protocolConfig.request != nil || protocolConfig.response != nil || protocolConfig.messageAssembly != nil {
+            contract = ProviderContract(
+                id: providerId ?? "mock",
+                name: "Mock",
+                category: .openAI,
+                isCustom: true,
+                defaultBaseURL: "https://api.openai.com/v1",
+                defaultEndpointType: .openai,
+                endpoints: [.openai: ProviderContract.defaultOpenAIEndpoint],
+                request: protocolConfig.request,
+                response: protocolConfig.response,
+                messageAssembly: protocolConfig.messageAssembly,
+                protocolConfig: protocolConfig,
+                reasoning: ProviderReasoningContract(strategyName: "openai-standard", strategy: .openAIStandard),
+                capability: .openAICompatibleDefault
+            )
+        }
+        return contract
     }
 
     func getProvider(id: String?) -> ProviderMetadata? {
@@ -22,11 +45,21 @@ final class MockProviderRegistry: ProviderRegistryProtocol {
         []
     }
 
+    func getAllContracts() -> [ProviderContract] {
+        [getContract(for: nil)]
+    }
+
     func getReasoningStrategy(name: String?) -> ReasoningStrategy? {
         nil
     }
 
     func getCategory(_ providerId: String) -> APIType {
         .openAI
+    }
+
+    func validateConfig() throws {
+        if let error = lastLoadError {
+            throw error
+        }
     }
 }

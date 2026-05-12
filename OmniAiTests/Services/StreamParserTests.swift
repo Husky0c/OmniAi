@@ -19,7 +19,7 @@ final class StreamParserTests: XCTestCase {
                         protocolConfig: ProtocolConfig(request: nil, response: nil, messageAssembly: nil),
                         responseConfig: ResponseParserConfig(
                             streamLinePrefix: "data: ",
-                            terminationSignal: "[DONE]",
+                            terminationSignal: .value("[DONE]"),
                             terminationFallback: nil,
                             thinkingFields: nil,
                             contentField: nil,

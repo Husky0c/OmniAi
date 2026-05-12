@@ -41,7 +41,9 @@ struct OpenAIEndpointAdapter: EndpointAdapter {
             messages: messages,
             stream: requestConfig?.stream ?? true,
             temperature: finalTemperature,
-            stream_options: requestConfig?.streamOptions.map { OpenAIChatRequest.StreamOptions(include_usage: $0.include_usage) }
+            stream_options: requestConfig?.streamOptions?.value.map {
+                OpenAIChatRequest.StreamOptions(include_usage: $0.include_usage)
+            }
         )
 
         if let tools = tools, !tools.isEmpty {

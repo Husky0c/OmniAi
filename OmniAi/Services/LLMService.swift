@@ -25,6 +25,15 @@ class LLMService: LLMServiceProtocol {
         }
     }
 
+    private func getAdapter(for contract: ProviderContract, endpointType: EndpointType) -> EndpointAdapter {
+        switch contract.endpoint(endpointType).adapterKind {
+        case .openAICompatible:
+            return OpenAIEndpointAdapter()
+        case .anthropicMessages:
+            return AnthropicEndpointAdapter()
+        }
+    }
+
     // MARK: - Base URL
 
     func getBaseURL(customURL: String?, providerId: String? = nil, apiType: APIType = .openAI) -> String {
@@ -47,13 +56,15 @@ class LLMService: LLMServiceProtocol {
 
     func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil, providerId: String? = nil, endpointType: EndpointType = .openai) -> AsyncThrowingStream<LLMStreamEvent, Error> {
 
-        let adapter = getAdapter(for: endpointType)
-        let protocolConfig = ProviderRegistry.shared.getProtocolConfig(for: providerId ?? "")
+        let contract = ProviderRegistry.shared.getContract(for: providerId)
+        let adapter = getAdapter(for: contract, endpointType: endpointType)
+        let protocolConfig = contract.protocolConfig
         let responseConfig = protocolConfig.response
 
-        let resolvedBaseURL = getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType)
+        let resolvedBaseURL = baseURLResolver.resolve(customURL: baseURL, providerId: providerId, apiType: apiType, endpointType: endpointType)
 
         let reasoningParams = ReasoningConfigBuilder.build(
+            contract: contract,
             providerId: providerId,
             apiType: apiType,
             baseURL: baseURL,
@@ -180,8 +191,9 @@ class LLMService: LLMServiceProtocol {
         providerId: String? = nil,
         endpointType: EndpointType = .openai
     ) async throws -> String {
-        let protocolConfig = ProviderRegistry.shared.getProtocolConfig(for: providerId ?? "")
-        let resolvedBaseURL = getBaseURL(customURL: baseURL, providerId: providerId, apiType: apiType)
+        let contract = ProviderRegistry.shared.getContract(for: providerId)
+        let protocolConfig = contract.protocolConfig
+        let resolvedBaseURL = baseURLResolver.resolve(customURL: baseURL, providerId: providerId, apiType: apiType, endpointType: endpointType)
         return try await LLMCompletionClient(session: session).sendMessageCompletion(
             messages: messages,
             apiKey: apiKey,

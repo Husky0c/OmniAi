@@ -53,13 +53,29 @@ enum ReasoningConfigBuilder {
         (pattern: "baichuan-m3", min: 0, max: 30000),
     ]
 
-    static func build(providerId: String? = nil, apiType: APIType, baseURL: String?, modelId: String, effort: String?) -> ReasoningParams {
+    /// Builds reasoning parameters based on provider contract and model configuration.
+    ///
+    /// - Parameters:
+    ///   - contract: The provider contract (preferred). If nil, falls back to providerId lookup.
+    ///   - providerId: Provider ID for fallback lookup (deprecated, pass contract instead).
+    ///   - apiType: API type for legacy fallback.
+    ///   - baseURL: Base URL for legacy fallback.
+    ///   - modelId: Model identifier.
+    ///   - effort: Reasoning effort level ("none", "low", "medium", "high", or "default").
+    /// - Returns: Reasoning parameters for the request.
+    static func build(
+        contract: ProviderContract? = nil,
+        providerId: String? = nil,
+        apiType: APIType,
+        baseURL: String?,
+        modelId: String,
+        effort: String?
+    ) -> ReasoningParams {
         guard let effort, effort != "default" else { return ReasoningParams() }
         let lower = modelId.lowercased()
 
-        if let pid = providerId,
-           let provider = ProviderRegistry.shared.getProvider(id: pid),
-           let strategy = ProviderRegistry.shared.getReasoningStrategy(name: provider.reasoning.strategy) {
+        // Primary path: use provided contract
+        if let strategy = contract?.reasoning.strategy {
             let budget = computeThinkingBudget(modelId: lower, effort: effort)
             if effort == "none" {
                 return buildDisableFromStrategy(strategy: strategy, modelId: lower)
@@ -67,6 +83,19 @@ enum ReasoningConfigBuilder {
             return buildEnableFromStrategy(strategy: strategy, effort: effort, budget: budget)
         }
 
+        // Deprecated fallback: lookup contract by providerId
+        if let pid = providerId {
+            let resolvedContract = ProviderRegistry.shared.getContract(for: pid)
+            if !resolvedContract.isCustom, let strategy = resolvedContract.reasoning.strategy {
+                let budget = computeThinkingBudget(modelId: lower, effort: effort)
+                if effort == "none" {
+                    return buildDisableFromStrategy(strategy: strategy, modelId: lower)
+                }
+                return buildEnableFromStrategy(strategy: strategy, effort: effort, budget: budget)
+            }
+        }
+
+        // Legacy fallback for unknown/custom providers
         return buildLegacy(apiType: apiType, baseURL: baseURL, modelId: lower, effort: effort)
     }
 
@@ -98,23 +127,21 @@ enum ReasoningConfigBuilder {
     }
 
     private static func buildDisableFromStrategy(strategy: ReasoningStrategy, modelId: String) -> ReasoningParams {
-        if modelId.contains("claude") {
-            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
-        }
-        if modelId.contains("gemini") && modelId.contains("flash") {
-            return ReasoningParams(reasoning_effort: "none")
-        }
-        if modelId.contains("glm") {
-            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
-        }
-        if modelId.range(of: "deepseek-(r1|v4)", options: .regularExpression) != nil {
-            return ReasoningParams(thinking: ThinkingConfig(type: "disabled"))
-        }
-        if modelId.contains("deepseek") {
-            return ReasoningParams(enable_thinking: false)
+        // Check disableOverrides first (model-specific rules)
+        if let overrides = strategy.disableOverrides {
+            for override in overrides {
+                if modelId.range(of: override.pattern, options: .regularExpression) != nil {
+                    return buildParamsForAction(override.action)
+                }
+            }
         }
 
-        switch strategy.disableAction {
+        // Fall back to default disableAction
+        return buildParamsForAction(strategy.disableAction ?? "reasoning_effort_none")
+    }
+
+    private static func buildParamsForAction(_ action: String) -> ReasoningParams {
+        switch action {
         case "reasoning_effort_none":
             return ReasoningParams(reasoning_effort: "none")
         case "thinking_disabled":
