@@ -36,7 +36,7 @@ class APIKeys{
     @Attribute(.unique) var id: UUID = UUID()
     var name: String = ""
     var company: String? = ""
-    var key: String? = ""
+    var keychainAccount: String = ""
     var requestURL: String? = ""
     var invisible: Bool = true //system default is invisible
     var helpInfo: String? = ""
@@ -92,7 +92,7 @@ class APIKeys{
         id: UUID = UUID(),
         name: String,
         company: String? = nil,
-        key: String? = nil,
+        keychainAccount: String? = nil,
         requestURL: String? = nil,
         invisible: Bool = false,
         helpInfo: String? = nil,
@@ -105,7 +105,7 @@ class APIKeys{
         self.id = id
         self.name = name
         self.company = company
-        self.key = key
+        self.keychainAccount = keychainAccount ?? APIKeys.defaultKeychainAccount(for: id)
         self.requestURL = requestURL
         self.invisible = invisible
         self.helpInfo = helpInfo
@@ -114,5 +114,13 @@ class APIKeys{
         self.apiTypeRawValue = apiType.rawValue
         self.apiSourceRawValue = apiSource.rawValue
         self.providerID = providerID
+    }
+
+    static func defaultKeychainAccount(for id: UUID) -> String {
+        "api-key-\(id.uuidString)"
+    }
+
+    var resolvedKeychainAccount: String {
+        keychainAccount.isEmpty ? APIKeys.defaultKeychainAccount(for: id) : keychainAccount
     }
 }

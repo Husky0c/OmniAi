@@ -3,6 +3,7 @@ import SwiftData
 
 struct DefaultModelSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appServices) private var appServices
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
     @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
@@ -102,7 +103,7 @@ struct DefaultModelSettingsView: View {
             if let channel = activeChannel {
                 ModelSelectionSheetFromChannel(
                     channelName: channel.name,
-                    apiKey: channel.key ?? "",
+                    apiKey: appServices.keyStore.apiKeyString(for: channel) ?? "",
                     baseURL: channel.requestURL,
                     apiType: channel.apiType,
                     providerId: channel.providerID,
@@ -120,7 +121,7 @@ struct DefaultModelSettingsView: View {
             if let channel = renameChannel {
                 ModelSelectionSheetFromChannel(
                     channelName: channel.name,
-                    apiKey: channel.key ?? "",
+                    apiKey: appServices.keyStore.apiKeyString(for: channel) ?? "",
                     baseURL: channel.requestURL,
                     apiType: channel.apiType,
                     providerId: channel.providerID,

@@ -20,15 +20,19 @@ final class APIKeysTests: XCTestCase {
         let key = APIKeys(
             name: "OpenAI Key",
             company: "OpenAI",
-            key: "sk-test123",
             requestURL: "https://api.openai.com/v1"
         )
         context.insert(key)
 
         XCTAssertEqual(key.name, "OpenAI Key")
-        XCTAssertEqual(key.key, "sk-test123")
+        XCTAssertEqual(key.keychainAccount, APIKeys.defaultKeychainAccount(for: key.id))
         XCTAssertEqual(key.apiType, .openAI)
         XCTAssertEqual(key.apiSource, .custom)
+    }
+
+    func testCustomKeychainAccount() {
+        let key = APIKeys(name: "OpenAI Key", keychainAccount: "custom-account")
+        XCTAssertEqual(key.keychainAccount, "custom-account")
     }
 
     func testAPITypeMapping() {

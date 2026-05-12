@@ -82,7 +82,7 @@ OmniAi/
 │   │   ├── Assistant.swift            # 助手模型（提示词/温度/上下文/推理强度）
 │   │   ├── ChatSession.swift          # 会话模型（会话级 provider 覆写）
 │   │   ├── ChatMessage.swift          # 消息模型（首字延迟/Token 统计/思考内容/工具调用）
-│   │   ├── APIKeys.swift              # API 凭证模型（加密存储/能力缓存）
+│   │   ├── APIKeys.swift              # API 渠道模型（Keychain 引用/能力缓存）
 │   │   ├── ProviderPreset.swift       # 提供商注册表（OpenAI / DeepSeek / Anthropic / Gemini / etc.）
 │   │   ├── MCPServerConfig.swift      # MCP 服务器配置
 │   │   ├── MessageAttachment.swift    # 消息附件模型

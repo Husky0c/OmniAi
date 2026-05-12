@@ -4,6 +4,7 @@ import SwiftData
 struct AddAPIKeyView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appServices) private var appServices
 
     var editingKey: APIKeys? = nil
 
@@ -20,6 +21,8 @@ struct AddAPIKeyView: View {
     @State private var isFetchingModels = false
     @State private var showCapEdit = false
     @State private var capEditModelId = ""
+    @State private var errorMessage: String? = nil
+    @State private var showError = false
 
     /// Track whether we just switched providers (to avoid re-applying defaults incorrectly)
     @State private var didJustSwitchProvider = false
@@ -166,7 +169,7 @@ struct AddAPIKeyView: View {
             .onAppear {
                 guard let existing = editingKey else { return }
                 name = existing.name
-                key = existing.key ?? ""
+                key = appServices.keyStore.apiKeyString(for: existing) ?? ""
                 requestURL = existing.requestURL ?? ""
                 apiType = existing.apiType
                 autoCapabilityProbe = existing.autoCapabilityProbe
@@ -202,6 +205,11 @@ struct AddAPIKeyView: View {
                 }
 
                 fetchModels()
+            }
+            .alert("保存失败", isPresented: $showError) {
+                Button("确定", role: .cancel) { }
+            } message: {
+                Text(errorMessage ?? "未知错误")
             }
             .sheet(isPresented: $showCapEdit) {
                 CapabilityEditSheet(
@@ -242,33 +250,38 @@ struct AddAPIKeyView: View {
     }
 
     private func saveAPIKey() {
-        if let existing = editingKey {
-            existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            existing.company = selectedPreset.name
-            existing.key = key.isEmpty ? nil : key
-            existing.requestURL = requestURL.isEmpty ? nil : requestURL
-            existing.apiType = apiType
-            existing.providerID = selectedProviderID
-            existing.autoCapabilityProbe = autoCapabilityProbe
-            existing.selectedModelIDs = selectedModelIDs
-            existing.endpointType = endpointType
-            existing.timestamp = Date()
-        } else {
-            let newKey = APIKeys(
-                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                company: selectedPreset.name,
-                key: key.isEmpty ? nil : key,
-                requestURL: requestURL.isEmpty ? nil : requestURL,
-                invisible: false,
-                autoCapabilityProbe: autoCapabilityProbe,
-                apiType: apiType,
-                providerID: selectedProviderID
-            )
-            newKey.selectedModelIDs = selectedModelIDs
-            newKey.endpointType = endpointType
-            modelContext.insert(newKey)
+        do {
+            if let existing = editingKey {
+                try appServices.keyStore.saveAPIKey(key, for: existing)
+                existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                existing.company = selectedPreset.name
+                existing.requestURL = requestURL.isEmpty ? nil : requestURL
+                existing.apiType = apiType
+                existing.providerID = selectedProviderID
+                existing.autoCapabilityProbe = autoCapabilityProbe
+                existing.selectedModelIDs = selectedModelIDs
+                existing.endpointType = endpointType
+                existing.timestamp = Date()
+            } else {
+                let newKey = APIKeys(
+                    name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                    company: selectedPreset.name,
+                    requestURL: requestURL.isEmpty ? nil : requestURL,
+                    invisible: false,
+                    autoCapabilityProbe: autoCapabilityProbe,
+                    apiType: apiType,
+                    providerID: selectedProviderID
+                )
+                try appServices.keyStore.saveAPIKey(key, for: newKey)
+                newKey.selectedModelIDs = selectedModelIDs
+                newKey.endpointType = endpointType
+                modelContext.insert(newKey)
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
         }
-        dismiss()
     }
 
     /// Strip known endpoint-specific suffixes from a base URL

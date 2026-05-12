@@ -3,12 +3,15 @@ import SwiftData
 
 struct LLMApiSettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appServices) private var appServices
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     
     @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
     
     @State private var showingAddKeySheet = false
     @State private var editingKey: APIKeys? = nil
+    @State private var deleteErrorMessage: String? = nil
+    @State private var showDeleteError = false
     
     var body: some View {
         Form {
@@ -49,15 +52,26 @@ struct LLMApiSettingsView: View {
         .sheet(item: $editingKey) { key in
             AddAPIKeyView(editingKey: key)
         }
+        .alert("删除失败", isPresented: $showDeleteError) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            Text(deleteErrorMessage ?? "未知错误")
+        }
     }
     
     private func deleteAPIKeys(offsets: IndexSet) {
-        for index in offsets {
-            let keyToDelete = apiKeys[index]
-            if activeAPIKeyID == keyToDelete.id.uuidString {
-                activeAPIKeyID = "" // 清除已删除的激活状态
+        let keysToDelete = offsets.map { apiKeys[$0] }
+        for keyToDelete in keysToDelete {
+            do {
+                try appServices.keyStore.deleteAPIKey(for: keyToDelete)
+                if activeAPIKeyID == keyToDelete.id.uuidString {
+                    activeAPIKeyID = "" // 清除已删除的激活状态
+                }
+                modelContext.delete(keyToDelete)
+            } catch {
+                deleteErrorMessage = "无法删除 \(keyToDelete.name) 的 Keychain 凭证：\(error.localizedDescription)"
+                showDeleteError = true
             }
-            modelContext.delete(keyToDelete)
         }
     }
 }

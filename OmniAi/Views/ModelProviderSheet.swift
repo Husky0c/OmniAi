@@ -4,6 +4,7 @@ import SwiftData
 struct ModelProviderSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appServices) private var appServices
     let apiKeys: [APIKeys]
     @Binding var activeAPIKeyID: String
     @Binding var defaultModelId: String
@@ -131,7 +132,7 @@ struct ModelProviderSheet: View {
     }
 
     private func fetchModels(for channel: APIKeys) {
-        guard let keyString = channel.key, !keyString.isEmpty else {
+        guard let keyString = appServices.keyStore.apiKeyString(for: channel), !keyString.isEmpty else {
             availableModels = []
             return
         }

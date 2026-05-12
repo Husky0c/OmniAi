@@ -17,16 +17,6 @@ struct DefaultToolServiceFactory: ToolServiceFactory {
     }
 }
 
-protocol KeyStoreProtocol {
-    func apiKeyString(for channel: APIKeys) -> String?
-}
-
-struct SwiftDataKeyStore: KeyStoreProtocol {
-    func apiKeyString(for channel: APIKeys) -> String? {
-        channel.key
-    }
-}
-
 struct AppServices {
     var llmService: LLMServiceProtocol
     var providerRegistry: ProviderRegistryProtocol
@@ -37,7 +27,7 @@ struct AppServices {
         llmService: LLMService.shared,
         providerRegistry: ProviderRegistry.shared,
         toolServiceFactory: DefaultToolServiceFactory(),
-        keyStore: SwiftDataKeyStore()
+        keyStore: KeychainKeyStore()
     )
 
     func chatEngine() -> ChatEngine {
