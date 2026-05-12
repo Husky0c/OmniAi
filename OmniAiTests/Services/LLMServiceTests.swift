@@ -131,8 +131,9 @@ final class LLMServiceTests: XCTestCase {
             for try await _ in stream { }
             XCTFail("Expected error")
         } catch {
-            let nsError = error as NSError
-            XCTAssertEqual(nsError.code, 401)
+            guard case LLMServiceError.authenticationFailed = error else {
+                return XCTFail("Expected authenticationFailed, got \(error)")
+            }
         }
     }
 
