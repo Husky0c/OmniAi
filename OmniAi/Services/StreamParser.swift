@@ -9,7 +9,7 @@ struct StreamParser {
         requestContext: LLMRequestContext,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
     ) async throws {
-        let thinkTagParser = ThinkTagParser(tagPairs: responseConfig?.inlineThinkingTags ?? [])
+        var thinkTagParser = ThinkTagParser(tagPairs: responseConfig?.inlineThinkingTags ?? [])
         let streamLinePrefix = responseConfig?.streamLinePrefix ?? "data: "
         let terminationSignal = responseConfig?.terminationSignal?.value
         var context = StreamParsingContext()

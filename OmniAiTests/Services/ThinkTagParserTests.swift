@@ -16,7 +16,7 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testNormalTextPassesThrough() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let events = parser.feed("Hello, world!")
         XCTAssertEqual(events.count, 1)
         if case .chunk(let text) = events[0] {
@@ -27,7 +27,7 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testThinkingTagParsing() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let input = "\(thinkOpen)thinking content here\(thinkClose) visible text"
         let events = parser.feed(input)
         XCTAssertEqual(events.count, 2)
@@ -44,7 +44,7 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testThoughtTagParsing() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let input = "\(thoughtOpen)hidden thought\(thoughtClose)visible"
         let events = parser.feed(input)
         XCTAssertEqual(events.count, 2)
@@ -61,13 +61,13 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testEmptyInput() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let events = parser.feed("")
         XCTAssertTrue(events.isEmpty)
     }
 
     func testChunkAcrossBoundaries() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let events1 = parser.feed("\(thinkOpen)partial ")
 
         XCTAssertEqual(events1.count, 1)
@@ -86,7 +86,7 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testMultipleThinkingBlocks() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let input = "before \(thinkOpen)A\(thinkClose) mid \(thinkOpen)B\(thinkClose) after"
         let events = parser.feed(input)
 
@@ -97,7 +97,7 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testWhitespaceOnlyChunkSkippedAfterThinking() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let input = "\(thinkOpen)hidden\(thinkClose) \n  "
         let events = parser.feed(input)
         XCTAssertEqual(events.count, 1)
@@ -107,7 +107,7 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testComplexInterleaved() {
-        let parser = ThinkTagParser(tagPairs: defaultTagPairs)
+        var parser = ThinkTagParser(tagPairs: defaultTagPairs)
         let input = "\(thoughtOpen)a\(thoughtClose)\(thoughtOpen)b\(thoughtClose)"
         let events = parser.feed(input)
         let thoughts = events.filter { if case .thinking = $0 { true } else { false } }
@@ -116,7 +116,7 @@ final class ThinkTagParserTests: XCTestCase {
 
     func testCustomSingleTagPair() {
         let customTags = [ResponseParserConfig.TagPair(open: "<custom>", close: "</custom>")]
-        let parser = ThinkTagParser(tagPairs: customTags)
+        var parser = ThinkTagParser(tagPairs: customTags)
         let input = "<custom>secret</custom> visible"
         let events = parser.feed(input)
         XCTAssertEqual(events.count, 2)
@@ -126,7 +126,7 @@ final class ThinkTagParserTests: XCTestCase {
     }
 
     func testEmptyTagPairsAllContentIsChunk() {
-        let parser = ThinkTagParser(tagPairs: [])
+        var parser = ThinkTagParser(tagPairs: [])
         let input = "<think>should not be parsed</think> just text"
         let events = parser.feed(input)
         XCTAssertEqual(events.count, 1)

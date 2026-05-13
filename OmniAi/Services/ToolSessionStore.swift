@@ -37,6 +37,13 @@ final class ToolSessionStore: ToolServiceFactory {
         lock.withLock { services[sessionId] != nil }
     }
 
+    func resetAll() async {
+        let ids = lock.withLock { Array(services.keys) }
+        for id in ids {
+            await releaseService(for: id)
+        }
+    }
+
     func connectAssistantMCPServers(
         for sessionId: UUID,
         assistant: Assistant?,

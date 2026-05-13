@@ -3,6 +3,10 @@ import XCTest
 
 @MainActor
 final class ToolSessionStoreTests: XCTestCase {
+    override func tearDown() async throws {
+        await ToolSessionStore.shared.resetAll()
+        try await super.tearDown()
+    }
     func testReturnsSameServiceForSameSessionId() async {
         let store = ToolSessionStore.shared
         let sessionId = UUID()

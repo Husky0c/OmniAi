@@ -3,6 +3,75 @@ import XCTest
 
 final class ProviderConfigTests: XCTestCase {
 
+    private static let testConfigJSON = """
+    {
+        "providers": [
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "category": "openai",
+                "defaultBaseURL": "https://api.openai.com/v1",
+                "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+                "reasoning": { "strategy": "openai-standard" }
+            },
+            {
+                "id": "minimax",
+                "name": "MiniMax",
+                "category": "openai",
+                "defaultBaseURL": "https://api.minimaxi.com/v1",
+                "urlNormalization": { "appendVersion": true, "versionPath": "/v1" },
+                "reasoning": { "strategy": "openai-standard" },
+                "protocol": {
+                    "request": {
+                        "streamOptions": null,
+                        "extraFields": { "reasoning_split": true }
+                    },
+                    "response": {
+                        "terminationSignal": null,
+                        "terminationFallback": "finishReason"
+                    }
+                }
+            }
+        ],
+        "reasoningStrategies": {
+            "openai-standard": {
+                "enableParams": ["reasoning_effort"],
+                "disableAction": "reasoning_effort_none"
+            }
+        },
+        "protocolDefaults": {
+            "request": {
+                "stream": true,
+                "streamOptions": { "include_usage": true },
+                "temperatureRange": { "min": 0.0, "max": 2.0 }
+            },
+            "response": {
+                "streamLinePrefix": "data: ",
+                "terminationSignal": "[DONE]",
+                "terminationFallback": "finishReason",
+                "thinkingFields": ["reasoning_content", "thinking"],
+                "contentField": "content",
+                "toolCallsField": "tool_calls",
+                "inlineThinkingTags": [
+                    { "open": "<think>", "close": "</think>" },
+                    { "open": "<thought>", "close": "</thought>" }
+                ]
+            },
+            "messageAssembly": {
+                "preserveAssistantContentWhenToolCalls": true,
+                "includeReasoningContent": true,
+                "reasoningFieldName": "reasoning_content"
+            }
+        }
+    }
+    """
+
+    override class func setUp() {
+        super.setUp()
+        let data = testConfigJSON.data(using: .utf8)!
+        try! ProviderRegistry.shared.reload(from: data)
+    }
+
     // MARK: - JSON Decoding
 
     func testDecodeFullProviderConfigFile() throws {

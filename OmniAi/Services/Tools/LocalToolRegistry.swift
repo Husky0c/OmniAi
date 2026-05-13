@@ -38,20 +38,27 @@ final class LocalToolRegistry {
     }
 
     func registerNativeTools() {
-        register(name: "get_current_time", handler: { _ in
+        lock.withLock {
+            _registerNativeTools()
+        }
+    }
+
+    private func _registerNativeTools() {
+        handlers["get_current_time"] = { _ in
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
             return """
             {"time": "\(formatter.string(from: Date()))", "timezone": "\(TimeZone.current.identifier)"}
             """
-        }, definition: ToolDefinition(function: ToolFunction(
+        }
+        definitions["get_current_time"] = ToolDefinition(function: ToolFunction(
             name: "get_current_time",
             description: "Get the current date and time",
             parameters: JSONSchema(type: "object", properties: [:], additionalProperties: false),
             strict: true
-        )))
+        ))
 
-        register(name: "calculator", handler: { argumentsJSON in
+        handlers["calculator"] = { argumentsJSON in
             guard let data = argumentsJSON.data(using: .utf8),
                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let expression = dict["expression"] as? String else {
@@ -69,7 +76,8 @@ final class LocalToolRegistry {
                 return #"{"expression": "\#(expression)", "result": \#(result)}"#
             }
             return #"{"error": "Could not evaluate expression"}"#
-        }, definition: ToolDefinition(function: ToolFunction(
+        }
+        definitions["calculator"] = ToolDefinition(function: ToolFunction(
             name: "calculator",
             description: "Evaluate a mathematical expression. Supports + - * / and parentheses.",
             parameters: JSONSchema(
@@ -79,6 +87,6 @@ final class LocalToolRegistry {
                 additionalProperties: false
             ),
             strict: true
-        )))
+        ))
     }
 }

@@ -5,14 +5,17 @@ import SwiftData
 final class ChatMessageTests: XCTestCase {
 
     var context: ModelContext!
+    private var container: ModelContainer!
 
     override func setUp() {
         super.setUp()
-        context = ModelContext(TestModelContainer.shared)
+        container = TestModelContainer.newInMemoryContainer()
+        context = ModelContext(container)
     }
 
     override func tearDown() {
         context = nil
+        container = nil
         super.tearDown()
     }
 

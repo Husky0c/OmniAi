@@ -1,6 +1,7 @@
 import XCTest
 @testable import OmniAi
 
+@MainActor
 final class LocalToolRegistryTests: XCTestCase {
 
     func testRegisterAndCanHandle() {

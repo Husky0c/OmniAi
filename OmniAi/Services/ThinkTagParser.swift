@@ -1,6 +1,6 @@
 import Foundation
 
-final class ThinkTagParser {
+struct ThinkTagParser {
     private enum State {
         case normal
         case insideThinking
@@ -19,7 +19,7 @@ final class ThinkTagParser {
         self.tagPairs = tagPairs.map { TagPair(open: $0.open, close: $0.close) }
     }
 
-    func feed(_ raw: String) -> [LLMStreamEvent] {
+    mutating func feed(_ raw: String) -> [LLMStreamEvent] {
         var remaining = raw
         var events: [LLMStreamEvent] = []
 
@@ -35,7 +35,7 @@ final class ThinkTagParser {
         return events
     }
 
-    private func handleInsideThinking(_ remaining: inout String, events: inout [LLMStreamEvent]) {
+    private mutating func handleInsideThinking(_ remaining: inout String, events: inout [LLMStreamEvent]) {
         for pair in tagPairs {
             if let endRange = remaining.range(of: pair.close) {
                 let thinking = String(remaining[remaining.startIndex..<endRange.lowerBound])
@@ -59,7 +59,7 @@ final class ThinkTagParser {
         remaining = ""
     }
 
-    private func handleNormal(_ remaining: inout String, events: inout [LLMStreamEvent]) {
+    private mutating func handleNormal(_ remaining: inout String, events: inout [LLMStreamEvent]) {
         for pair in tagPairs {
             if let startRange = remaining.range(of: pair.open) {
                 let before = String(remaining[remaining.startIndex..<startRange.lowerBound])

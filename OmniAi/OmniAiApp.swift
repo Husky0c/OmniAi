@@ -14,6 +14,12 @@ struct OmniAiApp: App {
     let initializationError: Error?
 
     init() {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            self.container = nil
+            self.initializationError = nil
+            return
+        }
+
         let schema = Schema([
             ChatSession.self,
             ChatMessage.self,
@@ -24,12 +30,6 @@ struct OmniAiApp: App {
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
-        // 临时注入模拟错误
-//        self.container = nil
-//        self.initializationError = NSError(domain: "Simulated", code: -1,
-//            userInfo: [NSLocalizedDescriptionKey: "模拟数据损坏: default.store 校验失败"])
-//        return
-        
         do {
             self.container = try ModelContainer(for: schema, configurations: [modelConfiguration])
             self.initializationError = nil

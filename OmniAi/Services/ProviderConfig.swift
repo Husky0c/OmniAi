@@ -365,27 +365,7 @@ class ProviderRegistry {
                 throw ProviderConfigError.fileNotFound
             }
             let data = try Data(contentsOf: url)
-            let decoded: ProviderConfigFile
-            do {
-                decoded = try JSONDecoder().decode(ProviderConfigFile.self, from: data)
-            } catch {
-                throw ProviderConfigError.invalidJSON(error)
-            }
-
-            let ids = decoded.providers.map(\.id)
-            if let duplicate = Dictionary(grouping: ids, by: { $0 }).first(where: { $0.value.count > 1 })?.key {
-                throw ProviderConfigError.duplicateProviderId(duplicate)
-            }
-
-            providers = decoded.providers
-            providerMap = Dictionary(uniqueKeysWithValues: decoded.providers.map { ($0.id, $0) })
-            strategies = decoded.reasoningStrategies
-            protocolDefaults = (decoded.protocolDefaults ?? .openAICompatibleDefaults).merged(over: .openAICompatibleDefaults)
-            contracts = try makeContracts(from: decoded.providers)
-            if contracts["newapi"] == nil {
-                contracts["newapi"] = makeNewAPIContract()
-            }
-            lastLoadError = nil
+            try applyConfig(from: data)
         } catch let error as ProviderConfigError {
             lastLoadError = error
             logger.error("\(error.localizedDescription)")
@@ -395,6 +375,47 @@ class ProviderRegistry {
             lastLoadError = wrapped
             logger.error("\(wrapped.localizedDescription)")
             installFallbackContracts()
+        }
+    }
+
+    private func applyConfig(from data: Data) throws {
+        let decoded: ProviderConfigFile
+        do {
+            decoded = try JSONDecoder().decode(ProviderConfigFile.self, from: data)
+        } catch {
+            throw ProviderConfigError.invalidJSON(error)
+        }
+
+        let ids = decoded.providers.map(\.id)
+        if let duplicate = Dictionary(grouping: ids, by: { $0 }).first(where: { $0.value.count > 1 })?.key {
+            throw ProviderConfigError.duplicateProviderId(duplicate)
+        }
+
+        providers = decoded.providers
+        providerMap = Dictionary(uniqueKeysWithValues: decoded.providers.map { ($0.id, $0) })
+        strategies = decoded.reasoningStrategies
+        protocolDefaults = (decoded.protocolDefaults ?? .openAICompatibleDefaults).merged(over: .openAICompatibleDefaults)
+        contracts = try makeContracts(from: decoded.providers)
+        if contracts["newapi"] == nil {
+            contracts["newapi"] = makeNewAPIContract()
+        }
+    }
+
+    /// Reload configuration from raw JSON data. Replaces all existing provider config.
+    /// Used for testing to avoid dependency on Bundle.main.
+    func reload(from data: Data) throws {
+        do {
+            try applyConfig(from: data)
+            lastLoadError = nil
+        } catch let error as ProviderConfigError {
+            lastLoadError = error
+            installFallbackContracts()
+            throw error
+        } catch {
+            let wrapped = ProviderConfigError.invalidJSON(error)
+            lastLoadError = wrapped
+            installFallbackContracts()
+            throw wrapped
         }
     }
 
