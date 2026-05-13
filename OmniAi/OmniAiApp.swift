@@ -10,7 +10,10 @@ import SwiftData
 
 @main
 struct OmniAiApp: App {
-    var sharedModelContainer: ModelContainer = {
+    let container: ModelContainer?
+    let initializationError: Error?
+
+    init() {
         let schema = Schema([
             ChatSession.self,
             ChatMessage.self,
@@ -21,17 +24,29 @@ struct OmniAiApp: App {
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
+        // 临时注入模拟错误
+//        self.container = nil
+//        self.initializationError = NSError(domain: "Simulated", code: -1,
+//            userInfo: [NSLocalizedDescriptionKey: "模拟数据损坏: default.store 校验失败"])
+//        return
+        
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            self.container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            self.initializationError = nil
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            self.container = nil
+            self.initializationError = error
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            if let container = container {
+                HomeView()
+                    .modelContainer(container)
+            } else {
+                DataLoadErrorView(error: initializationError)
+            }
         }
-        .modelContainer(sharedModelContainer)
     }
 }
