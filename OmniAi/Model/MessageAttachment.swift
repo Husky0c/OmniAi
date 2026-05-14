@@ -7,6 +7,7 @@ final class MessageAttachment {
     var typeRawValue: String
     var name: String
     @Attribute(.externalStorage) var data: Data?
+    @Attribute(.externalStorage) var thumbnailData: Data?
 
     @Relationship(inverse: \ChatMessage.attachments)
     var message: ChatMessage?
@@ -16,11 +17,12 @@ final class MessageAttachment {
         set { typeRawValue = newValue.rawValue }
     }
 
-    init(type: AttachmentType, name: String, data: Data? = nil, message: ChatMessage? = nil) {
+    init(type: AttachmentType, name: String, data: Data? = nil, thumbnailData: Data? = nil, message: ChatMessage? = nil) {
         self.id = UUID()
         self.typeRawValue = type.rawValue
         self.name = name
         self.data = data
+        self.thumbnailData = thumbnailData
         self.message = message
     }
 }

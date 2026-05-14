@@ -13,6 +13,7 @@ struct MessageBubbleView: View {
     var onEdit: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
     var onRegenerate: (() -> Void)? = nil
+    var onTapImage: ((Data) -> Void)? = nil
     @State private var showStats = false
     @State private var showActionMenu = false
 #if canImport(UIKit)
@@ -61,7 +62,7 @@ struct MessageBubbleView: View {
                                     if !imageAttachments.isEmpty {
                                         ForEach(imageAttachments) { att in
 #if canImport(UIKit)
-                                            if let data = att.data, let uiImage = UIImage(data: data) {
+                                            if let displayData = att.thumbnailData ?? att.data, let uiImage = UIImage(data: displayData) {
                                                 Image(uiImage: uiImage)
                                                     .resizable()
                                                     .scaledToFit()
@@ -69,6 +70,9 @@ struct MessageBubbleView: View {
                                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     .padding(.horizontal, 12)
                                                     .padding(.top, 8)
+                                                    .onTapGesture {
+                                                        if let fullData = att.data { onTapImage?(fullData) }
+                                                    }
                                             }
 #else
                                             Label(att.name, systemImage: "photo")

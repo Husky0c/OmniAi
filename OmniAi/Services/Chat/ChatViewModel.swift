@@ -39,7 +39,7 @@ final class ChatViewModel {
         let userMessage = ChatMessage(content: text, role: .user, session: session, modelId: effectiveModelId)
         if !attachments.isEmpty {
             userMessage.attachments = attachments.map { input in
-                MessageAttachment(type: input.type, name: input.name, data: input.data)
+                MessageAttachment(type: input.type, name: input.name, data: input.data, thumbnailData: input.thumbnailData)
             }
         }
         session.messages.append(userMessage)

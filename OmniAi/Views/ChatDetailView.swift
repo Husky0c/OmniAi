@@ -61,6 +61,7 @@ private struct ChatDetailContentView: View {
     let onOpenSettings: (() -> Void)?
 
     @State private var viewModel: ChatViewModel
+    @State private var previewImageData: Data?
 
     init(
         session: ChatSession,
@@ -137,6 +138,9 @@ private struct ChatDetailContentView: View {
                     apiKeys: apiKeys,
                     titleConfig: titleConfig
                 )
+            },
+            onTapImage: { data in
+                previewImageData = data
             }
         )
     }
@@ -292,5 +296,16 @@ private struct ChatDetailContentView: View {
                 }
             }
         }
+        .sheet(item: Binding(
+            get: { previewImageData.map { ImagePreviewData(data: $0) } },
+            set: { previewImageData = $0?.data }
+        )) { preview in
+            ImageViewer(imageData: preview.data)
+        }
     }
+}
+
+private struct ImagePreviewData: Identifiable {
+    let id = UUID()
+    let data: Data
 }

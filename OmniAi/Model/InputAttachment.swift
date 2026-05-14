@@ -7,12 +7,14 @@ struct InputAttachment: Identifiable {
     let name: String
     let url: URL?
     let data: Data?
+    let thumbnailData: Data?
 
-    init(type: AttachmentType, name: String, url: URL? = nil, data: Data? = nil) {
+    init(type: AttachmentType, name: String, url: URL? = nil, data: Data? = nil, thumbnailData: Data? = nil) {
         self.type = type
         self.name = name
         self.url = url
         self.data = data
+        self.thumbnailData = thumbnailData
     }
 
     var utType: UTType? {

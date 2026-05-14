@@ -25,6 +25,7 @@ struct ChatInputBar: View{
     @State private var showCamera = false
     @State private var capturedImageData: Data?
     @State private var showFileImporter = false
+    @State private var previewImageData: Data?
     
 #if canImport(UIKit)
     @State private var isFocused: Bool = false
@@ -137,14 +138,23 @@ struct ChatInputBar: View{
         }
 #endif
         .onChange(of: capturedImageData) { _, newData in
-            if let data = newData {
+            if let data = newData,
+               let compressed = ImageProcessor.compressImage(data) {
+                let thumb = ImageProcessor.generateThumbnail(data)
                 attachments.append(InputAttachment(
                     type: .image,
                     name: "IMG_\(Int(Date().timeIntervalSince1970)).jpg",
-                    data: data
+                    data: compressed,
+                    thumbnailData: thumb
                 ))
                 capturedImageData = nil
             }
+        }
+        .sheet(item: Binding(
+            get: { previewImageData.map { ImagePreviewData(data: $0) } },
+            set: { previewImageData = $0?.data }
+        )) { preview in
+            ImageViewer(imageData: preview.data)
         }
     }
     
@@ -176,7 +186,7 @@ struct ChatInputBar: View{
     
     @ViewBuilder
     private func attachmentThumbnail(_ attachment: InputAttachment) -> some View {
-        if attachment.type == .image, let data = attachment.data {
+        if attachment.type == .image, let data = attachment.thumbnailData ?? attachment.data {
 #if canImport(UIKit)
             if let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage)
@@ -184,6 +194,9 @@ struct ChatInputBar: View{
                     .scaledToFill()
                     .frame(width: 50, height: 50)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .onTapGesture {
+                        if let fullData = attachment.data { previewImageData = fullData }
+                    }
             } else {
                 fallbackThumbnail(attachment)
             }
@@ -222,11 +235,14 @@ struct ChatInputBar: View{
     private func handleSelectedPhotos() async {
         for item in selectedPhotos {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            let compressed = ImageProcessor.compressImage(data)
+            let thumb = ImageProcessor.generateThumbnail(data)
             let name = item.itemIdentifier ?? "photo_\(Int(Date().timeIntervalSince1970)).jpg"
             attachments.append(InputAttachment(
                 type: .image,
                 name: name,
-                data: data
+                data: compressed,
+                thumbnailData: thumb
             ))
         }
         selectedPhotos.removeAll()
@@ -243,12 +259,24 @@ struct ChatInputBar: View{
                 let type = AttachmentType.from(extension: ext)
                 let name = url.lastPathComponent
                 let fileData = try? Data(contentsOf: url)
-                attachments.append(InputAttachment(
-                    type: type,
-                    name: name,
-                    url: url,
-                    data: fileData
-                ))
+                if type == .image, let data = fileData {
+                    let compressed = ImageProcessor.compressImage(data)
+                    let thumb = ImageProcessor.generateThumbnail(data)
+                    attachments.append(InputAttachment(
+                        type: type,
+                        name: name,
+                        url: url,
+                        data: compressed,
+                        thumbnailData: thumb
+                    ))
+                } else {
+                    attachments.append(InputAttachment(
+                        type: type,
+                        name: name,
+                        url: url,
+                        data: fileData
+                    ))
+                }
             }
         case .failure(let error):
             logger.error("文件选择失败: \(error.localizedDescription)")
@@ -265,4 +293,9 @@ struct ChatInputBar: View{
             ChatInputBar()
         }
     }
+}
+
+private struct ImagePreviewData: Identifiable {
+    let id = UUID()
+    let data: Data
 }
