@@ -1,19 +1,20 @@
 import SwiftUI
 import SwiftData
-import MarkdownUI
-import Combine
+#if os(macOS)
+import AppKit
+#endif
+#if canImport(UIKit)
 import UIKit
-import OSLog
+#endif
 
 struct ChatDetailView: View {
-    private static let logger = Logger(subsystem: "com.omniai.chat", category: "ChatDetailView")
-
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appServices) private var appServices
+
     var session: ChatSession
     var onToggleSidebar: (() -> Void)? = nil
     var onOpenSettings: (() -> Void)? = nil
-    
+
     @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
     @AppStorage(AppSettings.Keys.defaultModelId) private var defaultModelId: String = AppSettings.Defaults.defaultModelId
     @AppStorage(AppSettings.Keys.autoRenameInterval) private var autoRenameInterval: Int = AppSettings.Defaults.autoRenameInterval
@@ -22,14 +23,67 @@ struct ChatDetailView: View {
     @AppStorage(AppSettings.Keys.autoRenamePrompt) private var autoRenamePrompt: String = AppSettings.Defaults.autoRenamePrompt
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
     @Query(sort: \MCPServerConfig.timestamp) private var mcpServers: [MCPServerConfig]
-    
-    @State private var sortedMessages: [ChatMessage] = []
 
-    @State private var isGenerating: Bool = false
-    @State private var currentGenerationTask: Task<Void, Never>?
-    @State private var showModelProviderSheet: Bool = false
-    @State private var editingMessage: ChatMessage?
-    @State private var editingText: String = ""
+    private var titleConfig: ChatTitleConfig {
+        ChatTitleConfig(
+            interval: autoRenameInterval,
+            modelId: autoRenameModelId,
+            apiKeyID: autoRenameAPIKeyID,
+            prompt: autoRenamePrompt
+        )
+    }
+
+    var body: some View {
+        ChatDetailContentView(
+            session: session,
+            modelContext: modelContext,
+            appServices: appServices,
+            activeAPIKeyID: activeAPIKeyID,
+            defaultModelId: defaultModelId,
+            titleConfig: titleConfig,
+            apiKeys: apiKeys,
+            mcpServers: mcpServers,
+            onToggleSidebar: onToggleSidebar,
+            onOpenSettings: onOpenSettings
+        )
+        .id(session.id)
+    }
+}
+
+private struct ChatDetailContentView: View {
+    let session: ChatSession
+    let activeAPIKeyID: String
+    let defaultModelId: String
+    let titleConfig: ChatTitleConfig
+    let apiKeys: [APIKeys]
+    let mcpServers: [MCPServerConfig]
+    let onToggleSidebar: (() -> Void)?
+    let onOpenSettings: (() -> Void)?
+
+    @State private var viewModel: ChatViewModel
+
+    init(
+        session: ChatSession,
+        modelContext: ModelContext,
+        appServices: AppServices,
+        activeAPIKeyID: String,
+        defaultModelId: String,
+        titleConfig: ChatTitleConfig,
+        apiKeys: [APIKeys],
+        mcpServers: [MCPServerConfig],
+        onToggleSidebar: (() -> Void)?,
+        onOpenSettings: (() -> Void)?
+    ) {
+        self.session = session
+        self.activeAPIKeyID = activeAPIKeyID
+        self.defaultModelId = defaultModelId
+        self.titleConfig = titleConfig
+        self.apiKeys = apiKeys
+        self.mcpServers = mcpServers
+        self.onToggleSidebar = onToggleSidebar
+        self.onOpenSettings = onOpenSettings
+        _viewModel = State(initialValue: ChatViewModel(session: session, modelContext: modelContext, appServices: appServices))
+    }
 
     private var effectiveChannelId: String {
         session.assistant?.channelId ?? activeAPIKeyID
@@ -43,26 +97,22 @@ struct ChatDetailView: View {
         apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
     }
 
-    private var activeChannel: APIKeys? {
-        apiKeys.first(where: { $0.id.uuidString == activeAPIKeyID })
-    }
-    
     private func messageContext(for message: ChatMessage, at index: Int) -> (showHeader: Bool, isIntermediateTool: Bool) {
-        let idx = sortedMessages.firstIndex(where: { $0.id == message.id }) ?? index
-        let isLast = idx == sortedMessages.count - 1
-        let nextIsAssistant = !isLast && sortedMessages[idx + 1].role == .assistant
+        let idx = viewModel.sortedMessages.firstIndex(where: { $0.id == message.id }) ?? index
+        let isLast = idx == viewModel.sortedMessages.count - 1
+        let nextIsAssistant = !isLast && viewModel.sortedMessages[idx + 1].role == .assistant
         let isIntermediateTool = message.role == .assistant
             && message.content.isEmpty
             && message.toolCallsData != nil
             && nextIsAssistant
-        let showHeader = index == 0 || sortedMessages[index - 1].role != message.role
+        let showHeader = index == 0 || viewModel.sortedMessages[index - 1].role != message.role
         return (showHeader: showHeader, isIntermediateTool: isIntermediateTool)
     }
 
     private func bubbleView(for message: ChatMessage, showHeader: Bool = true, isIntermediateToolMessage: Bool = false) -> MessageBubbleView {
         MessageBubbleView(
             message: message,
-            isGenerating: isGenerating && message.id == sortedMessages.last?.id,
+            isGenerating: viewModel.isGenerating && message.id == viewModel.sortedMessages.last?.id,
             showHeader: showHeader,
             isIntermediateToolMessage: isIntermediateToolMessage,
             onCopy: {
@@ -74,47 +124,28 @@ struct ChatDetailView: View {
                 #endif
             },
             onEdit: {
-                editingText = message.content
-                editingMessage = message
+                viewModel.beginEditing(message: message)
             },
             onDelete: {
-                modelContext.delete(message)
-                session.messages.removeAll { $0.id == message.id }
+                viewModel.delete(message: message)
             },
             onRegenerate: {
-                if message.role == .user {
-                    let messages = sortedMessages
-                    if let idx = messages.firstIndex(where: { $0.id == message.id }) {
-                        let toDelete = messages[idx...]
-                        for m in toDelete {
-                            modelContext.delete(m)
-                        }
-                        session.messages.removeAll { m in
-                            toDelete.contains { $0.id == m.id }
-                        }
-                    }
-                    let newUserMsg = ChatMessage(content: message.content, role: .user, session: session, modelId: effectiveModelId)
-                    session.messages.append(newUserMsg)
-                    let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session, modelId: effectiveModelId)
-                    session.messages.append(newAssistantMsg)
-                    fetchAIResponse(for: newAssistantMsg)
-                } else {
-                    message.content = ""
-                    message.firstTokenLatency = nil
-                    message.promptTokens = nil
-                    message.completionTokens = nil
-                    message.totalTokens = nil
-                    fetchAIResponse(for: message)
-                }
+                viewModel.regenerate(
+                    message: message,
+                    effectiveModelId: effectiveModelId,
+                    effectiveChannelId: effectiveChannelId,
+                    apiKeys: apiKeys,
+                    titleConfig: titleConfig
+                )
             }
         )
     }
-    
+
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(Array(sortedMessages.enumerated()), id: \.element.id) { index, message in
+                    ForEach(Array(viewModel.sortedMessages.enumerated()), id: \.element.id) { index, message in
                         let ctx = messageContext(for: message, at: index)
                         bubbleView(for: message, showHeader: ctx.showHeader, isIntermediateToolMessage: ctx.isIntermediateTool)
                             .id(message.id)
@@ -131,17 +162,17 @@ struct ChatDetailView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear {
-                refreshSortedMessages()
-                if let lastID = sortedMessages.last?.id {
+                viewModel.refreshSortedMessages()
+                if let lastID = viewModel.sortedMessages.last?.id {
                     scrollProxy.scrollTo(lastID, anchor: .bottom)
                 }
                 Task {
-                    await connectAssistantMCPServers(enabledConfigs: mcpServers)
+                    await viewModel.connectMCPServers(enabledConfigs: mcpServers)
                 }
             }
             .onChange(of: session.messages.count) { _, _ in
-                refreshSortedMessages()
-                if let lastID = sortedMessages.last?.id {
+                viewModel.refreshSortedMessages()
+                if let lastID = viewModel.sortedMessages.last?.id {
                     withAnimation {
                         scrollProxy.scrollTo(lastID, anchor: .bottom)
                     }
@@ -149,19 +180,32 @@ struct ChatDetailView: View {
             }
         }
         .task(id: session.id) {
-            await connectAssistantMCPServers(enabledConfigs: mcpServers)
+            await viewModel.connectMCPServers(enabledConfigs: mcpServers)
         }
         .onChange(of: mcpServers) { _, newServers in
             Task {
-                await connectAssistantMCPServers(enabledConfigs: newServers)
+                await viewModel.connectMCPServers(enabledConfigs: newServers)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            ChatInputBar(onSend: sendMessage, isGenerating: isGenerating, onStop: stopGeneration)
+            ChatInputBar(
+                onSend: { text, attachments in
+                    viewModel.sendMessage(
+                        text,
+                        attachments: attachments,
+                        effectiveModelId: effectiveModelId,
+                        effectiveChannelId: effectiveChannelId,
+                        apiKeys: apiKeys,
+                        titleConfig: titleConfig
+                    )
+                },
+                isGenerating: viewModel.isGenerating,
+                onStop: viewModel.stopGeneration
+            )
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Button(action: { showModelProviderSheet = true }) {
+                Button(action: { viewModel.showModelProviderSheet = true }) {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.down")
                             .font(.caption2)
@@ -211,7 +255,7 @@ struct ChatDetailView: View {
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
-        .sheet(isPresented: $showModelProviderSheet) {
+        .sheet(isPresented: $viewModel.showModelProviderSheet) {
             ModelProviderSheet(
                 apiKeys: Array(apiKeys),
                 activeAPIKeyID: Binding(
@@ -224,11 +268,11 @@ struct ChatDetailView: View {
                 )
             )
         }
-        .sheet(item: $editingMessage) { message in
+        .sheet(item: $viewModel.editingMessage) { message in
             NavigationStack {
                 Form {
                     Section(header: Text("编辑消息")) {
-                        TextEditor(text: $editingText)
+                        TextEditor(text: $viewModel.editingText)
                             .frame(minHeight: 150)
                     }
                 }
@@ -238,311 +282,15 @@ struct ChatDetailView: View {
 #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") { editingMessage = nil }
+                        Button("取消") { viewModel.editingMessage = nil }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("保存") {
-                            message.content = editingText
-                            editingMessage = nil
+                            viewModel.saveEditing(message: message)
                         }
                     }
                 }
             }
-        }
-    }
-    
-    private func sendMessage(_ text: String, attachments: [InputAttachment] = []) {
-        guard !text.isEmpty || !attachments.isEmpty else { return }
-        
-        let userMessage = ChatMessage(content: text, role: .user, session: session, modelId: effectiveModelId)
-        if !attachments.isEmpty {
-            userMessage.attachments = attachments.map { input in
-                MessageAttachment(type: input.type, name: input.name, data: input.data)
-            }
-        }
-        session.messages.append(userMessage)
-        session.lastModified = Date()
-        
-        let assistantMessage = ChatMessage(content: "", role: .assistant, session: session, modelId: effectiveModelId)
-        session.messages.append(assistantMessage)
-        
-        fetchAIResponse(for: assistantMessage)
-    }
-
-    private func stopGeneration() {
-        currentGenerationTask?.cancel()
-        currentGenerationTask = nil
-        isGenerating = false
-    }
-
-    private func refreshSortedMessages() {
-        sortedMessages = session.messages
-            .filter { $0.role != .tool }
-            .sorted { $0.createdAt < $1.createdAt }
-    }
-
-    private func connectAssistantMCPServers(enabledConfigs: [MCPServerConfig]) async {
-        await ToolSessionStore.shared.connectAssistantMCPServers(
-            for: session.id,
-            assistant: session.assistant,
-            enabledConfigs: enabledConfigs
-        )
-    }
-
-    private func fetchAIResponse(for assistantMessage: ChatMessage, toolRound: Int = 0) {
-        isGenerating = true
-
-        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId }),
-              let apiKeyString = appServices.keyStore.apiKeyString(for: activeKey), !apiKeyString.isEmpty else {
-            assistantMessage.content = ChatErrorFormatter.render(.missingAPIKey, existingContent: assistantMessage.content)
-            isGenerating = false
-            return
-        }
-
-        let chatEngine = appServices.chatEngine()
-        let assistantSnapshot = ChatAssistantSnapshot(
-            systemPrompt: session.assistant?.systemPrompt,
-            contextCount: session.assistant?.contextCount,
-            temperature: session.assistant?.temperature,
-            reasoningEffort: session.assistant?.reasoningEffort,
-            modelId: effectiveModelId,
-            maxToolCallRounds: session.assistant?.maxToolCallRounds ?? ChatRuntimeDefaults.defaultMaxToolCallRounds
-        )
-        let channelSnapshot = ChatChannelSnapshot(
-            id: activeKey.id.uuidString,
-            apiKey: apiKeyString,
-            requestURL: activeKey.requestURL,
-            apiType: activeKey.apiType,
-            providerId: activeKey.providerID,
-            endpointType: activeKey.endpointType,
-            cachedCapabilities: activeKey.cachedCapabilities
-        )
-        let assemblyConfig = chatEngine.messageAssemblyConfig(for: channelSnapshot.providerId)
-        var messageSnapshots = session.messages
-            .sorted { $0.createdAt < $1.createdAt }
-            .filter { $0.id != assistantMessage.id }
-            .map { ChatMessageAssembler.makeSnapshot(from: $0) }
-
-        if let contextCount = assistantSnapshot.contextCount, contextCount < messageSnapshots.count {
-            messageSnapshots = Array(messageSnapshots.suffix(contextCount))
-        }
-
-        currentGenerationTask?.cancel()
-        currentGenerationTask = Task { [session] in
-            let aiMessages = ChatMessageAssembler.assemble(
-                messages: messageSnapshots,
-                systemPrompt: assistantSnapshot.systemPrompt,
-                assemblyConfig: assemblyConfig
-            )
-            
-            let temperature = assistantSnapshot.temperature
-            let startTime = Date()
-            var hasReceivedFirstChunk = false
-            let modelId = assistantSnapshot.modelId
-            
-            let caps = ModelCapability.effective(for: modelId, cached: channelSnapshot.cachedCapabilities)
-            let toolService = appServices.toolServiceFactory.toolService(for: session.id)
-            let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
-            
-            let response = chatEngine.streamResponse(
-                request: ChatEngineRequest(
-                    messages: aiMessages,
-                    apiKey: channelSnapshot.apiKey,
-                    baseURL: channelSnapshot.requestURL,
-                    modelId: modelId,
-                    temperature: temperature,
-                    reasoningEffort: assistantSnapshot.reasoningEffort,
-                    apiType: channelSnapshot.apiType,
-                    tools: toolDefinitions,
-                    providerId: channelSnapshot.providerId,
-                    endpointType: channelSnapshot.endpointType
-                )
-            )
-            
-            do {
-                for try await event in response.events {
-                    switch event {
-                    case .chunk(let text):
-                        await MainActor.run {
-                            if !hasReceivedFirstChunk {
-                                hasReceivedFirstChunk = true
-                                assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
-                            }
-                            assistantMessage.content += text
-                        }
-                    case .thinking(let text):
-                        await MainActor.run {
-                            assistantMessage.thinkingContent = (assistantMessage.thinkingContent ?? "") + text
-                        }
-                    case .usage(let promptTokens, let completionTokens, let totalTokens):
-                        await MainActor.run {
-                            assistantMessage.promptTokens = promptTokens
-                            assistantMessage.completionTokens = completionTokens
-                            assistantMessage.totalTokens = totalTokens
-                        }
-                    case .toolCallName(let toolName):
-                        await MainActor.run {
-                            if !hasReceivedFirstChunk {
-                                hasReceivedFirstChunk = true
-                                assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
-                            }
-                            assistantMessage.toolCallName = toolName
-                        }
-                    case .finishReason:
-                        break
-                    case .failed(let error):
-                        await MainActor.run {
-                            assistantMessage.content = ChatErrorFormatter.render(error, existingContent: assistantMessage.content)
-                        }
-                    }
-                }
-            } catch is CancellationError {
-                // 用户主动打断，保留已生成内容
-            } catch {
-                let chatError = ChatEngineError.from(error)
-                await MainActor.run {
-                    if !assistantMessage.content.contains(chatError.localizedDescription) {
-                        assistantMessage.content = ChatErrorFormatter.render(chatError, existingContent: assistantMessage.content)
-                    }
-                }
-            }
-
-            let toolCalls = await response.toolCalls()
-            let shouldReenter = await response.needsToolReentry()
-            if shouldReenter, !toolCalls.isEmpty {
-                guard ChatEngine.canRunToolRound(toolRound, maxRounds: assistantSnapshot.maxToolCallRounds) else {
-                    await MainActor.run {
-                        assistantMessage.content = ChatErrorFormatter.render(
-                            .toolCallLimitExceeded(maxRounds: assistantSnapshot.maxToolCallRounds),
-                            existingContent: assistantMessage.content
-                        )
-                        isGenerating = false
-                        session.lastModified = Date()
-                    }
-                    return
-                }
-
-                if let toolData = try? JSONEncoder().encode(toolCalls) {
-                    await MainActor.run {
-                        assistantMessage.toolCallsData = toolData
-                    }
-                }
-                
-                await MainActor.run {
-                    session.lastModified = Date()
-                }
-                
-                for toolCall in toolCalls {
-                    guard let name = toolCall.function?.name, let args = toolCall.function?.arguments else {
-                        continue
-                    }
-                    let result = await appServices.toolServiceFactory.toolService(for: session.id).execute(name: name, argumentsJSON: args)
-                    let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: modelId)
-                    toolMessage.toolCallId = toolCall.id
-                    await MainActor.run {
-                        session.messages.append(toolMessage)
-                    }
-                }
-                
-                let newAssistantMsg = ChatMessage(content: "", role: .assistant, session: session, modelId: modelId)
-                await MainActor.run {
-                    session.messages.append(newAssistantMsg)
-                }
-                
-                await MainActor.run {
-                    isGenerating = false
-                }
-                
-                fetchAIResponse(for: newAssistantMsg, toolRound: toolRound + 1)
-                return
-            }
-            
-            await MainActor.run {
-                isGenerating = false
-                session.lastModified = Date()
-            }
-            
-            if autoRenameInterval > 0 {
-                let rounds = session.messages.filter { $0.role == .user }.count
-                if session.title == "新对话" || (rounds > 0 && rounds % autoRenameInterval == 0) {
-                    await autoTitle()
-                }
-            }
-        }
-    }
-    
-    private func autoTitle() async {
-        let channel: APIKeys
-        if autoRenameAPIKeyID.isEmpty {
-            guard let effective = effectiveChannel else { return }
-            channel = effective
-        } else {
-            guard let rename = apiKeys.first(where: { $0.id.uuidString == autoRenameAPIKeyID }),
-                  let renameKey = appServices.keyStore.apiKeyString(for: rename), !renameKey.isEmpty else { return }
-            channel = rename
-        }
-        
-        guard let keyString = appServices.keyStore.apiKeyString(for: channel), !keyString.isEmpty else { return }
-        
-        let recent = session.messages
-            .filter { $0.role == .user || $0.role == .assistant }
-            .suffix(4)
-            .map { "[\($0.role == .user ? "用户" : "助手")]: \($0.content.prefix(300))" }
-            .joined(separator: "\n")
-        
-        let titlePrompt = autoRenamePrompt
-        
-        let messages: [OpenAIMessage] = [
-            OpenAIMessage(role: "system", content: .text(titlePrompt)),
-            OpenAIMessage(role: "user", content: .text("对话内容：\n\(recent)"))
-        ]
-        
-        let modelId = autoRenameModelId.isEmpty ? effectiveModelId : autoRenameModelId
-        
-        do {
-            let raw = try await appServices.chatEngine().complete(
-                request: ChatCompletionRequest(
-                    messages: messages,
-                    apiKey: keyString,
-                    baseURL: channel.requestURL,
-                    modelId: modelId,
-                    temperature: 0.3,
-                    apiType: channel.apiType,
-                    providerId: channel.providerID,
-                    endpointType: channel.endpointType
-                )
-            )
-            // Strip <think> tags from reasoning model outputs
-            let stripped = raw.replacingOccurrences(
-                of: "(?s)<think>.*?</think>",
-                with: "",
-                options: [.regularExpression]
-            )
-            let lines = stripped.split(separator: "\n")
-                .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
-                .filter { !$0.isEmpty && $0.count <= 25 }
-            let titleLine = lines.last ?? lines.first ?? ""
-            let trimmed = titleLine
-                .replacingOccurrences(of: "\"", with: "")
-                .replacingOccurrences(of: "「", with: "")
-                .replacingOccurrences(of: "」", with: "")
-                .replacingOccurrences(of: "标题：", with: "")
-                .replacingOccurrences(of: "标题:", with: "")
-            await MainActor.run {
-                if !trimmed.isEmpty {
-                    session.title = trimmed
-                    session.lastModified = Date()
-                }
-            }
-        } catch {
-            let context = LLMRequestContext(
-                providerId: channel.providerID,
-                endpointType: channel.endpointType,
-                modelId: modelId,
-                phase: .autoTitle
-            )
-            let appError = AppError.autoTitleFailure(context: context, underlying: error)
-            Self.logger.error("\(appError.logDescription)")
         }
     }
 }
