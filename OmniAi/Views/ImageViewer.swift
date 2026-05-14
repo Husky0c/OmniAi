@@ -15,7 +15,9 @@ struct ImageViewer: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.clear
+                .background(.regularMaterial)
+                .ignoresSafeArea()
 
 #if canImport(UIKit)
             if let uiImage = UIImage(data: imageData) {
@@ -79,7 +81,7 @@ struct ImageViewer: View {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.white.opacity(0.8))
+                            .foregroundStyle(.primary)
                             .padding(16)
                     }
                 }
