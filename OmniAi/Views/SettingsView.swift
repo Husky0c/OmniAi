@@ -1,11 +1,16 @@
 import SwiftUI
 import PhotosUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
     @AppStorage(AppSettings.Keys.userName) private var userName: String = AppSettings.Defaults.userName
+#if canImport(UIKit)
     @State private var avatarImage: UIImage? = nil
+#endif
     @State private var photoItem: PhotosPickerItem? = nil
     
     var body: some View {
@@ -13,6 +18,7 @@ struct SettingsView: View {
             Form {
                 Section(header: Text("账户信息")) {
                     HStack {
+#if canImport(UIKit)
                         PhotosPicker(selection: $photoItem, matching: .images) {
                             Group {
                                 if let image = avatarImage {
@@ -29,10 +35,17 @@ struct SettingsView: View {
                             }
                         }
                         .buttonStyle(.plain)
+#else
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable()
+                            .frame(width: 50, height: 50)
+                            .foregroundStyle(.blue)
+#endif
                         
                         VStack(alignment: .leading, spacing: 4) {
                             TextField("昵称", text: $userName)
                                 .font(.title3)
+#if canImport(UIKit)
                             if avatarImage != nil {
                                 Button("移除头像", role: .destructive) {
                                     avatarImage = nil
@@ -41,11 +54,13 @@ struct SettingsView: View {
                                 }
                                 .font(.caption)
                             }
+#endif
                         }
                         .padding(.leading, 8)
                     }
                     .padding(.vertical, 4)
                 }
+#if canImport(UIKit)
                 .onChange(of: photoItem) { _, newItem in
                     Task {
                         guard let data = try? await newItem?.loadTransferable(type: Data.self) else { return }
@@ -58,6 +73,7 @@ struct SettingsView: View {
                 .onAppear {
                     avatarImage = AvatarManager.loadAsync()
                 }
+#endif
                 
                 Section {
                     NavigationLink(destination: LLMApiSettingsView()) {

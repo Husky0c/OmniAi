@@ -41,23 +41,23 @@ struct MCPServerEditView: View {
                     switch transportType {
                     case .stdio:
                         TextField("命令路径", text: $command)
-                            .autocapitalization(.none)
+                            .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                         TextField("参数（空格分隔）", text: $argumentsText)
-                            .autocapitalization(.none)
+                            .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                     case .sse:
                         TextField("服务器 URL", text: $serverURL)
-                            .keyboardType(.URL)
-                            .autocapitalization(.none)
+                            .omniURLKeyboard()
+                            .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                     case .streamableHTTP:
                         TextField("服务器 URL", text: $serverURL)
-                            .keyboardType(.URL)
-                            .autocapitalization(.none)
+                            .omniURLKeyboard()
+                            .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                         SecureField("认证 Token（可选）", text: $authToken)
-                            .autocapitalization(.none)
+                            .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                     }
                 }

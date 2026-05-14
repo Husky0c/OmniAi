@@ -130,12 +130,12 @@ struct ChatInputBar: View{
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             handleFileImporter(result)
         }
-        .fullScreenCover(isPresented: $showCamera) {
 #if canImport(UIKit)
+        .fullScreenCover(isPresented: $showCamera) {
             CameraPicker(imageData: $capturedImageData)
                 .ignoresSafeArea()
-#endif
         }
+#endif
         .onChange(of: capturedImageData) { _, newData in
             if let data = newData {
                 attachments.append(InputAttachment(

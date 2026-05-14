@@ -44,7 +44,7 @@ struct DefaultModelSettingsView: View {
                 
                 HStack {
                     TextField("默认对话模型", text: $defaultModelId)
-                        .autocapitalization(.none)
+                        .omniNoAutocapitalization()
                         .disableAutocorrection(true)
                     
                     Button(action: { showDefaultModelSheet = true }) {
@@ -73,7 +73,7 @@ struct DefaultModelSettingsView: View {
                 
                 HStack {
                     TextField("标题用模型 ID（可选）", text: $autoRenameModelId)
-                        .autocapitalization(.none)
+                        .omniNoAutocapitalization()
                         .disableAutocorrection(true)
                     
                     Button(action: { showRenameModelSheet = true }) {
@@ -163,7 +163,7 @@ struct ModelSelectionSheetFromChannel: View {
                             .foregroundStyle(.secondary)
                         TextField("手动输入模型 ID", text: $selectedModel)
                             .textFieldStyle(.roundedBorder)
-                            .autocapitalization(.none)
+                            .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                             .padding(.horizontal)
                     }

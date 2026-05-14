@@ -65,8 +65,8 @@ struct AddAPIKeyView: View {
                     if selectedPreset.isCustom {
 #if os(iOS)
                         TextField("Base URL", text: $requestURL)
-                            .keyboardType(.URL)
-                            .autocapitalization(.none)
+                            .omniURLKeyboard()
+                            .omniNoAutocapitalization()
                             .disableAutocorrection(true)
 #else
                         TextField("Base URL", text: $requestURL)

@@ -1,5 +1,8 @@
 import SwiftUI
 import MarkdownUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct MessageBubbleView: View {
     let message: ChatMessage
@@ -12,7 +15,9 @@ struct MessageBubbleView: View {
     var onRegenerate: (() -> Void)? = nil
     @State private var showStats = false
     @State private var showActionMenu = false
+#if canImport(UIKit)
     @State private var userAvatar: UIImage? = nil
+#endif
     @AppStorage(AppSettings.Keys.userName) private var userName: String = AppSettings.Defaults.userName
 
     var isUser: Bool {
@@ -55,6 +60,7 @@ struct MessageBubbleView: View {
                                     let imageAttachments = (message.attachments ?? []).filter { $0.type == .image }
                                     if !imageAttachments.isEmpty {
                                         ForEach(imageAttachments) { att in
+#if canImport(UIKit)
                                             if let data = att.data, let uiImage = UIImage(data: data) {
                                                 Image(uiImage: uiImage)
                                                     .resizable()
@@ -64,6 +70,13 @@ struct MessageBubbleView: View {
                                                     .padding(.horizontal, 12)
                                                     .padding(.top, 8)
                                             }
+#else
+                                            Label(att.name, systemImage: "photo")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.horizontal, 12)
+                                                .padding(.top, 8)
+#endif
                                         }
                                     }
                                     Markdown(message.content)
@@ -174,7 +187,9 @@ struct MessageBubbleView: View {
                 Label("删除", systemImage: "trash")
             }
         }
+#if canImport(UIKit)
         .onAppear { userAvatar = AvatarManager.loadAsync() }
+#endif
     }
 
     @ViewBuilder
@@ -217,6 +232,7 @@ struct MessageBubbleView: View {
 
             if isUser {
                 Group {
+#if canImport(UIKit)
                     if let image = userAvatar {
                         Image(uiImage: image)
                             .resizable()
@@ -226,6 +242,11 @@ struct MessageBubbleView: View {
                             .resizable()
                             .foregroundStyle(.blue)
                     }
+#else
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .foregroundStyle(.blue)
+#endif
                 }
                 .frame(width: 22, height: 22)
                 .clipShape(Circle())

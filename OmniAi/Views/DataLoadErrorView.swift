@@ -35,7 +35,11 @@ struct DataLoadErrorView: View {
                             .font(.system(.caption, design: .monospaced))
                             .padding()
                             .frame(maxWidth: .infinity, alignment: .leading)
+#if canImport(UIKit)
                             .background(Color(.systemGray6))
+#else
+                            .background(Color.secondary.opacity(0.12))
+#endif
                             .cornerRadius(8)
                     }
                     .frame(maxHeight: 150)
