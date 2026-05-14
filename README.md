@@ -76,7 +76,12 @@ OmniAi/
 ├── OmniAiTests/
 │   ├── Helpers/                       # MockURLSession、MockLLMService、MockKeyStore 等
 │   ├── Model/                         # SwiftData model tests
-│   └── Services/                      # Chat、provider、network、MCP、tool tests
+│   └── Services/
+│       ├── App/                       # KeyStore 等应用基础设施 tests
+│       ├── Chat/                      # ChatEngine、ChatMessageAssembler、ChatTitleService tests
+│       ├── LLM/                       # LLMService、stream parser、base URL、reasoning tests
+│       ├── Provider/                  # provider config / registry tests
+│       └── Tools/                     # local tools、MCP JSON-RPC、tool session tests
 │
 ├── OmniAi/
 │   ├── OmniAiApp.swift                # App 入口和 SwiftData ModelContainer
@@ -102,44 +107,56 @@ OmniAi/
 │   │   ├── SettingsView.swift
 │   │   ├── LLMApiSettingsView.swift
 │   │   ├── ModelProviderSheet.swift
+│   │   ├── View+TextInput.swift       # 跨平台输入修饰器
 │   │   └── Animation/InteractiveDrawer.swift
 │   │
 │   ├── Services/
-│   │   ├── AppServices.swift           # 依赖注入入口
-│   │   ├── AppSettings.swift           # @AppStorage key/default 集中定义
-│   │   ├── AppError.swift              # app-level error + request context
-│   │   ├── KeyStore.swift              # Keychain-backed API key storage
-│   │   ├── LLMService.swift            # 网络 facade
-│   │   ├── LLMServiceProtocol.swift
-│   │   ├── LLMDTOs.swift
-│   │   ├── BaseURLResolver.swift
-│   │   ├── ModelCatalogService.swift
-│   │   ├── LLMCompletionClient.swift
-│   │   ├── StreamParser.swift
-│   │   ├── EndpointAdapter.swift
-│   │   ├── OpenAIEndpointAdapter.swift
-│   │   ├── AnthropicEndpointAdapter.swift
-│   │   ├── ProviderConfig.swift
-│   │   ├── ProviderContract.swift
-│   │   ├── ProviderRegistryProtocol.swift
-│   │   ├── ModelCapabilityResolver.swift
-│   │   ├── ReasoningConfigBuilder.swift
-│   │   ├── ThinkTagParser.swift
-│   │   ├── ToolSessionStore.swift
-│   │   ├── ToolExecutionService.swift
+│   │   ├── App/
+│   │   │   ├── AppServices.swift       # 依赖注入入口
+│   │   │   ├── AppSettings.swift       # @AppStorage key/default 集中定义
+│   │   │   ├── AppError.swift          # app-level error + request context
+│   │   │   ├── AvatarManager.swift     # 用户头像文件存储和缓存
+│   │   │   └── KeyStore.swift          # Keychain-backed API key storage
 │   │   ├── Chat/
 │   │   │   ├── ChatEngine.swift
 │   │   │   ├── ChatMessageAssembler.swift
 │   │   │   ├── ChatErrorFormatter.swift
-│   │   │   └── ChatRuntimeDefaults.swift
+│   │   │   ├── ChatRuntimeDefaults.swift
+│   │   │   ├── ChatTitleService.swift
+│   │   │   └── ChatViewModel.swift
+│   │   ├── LLM/
+│   │   │   ├── LLMService.swift        # 网络 facade
+│   │   │   ├── LLMServiceProtocol.swift
+│   │   │   ├── LLMDTOs.swift
+│   │   │   ├── BaseURLResolver.swift
+│   │   │   ├── LLMCompletionClient.swift
+│   │   │   ├── StreamParser.swift
+│   │   │   ├── ThinkTagParser.swift
+│   │   │   ├── EndpointAdapter.swift
+│   │   │   ├── OpenAIEndpointAdapter.swift
+│   │   │   ├── AnthropicEndpointAdapter.swift
+│   │   │   ├── AnthropicModels.swift
+│   │   │   ├── ReasoningConfigBuilder.swift
+│   │   │   └── URLSessionProtocol.swift
+│   │   ├── ModelCatalog/
+│   │   │   ├── ModelCatalogService.swift
+│   │   │   ├── ModelCapabilityResolver.swift
+│   │   │   └── ModelIconManager.swift
+│   │   ├── Provider/
+│   │   │   ├── ProviderConfig.swift
+│   │   │   ├── ProviderContract.swift
+│   │   │   └── ProviderRegistryProtocol.swift
 │   │   └── Tools/
+│   │       ├── LocalToolRegistry.swift
+│   │       ├── ToolExecutionService.swift
+│   │       ├── ToolSessionStore.swift
 │   │       ├── MCPTransport.swift
 │   │       ├── StdioTransport.swift
 │   │       ├── SSETransport.swift
 │   │       ├── StreamableHTTPTransport.swift
 │   │       ├── MCPConnectionManager.swift
 │   │       ├── MCPJSONRPC.swift
-│   │       └── LocalToolRegistry.swift
+│   │       └── NSLock+withLock.swift
 │   │
 │   └── Resources/
 │       ├── provider_config.json
@@ -172,13 +189,13 @@ ChatInputBar
 
 ### 网络层分工
 
-- `LLMService`：保持对外 facade 和协议兼容。
-- `BaseURLResolver`：处理 provider/custom base URL 规范化。
-- `ModelCatalogService`：拉取模型列表并构建能力信息。
-- `LLMCompletionClient`：处理非流式 completion，主要用于自动标题。
-- `StreamParser`：解析 OpenAI 单行 SSE 和 Anthropic 双行 SSE。
-- `OpenAIEndpointAdapter` / `AnthropicEndpointAdapter`：构建请求并解析 endpoint-specific 响应片段。
-- `ProviderContract`：运行时 provider 行为的 typed contract。
+- `Services/LLM/LLMService`：保持对外 facade 和协议兼容。
+- `Services/LLM/BaseURLResolver`：处理 provider/custom base URL 规范化。
+- `Services/ModelCatalog/ModelCatalogService`：拉取模型列表并构建能力信息。
+- `Services/LLM/LLMCompletionClient`：处理非流式 completion，主要用于自动标题。
+- `Services/LLM/StreamParser`：解析 OpenAI 单行 SSE 和 Anthropic 双行 SSE。
+- `Services/LLM/OpenAIEndpointAdapter` / `AnthropicEndpointAdapter`：构建请求并解析 endpoint-specific 响应片段。
+- `Services/Provider/ProviderContract`：运行时 provider 行为的 typed contract。
 
 ### 依赖注入
 
