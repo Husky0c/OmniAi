@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import SwiftData
 
 final class ToolSessionStore: ToolServiceFactory {
     static let shared = ToolSessionStore()
@@ -31,6 +32,28 @@ final class ToolSessionStore: ToolServiceFactory {
     func releaseService(for sessionId: UUID) async {
         let service = lock.withLock { services.removeValue(forKey: sessionId) }
         await service?.disconnectAllMCPServers()
+    }
+
+    func releaseServices(excluding activeSessionIds: Set<UUID>) async {
+        let staleServices = lock.withLock {
+            let staleIds = services.keys.filter { !activeSessionIds.contains($0) }
+            return staleIds.compactMap { services.removeValue(forKey: $0) }
+        }
+
+        for service in staleServices {
+            await service.disconnectAllMCPServers()
+        }
+    }
+
+    @MainActor
+    func releaseServicesNotInModelContext(_ modelContext: ModelContext) async {
+        do {
+            let descriptor = FetchDescriptor<ChatSession>()
+            let sessions = try modelContext.fetch(descriptor)
+            await releaseServices(excluding: Set(sessions.map(\.id)))
+        } catch {
+            logger.error("Failed to clean stale tool sessions: \(error.localizedDescription)")
+        }
     }
 
     func hasService(for sessionId: UUID) -> Bool {

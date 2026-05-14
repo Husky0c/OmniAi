@@ -224,7 +224,13 @@ struct AssistantSettingsView: View {
     }
     
     private func deleteAssistant() {
+        let sessionIds = assistant.sessions.map(\.id)
         modelContext.delete(assistant)
+        for sessionId in sessionIds {
+            Task {
+                await ToolSessionStore.shared.releaseService(for: sessionId)
+            }
+        }
         dismiss()
     }
 }

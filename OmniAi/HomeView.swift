@@ -5,6 +5,7 @@ import UIKit
 #endif
 
 struct HomeView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedSession: ChatSession?
     @State private var isSidebarOpen: Bool = false
     @State private var showSettings: Bool = false
@@ -42,6 +43,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .task {
+            await ToolSessionStore.shared.releaseServicesNotInModelContext(modelContext)
         }
     }
 }

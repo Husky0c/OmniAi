@@ -15,6 +15,10 @@ final class ToolExecutionService {
         localRegistry.registerNativeTools()
     }
 
+    deinit {
+        mcpManager.disconnectAllNow()
+    }
+
     func getDefinitions() -> [ToolDefinition] {
         localRegistry.allDefinitions() + mcpManager.discoveredDefinitions()
     }

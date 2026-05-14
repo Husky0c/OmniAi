@@ -13,6 +13,10 @@ final class MCPConnectionManager {
         lock.withLock { transports.count }
     }
 
+    deinit {
+        disconnectAllNow()
+    }
+
     func connectedServerIds() -> Set<String> {
         lock.withLock { Set(transports.keys) }
     }
@@ -63,6 +67,10 @@ extension MCPConnectionManager {
     }
 
     func disconnectAll() async {
+        disconnectAllNow()
+    }
+
+    func disconnectAllNow() {
         var allTransports: [String: MCPTransport] = [:]
         lock.withLock {
             allTransports = transports
