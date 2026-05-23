@@ -19,4 +19,21 @@ final class ChatTitleServiceTests: XCTestCase {
 
         XCTAssertEqual(ChatTitleService.cleanedTitle(from: raw), "短标题")
     }
+
+    func testShouldGenerateTitleRunsImmediatelyForNewConversationThenAtInterval() {
+        let interval = 6
+
+        XCTAssertTrue(ChatTitleService.shouldGenerateTitle(currentTitle: "新对话", userMessageCount: 1, interval: interval))
+        XCTAssertFalse(ChatTitleService.shouldGenerateTitle(currentTitle: "已命名", userMessageCount: 2, interval: interval))
+        XCTAssertFalse(ChatTitleService.shouldGenerateTitle(currentTitle: "已命名", userMessageCount: 5, interval: interval))
+        XCTAssertTrue(ChatTitleService.shouldGenerateTitle(currentTitle: "已命名", userMessageCount: 6, interval: interval))
+        XCTAssertFalse(ChatTitleService.shouldGenerateTitle(currentTitle: "已命名", userMessageCount: 7, interval: interval))
+        XCTAssertTrue(ChatTitleService.shouldGenerateTitle(currentTitle: "已命名", userMessageCount: 12, interval: interval))
+    }
+
+    func testShouldGenerateTitleRespectsDisabledIntervalAndCustomInitialTitle() {
+        XCTAssertFalse(ChatTitleService.shouldGenerateTitle(currentTitle: "新对话", userMessageCount: 1, interval: 0))
+        XCTAssertFalse(ChatTitleService.shouldGenerateTitle(currentTitle: "已命名", userMessageCount: 1, interval: 6))
+        XCTAssertFalse(ChatTitleService.shouldGenerateTitle(currentTitle: "新对话", userMessageCount: 0, interval: 6))
+    }
 }

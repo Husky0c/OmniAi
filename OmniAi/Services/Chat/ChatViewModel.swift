@@ -457,7 +457,11 @@ final class ChatViewModel {
         guard titleConfig.interval > 0 else { return }
 
         let rounds = session.messages.filter { $0.role == .user }.count
-        guard session.title == "新对话" || (rounds > 0 && rounds % titleConfig.interval == 0) else {
+        guard ChatTitleService.shouldGenerateTitle(
+            currentTitle: session.title,
+            userMessageCount: rounds,
+            interval: titleConfig.interval
+        ) else {
             return
         }
 

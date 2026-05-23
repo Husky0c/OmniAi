@@ -10,6 +10,7 @@ struct ChatTitleConfig: Equatable {
 
 struct ChatTitleService {
     private static let logger = Logger(subsystem: "com.omniai.chat", category: "ChatTitleService")
+    static let defaultUntitledSessionTitle = "新对话"
 
     private let appServices: AppServices
 
@@ -69,6 +70,18 @@ struct ChatTitleService {
             .replacingOccurrences(of: "」", with: "")
             .replacingOccurrences(of: "标题：", with: "")
             .replacingOccurrences(of: "标题:", with: "")
+    }
+
+    static func shouldGenerateTitle(currentTitle: String, userMessageCount rounds: Int, interval: Int) -> Bool {
+        guard interval > 0, rounds > 0 else {
+            return false
+        }
+
+        if rounds == 1, currentTitle == defaultUntitledSessionTitle {
+            return true
+        }
+
+        return rounds % interval == 0
     }
 
     static func logAutoTitleFailure(channel: APIKeys, modelId: String, error: Error) {
