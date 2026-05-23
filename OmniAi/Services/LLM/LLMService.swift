@@ -5,16 +5,26 @@ class LLMService: LLMServiceProtocol {
     static let shared = LLMService()
 
     private let logger = Logger(subsystem: "com.omniai.network", category: "LLMService")
-    private let baseURLResolver = BaseURLResolver()
+    private let providerRegistry: ProviderRegistryProtocol
+    private let baseURLResolver: BaseURLResolver
     private let streamParser = StreamParser()
 
-    var session: URLSessionProtocol = URLSession(configuration: {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 300
-        config.timeoutIntervalForResource = 3600
-        config.waitsForConnectivity = false
-        return config
-    }())
+    var session: URLSessionProtocol
+
+    init(
+        providerRegistry: ProviderRegistryProtocol = ProviderRegistry.shared,
+        session: URLSessionProtocol? = nil
+    ) {
+        self.providerRegistry = providerRegistry
+        self.baseURLResolver = BaseURLResolver(providerRegistry: providerRegistry)
+        self.session = session ?? URLSession(configuration: {
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 300
+            config.timeoutIntervalForResource = 3600
+            config.waitsForConnectivity = false
+            return config
+        }())
+    }
 
     // MARK: - Adapter Selection
 
@@ -43,7 +53,11 @@ class LLMService: LLMServiceProtocol {
     // MARK: - Fetch Models
 
     func fetchAvailableModels(apiKey: String, baseURL: String?, apiType: APIType = .openAI, providerId: String? = nil, endpointType: EndpointType = .openai) async throws -> [ModelInfo] {
-        try await ModelCatalogService(session: session).fetchAvailableModels(
+        try await ModelCatalogService(
+            session: session,
+            providerRegistry: providerRegistry,
+            baseURLResolver: baseURLResolver
+        ).fetchAvailableModels(
             apiKey: apiKey,
             baseURL: baseURL,
             apiType: apiType,
@@ -56,7 +70,7 @@ class LLMService: LLMServiceProtocol {
 
     func sendMessageStream(messages: [OpenAIMessage], apiKey: String, baseURL: String?, modelId: String, temperature: Double? = nil, reasoningEffort: String? = nil, apiType: APIType = .openAI, tools: [ToolDefinition]? = nil, providerId: String? = nil, endpointType: EndpointType = .openai) -> AsyncThrowingStream<LLMStreamEvent, Error> {
 
-        let contract = ProviderRegistry.shared.getContract(for: providerId)
+        let contract = providerRegistry.getContract(for: providerId)
         let adapter = getAdapter(for: contract, endpointType: endpointType)
         let protocolConfig = contract.protocolConfig
         let responseConfig = protocolConfig.response
@@ -232,7 +246,7 @@ class LLMService: LLMServiceProtocol {
         providerId: String? = nil,
         endpointType: EndpointType = .openai
     ) async throws -> String {
-        let contract = ProviderRegistry.shared.getContract(for: providerId)
+        let contract = providerRegistry.getContract(for: providerId)
         let protocolConfig = contract.protocolConfig
         let resolvedBaseURL = baseURLResolver.resolve(customURL: baseURL, providerId: providerId, apiType: apiType, endpointType: endpointType)
         let context = LLMRequestContext(
