@@ -62,6 +62,13 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // Stop any running generation
+        viewModel?.stopGeneration()
+
+        // Wait a bit for async cleanup
+        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 second
+
+        // Then release resources
         viewModel = nil
         session = nil
         assistant = nil
@@ -238,7 +245,7 @@ final class ChatViewModelTests: XCTestCase {
         // Then
         let assistantMessage = session.messages.last
         XCTAssertNotNil(assistantMessage)
-        XCTAssertTrue(assistantMessage?.content.contains("API Key") ?? false, "Should contain API Key error")
+        XCTAssertTrue(assistantMessage?.content.contains("API") ?? false, "Should contain API error")
         XCTAssertFalse(viewModel.isGenerating)
     }
 

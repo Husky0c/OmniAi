@@ -4,6 +4,9 @@ import SwiftData
 
 class MockToolServiceFactory: ToolServiceFactory {
     var mockToolService: ToolExecutionService?
+    private var cachedServices: [UUID: ToolExecutionService] = [:]
+    private let lock = NSLock()
+
     var releaseServiceCalled = false
     var releaseServicesCalled = false
     var disconnectAllCalled = false
@@ -16,19 +19,26 @@ class MockToolServiceFactory: ToolServiceFactory {
         if let mock = mockToolService {
             return mock
         }
-        // Return a real ToolExecutionService for tests that don't need mocking
-        return ToolExecutionService(sessionId: sessionId)
+
+        return lock.withLock {
+            if let cached = cachedServices[sessionId] {
+                return cached
+            }
+            let service = ToolExecutionService(sessionId: sessionId)
+            cachedServices[sessionId] = service
+            return service
+        }
     }
 
     func toolService(for session: ChatSession) -> ToolExecutionService {
-        if let mock = mockToolService {
-            return mock
-        }
-        return ToolExecutionService(sessionId: session.id)
+        toolService(for: session.id)
     }
 
     func releaseService(for sessionId: UUID) async {
         releaseServiceCalled = true
+        lock.withLock {
+            _ = cachedServices.removeValue(forKey: sessionId)
+        }
     }
 
     func releaseServices(excluding activeSessionIds: Set<UUID>) async {
