@@ -4,6 +4,7 @@ import SwiftData
 struct AssistantSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appServices) private var appServices
     @AppStorage(AppSettings.Keys.defaultModelId) private var defaultModelId: String = AppSettings.Defaults.defaultModelId
     @AppStorage(AppSettings.Keys.activeAPIKeyID) private var activeAPIKeyID: String = AppSettings.Defaults.activeAPIKeyID
     @Query(filter: #Predicate<APIKeys> { $0.invisible == false }, sort: \APIKeys.timestamp) private var apiKeys: [APIKeys]
@@ -228,7 +229,7 @@ struct AssistantSettingsView: View {
         modelContext.delete(assistant)
         for sessionId in sessionIds {
             Task {
-                await ToolSessionStore.shared.releaseService(for: sessionId)
+                await appServices.toolServiceFactory.releaseService(for: sessionId)
             }
         }
         dismiss()

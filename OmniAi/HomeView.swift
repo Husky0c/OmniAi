@@ -6,6 +6,7 @@ import UIKit
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appServices) private var appServices
     @State private var selectedSession: ChatSession?
     @State private var isSidebarOpen: Bool = false
     @State private var showSettings: Bool = false
@@ -45,7 +46,7 @@ struct HomeView: View {
             SettingsView()
         }
         .task {
-            await ToolSessionStore.shared.releaseServicesNotInModelContext(modelContext)
+            await appServices.toolServiceFactory.releaseServicesNotInModelContext(modelContext)
         }
     }
 }

@@ -3,6 +3,7 @@ import SwiftData
 
 struct ChatSidebarView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appServices) private var appServices
     @Query(sort: \Assistant.createdAt) private var assistants: [Assistant]
     @Binding var selectedSession: ChatSession?
     var onSessionSelected: (() -> Void)? = nil
@@ -148,7 +149,7 @@ struct ChatSidebarView: View {
             }
             modelContext.delete(session)
             Task {
-                await ToolSessionStore.shared.releaseService(for: sessionId)
+                await appServices.toolServiceFactory.releaseService(for: sessionId)
             }
         }
     }

@@ -140,7 +140,7 @@ final class ChatViewModel {
     }
 
     func connectMCPServers(enabledConfigs: [MCPServerConfig]) async {
-        await ToolSessionStore.shared.connectAssistantMCPServers(
+        await appServices.toolServiceFactory.connectAssistantMCPServers(
             for: session.id,
             assistant: session.assistant,
             enabledConfigs: enabledConfigs
@@ -157,15 +157,66 @@ final class ChatViewModel {
     ) {
         isGenerating = true
 
-        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == effectiveChannelId }),
-              let apiKeyString = appServices.keyStore.apiKeyString(for: activeKey),
-              !apiKeyString.isEmpty else {
-            assistantMessage.content = ChatErrorFormatter.render(.missingAPIKey, existingContent: assistantMessage.content)
-            isGenerating = false
-            refreshSortedMessages()
+        guard let (activeKey, apiKeyString) = validateAPIKey(effectiveChannelId, apiKeys) else {
+            handleAPIKeyError(assistantMessage)
             return
         }
 
+        let context = prepareRequestContext(
+            assistantMessage: assistantMessage,
+            activeKey: activeKey,
+            apiKeyString: apiKeyString,
+            effectiveModelId: effectiveModelId,
+            effectiveChannelId: effectiveChannelId,
+            toolRound: toolRound,
+            apiKeys: apiKeys
+        )
+
+        executeStreamRequest(context: context, titleConfig: titleConfig)
+    }
+
+    private func validateAPIKey(
+        _ channelId: String,
+        _ apiKeys: [APIKeys]
+    ) -> (APIKeys, String)? {
+        guard let activeKey = apiKeys.first(where: { $0.id.uuidString == channelId }),
+              let apiKeyString = appServices.keyStore.apiKeyString(for: activeKey),
+              !apiKeyString.isEmpty else {
+            return nil
+        }
+        return (activeKey, apiKeyString)
+    }
+
+    private func handleAPIKeyError(_ assistantMessage: ChatMessage) {
+        assistantMessage.content = ChatErrorFormatter.render(.missingAPIKey, existingContent: assistantMessage.content)
+        isGenerating = false
+        refreshSortedMessages()
+    }
+
+    private struct StreamRequestContext {
+        let assistantMessage: ChatMessage
+        let chatEngine: ChatEngine
+        let assistantSnapshot: ChatAssistantSnapshot
+        let channelSnapshot: ChatChannelSnapshot
+        let messageSnapshots: [ChatMessageSnapshot]
+        let toolDefinitions: [ToolDefinition]?
+        let toolRound: Int
+        let effectiveModelId: String
+        let effectiveChannelId: String
+        let apiKeys: [APIKeys]
+        let activeKey: APIKeys
+        let apiKeyString: String
+    }
+
+    private func prepareRequestContext(
+        assistantMessage: ChatMessage,
+        activeKey: APIKeys,
+        apiKeyString: String,
+        effectiveModelId: String,
+        effectiveChannelId: String,
+        toolRound: Int,
+        apiKeys: [APIKeys]
+    ) -> StreamRequestContext {
         let chatEngine = appServices.chatEngine()
         let assistantSnapshot = ChatAssistantSnapshot(
             systemPrompt: session.assistant?.systemPrompt,
@@ -184,7 +235,6 @@ final class ChatViewModel {
             endpointType: activeKey.endpointType,
             cachedCapabilities: activeKey.cachedCapabilities
         )
-        let assemblyConfig = chatEngine.messageAssemblyConfig(for: channelSnapshot.providerId)
         var messageSnapshots = session.messages
             .sorted { $0.createdAt < $1.createdAt }
             .filter { $0.id != assistantMessage.id }
@@ -194,134 +244,199 @@ final class ChatViewModel {
             messageSnapshots = Array(messageSnapshots.suffix(contextCount))
         }
 
+        let caps = ModelCapability.effective(for: effectiveModelId, cached: channelSnapshot.cachedCapabilities)
+        let toolService = appServices.toolServiceFactory.toolService(for: session.id)
+        let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
+
+        return StreamRequestContext(
+            assistantMessage: assistantMessage,
+            chatEngine: chatEngine,
+            assistantSnapshot: assistantSnapshot,
+            channelSnapshot: channelSnapshot,
+            messageSnapshots: messageSnapshots,
+            toolDefinitions: toolDefinitions,
+            toolRound: toolRound,
+            effectiveModelId: effectiveModelId,
+            effectiveChannelId: effectiveChannelId,
+            apiKeys: apiKeys,
+            activeKey: activeKey,
+            apiKeyString: apiKeyString
+        )
+    }
+
+    private func executeStreamRequest(
+        context: StreamRequestContext,
+        titleConfig: ChatTitleConfig
+    ) {
         currentGenerationTask?.cancel()
-        currentGenerationTask = Task { [weak self, session] in
+        currentGenerationTask = Task { [weak self] in
             guard let self else { return }
-
-            let aiMessages = ChatMessageAssembler.assemble(
-                messages: messageSnapshots,
-                systemPrompt: assistantSnapshot.systemPrompt,
-                assemblyConfig: assemblyConfig
-            )
-
-            let temperature = assistantSnapshot.temperature
-            let startTime = Date()
-            var hasReceivedFirstChunk = false
-            let modelId = assistantSnapshot.modelId
-
-            let caps = ModelCapability.effective(for: modelId, cached: channelSnapshot.cachedCapabilities)
-            let toolService = appServices.toolServiceFactory.toolService(for: session.id)
-            let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
-
-            let response = chatEngine.streamResponse(
-                request: ChatEngineRequest(
-                    messages: aiMessages,
-                    apiKey: channelSnapshot.apiKey,
-                    baseURL: channelSnapshot.requestURL,
-                    modelId: modelId,
-                    temperature: temperature,
-                    reasoningEffort: assistantSnapshot.reasoningEffort,
-                    apiType: channelSnapshot.apiType,
-                    tools: toolDefinitions,
-                    providerId: channelSnapshot.providerId,
-                    endpointType: channelSnapshot.endpointType
-                )
-            )
-
-            do {
-                for try await event in response.events {
-                    switch event {
-                    case .chunk(let text):
-                        if !hasReceivedFirstChunk {
-                            hasReceivedFirstChunk = true
-                            assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
-                        }
-                        assistantMessage.content += text
-                    case .thinking(let text):
-                        assistantMessage.thinkingContent = (assistantMessage.thinkingContent ?? "") + text
-                    case .usage(let promptTokens, let completionTokens, let totalTokens):
-                        assistantMessage.promptTokens = promptTokens
-                        assistantMessage.completionTokens = completionTokens
-                        assistantMessage.totalTokens = totalTokens
-                    case .toolCallName(let toolName):
-                        if !hasReceivedFirstChunk {
-                            hasReceivedFirstChunk = true
-                            assistantMessage.firstTokenLatency = Date().timeIntervalSince(startTime)
-                        }
-                        assistantMessage.toolCallName = toolName
-                    case .finishReason:
-                        break
-                    case .failed(let error):
-                        assistantMessage.content = ChatErrorFormatter.render(error, existingContent: assistantMessage.content)
-                    }
-                }
-            } catch is CancellationError {
-                // 用户主动打断，保留已生成内容
-            } catch {
-                let chatError = ChatEngineError.from(error)
-                if !assistantMessage.content.contains(chatError.localizedDescription) {
-                    assistantMessage.content = ChatErrorFormatter.render(chatError, existingContent: assistantMessage.content)
-                }
-            }
-
-            let toolCalls = await response.toolCalls()
-            let shouldReenter = await response.needsToolReentry()
-            if shouldReenter, !toolCalls.isEmpty {
-                guard ChatEngine.canRunToolRound(toolRound, maxRounds: assistantSnapshot.maxToolCallRounds) else {
-                    assistantMessage.content = ChatErrorFormatter.render(
-                        .toolCallLimitExceeded(maxRounds: assistantSnapshot.maxToolCallRounds),
-                        existingContent: assistantMessage.content
-                    )
-                    isGenerating = false
-                    session.lastModified = Date()
-                    refreshSortedMessages()
-                    return
-                }
-
-                if let toolData = try? JSONEncoder().encode(toolCalls) {
-                    assistantMessage.toolCallsData = toolData
-                }
-
-                session.lastModified = Date()
-
-                for toolCall in toolCalls {
-                    guard let name = toolCall.function?.name, let args = toolCall.function?.arguments else {
-                        continue
-                    }
-                    let result = await appServices.toolServiceFactory.toolService(for: session.id).execute(name: name, argumentsJSON: args)
-                    let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: modelId)
-                    toolMessage.toolCallId = toolCall.id
-                    session.messages.append(toolMessage)
-                }
-
-                let newAssistantMessage = ChatMessage(content: "", role: .assistant, session: session, modelId: modelId)
-                session.messages.append(newAssistantMessage)
-                refreshSortedMessages()
-                isGenerating = false
-
-                fetchAIResponse(
-                    for: newAssistantMessage,
-                    toolRound: toolRound + 1,
-                    effectiveModelId: modelId,
-                    effectiveChannelId: effectiveChannelId,
-                    apiKeys: apiKeys,
-                    titleConfig: titleConfig
-                )
-                return
-            }
-
-            isGenerating = false
-            session.lastModified = Date()
-            refreshSortedMessages()
-
-            await maybeAutoTitle(
-                apiKeys: apiKeys,
-                activeKey: activeKey,
-                activeKeyString: apiKeyString,
-                effectiveModelId: effectiveModelId,
-                titleConfig: titleConfig
-            )
+            await processStreamEvents(context: context, titleConfig: titleConfig)
         }
+    }
+
+    private func processStreamEvents(
+        context: StreamRequestContext,
+        titleConfig: ChatTitleConfig
+    ) async {
+        let aiMessages = ChatMessageAssembler.assemble(
+            messages: context.messageSnapshots,
+            systemPrompt: context.assistantSnapshot.systemPrompt,
+            assemblyConfig: context.chatEngine.messageAssemblyConfig(for: context.channelSnapshot.providerId)
+        )
+
+        let response = context.chatEngine.streamResponse(
+            request: ChatEngineRequest(
+                messages: aiMessages,
+                apiKey: context.channelSnapshot.apiKey,
+                baseURL: context.channelSnapshot.requestURL,
+                modelId: context.effectiveModelId,
+                temperature: context.assistantSnapshot.temperature,
+                reasoningEffort: context.assistantSnapshot.reasoningEffort,
+                apiType: context.channelSnapshot.apiType,
+                tools: context.toolDefinitions,
+                providerId: context.channelSnapshot.providerId,
+                endpointType: context.channelSnapshot.endpointType
+            )
+        )
+
+        let startTime = Date()
+        var hasReceivedFirstChunk = false
+
+        do {
+            for try await event in response.events {
+                handleStreamEvent(event, message: context.assistantMessage, startTime: startTime, hasReceivedFirstChunk: &hasReceivedFirstChunk)
+            }
+        } catch is CancellationError {
+            // 用户主动打断，保留已生成内容
+        } catch {
+            handleStreamError(error, message: context.assistantMessage)
+        }
+
+        await handleToolCallsIfNeeded(response: response, context: context, titleConfig: titleConfig)
+    }
+
+    private func handleStreamEvent(
+        _ event: ChatEngineEvent,
+        message: ChatMessage,
+        startTime: Date,
+        hasReceivedFirstChunk: inout Bool
+    ) {
+        switch event {
+        case .chunk(let text):
+            if !hasReceivedFirstChunk {
+                hasReceivedFirstChunk = true
+                message.firstTokenLatency = Date().timeIntervalSince(startTime)
+            }
+            message.content += text
+        case .thinking(let text):
+            message.thinkingContent = (message.thinkingContent ?? "") + text
+        case .usage(let promptTokens, let completionTokens, let totalTokens):
+            message.promptTokens = promptTokens
+            message.completionTokens = completionTokens
+            message.totalTokens = totalTokens
+        case .toolCallName(let toolName):
+            if !hasReceivedFirstChunk {
+                hasReceivedFirstChunk = true
+                message.firstTokenLatency = Date().timeIntervalSince(startTime)
+            }
+            message.toolCallName = toolName
+        case .finishReason:
+            break
+        case .failed(let error):
+            message.content = ChatErrorFormatter.render(error, existingContent: message.content)
+        }
+    }
+
+    private func handleStreamError(_ error: Error, message: ChatMessage) {
+        let chatError = ChatEngineError.from(error)
+        if !message.content.contains(chatError.localizedDescription) {
+            message.content = ChatErrorFormatter.render(chatError, existingContent: message.content)
+        }
+    }
+
+    private func handleToolCallsIfNeeded(
+        response: ChatEngineResponse,
+        context: StreamRequestContext,
+        titleConfig: ChatTitleConfig
+    ) async {
+        let toolCalls = await response.toolCalls()
+        let shouldReenter = await response.needsToolReentry()
+
+        guard shouldReenter, !toolCalls.isEmpty else {
+            await finishGeneration(context: context, titleConfig: titleConfig)
+            return
+        }
+
+        guard ChatEngine.canRunToolRound(context.toolRound, maxRounds: context.assistantSnapshot.maxToolCallRounds) else {
+            handleToolCallLimitExceeded(context.assistantMessage, context.assistantSnapshot.maxToolCallRounds)
+            return
+        }
+
+        await executeToolCalls(toolCalls, context: context, titleConfig: titleConfig)
+    }
+
+    private func handleToolCallLimitExceeded(_ message: ChatMessage, _ maxRounds: Int) {
+        message.content = ChatErrorFormatter.render(
+            .toolCallLimitExceeded(maxRounds: maxRounds),
+            existingContent: message.content
+        )
+        isGenerating = false
+        session.lastModified = Date()
+        refreshSortedMessages()
+    }
+
+    private func executeToolCalls(
+        _ toolCalls: [OpenAIToolCall],
+        context: StreamRequestContext,
+        titleConfig: ChatTitleConfig
+    ) async {
+        if let toolData = try? JSONEncoder().encode(toolCalls) {
+            context.assistantMessage.toolCallsData = toolData
+        }
+
+        session.lastModified = Date()
+
+        for toolCall in toolCalls {
+            guard let name = toolCall.function?.name, let args = toolCall.function?.arguments else {
+                continue
+            }
+            let result = await appServices.toolServiceFactory.toolService(for: session.id).execute(name: name, argumentsJSON: args)
+            let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: context.effectiveModelId)
+            toolMessage.toolCallId = toolCall.id
+            session.messages.append(toolMessage)
+        }
+
+        let newAssistantMessage = ChatMessage(content: "", role: .assistant, session: session, modelId: context.effectiveModelId)
+        session.messages.append(newAssistantMessage)
+        refreshSortedMessages()
+        isGenerating = false
+
+        fetchAIResponse(
+            for: newAssistantMessage,
+            toolRound: context.toolRound + 1,
+            effectiveModelId: context.effectiveModelId,
+            effectiveChannelId: context.effectiveChannelId,
+            apiKeys: context.apiKeys,
+            titleConfig: titleConfig
+        )
+    }
+
+    private func finishGeneration(
+        context: StreamRequestContext,
+        titleConfig: ChatTitleConfig
+    ) async {
+        isGenerating = false
+        session.lastModified = Date()
+        refreshSortedMessages()
+
+        await maybeAutoTitle(
+            apiKeys: context.apiKeys,
+            activeKey: context.activeKey,
+            activeKeyString: context.apiKeyString,
+            effectiveModelId: context.effectiveModelId,
+            titleConfig: titleConfig
+        )
     }
 
     private func maybeAutoTitle(
