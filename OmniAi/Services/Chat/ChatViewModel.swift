@@ -164,7 +164,6 @@ final class ChatViewModel {
 
     private func fetchAIResponse(
         for assistantMessage: ChatMessage,
-        toolRound: Int = 0,
         effectiveModelId: String,
         effectiveChannelId: String,
         apiKeys: [APIKeys],
@@ -177,17 +176,53 @@ final class ChatViewModel {
             return
         }
 
-        let context = prepareRequestContext(
-            assistantMessage: assistantMessage,
-            activeKey: activeKey,
-            apiKeyString: apiKeyString,
-            effectiveModelId: effectiveModelId,
-            effectiveChannelId: effectiveChannelId,
-            toolRound: toolRound,
-            apiKeys: apiKeys
-        )
+        currentGenerationTask?.cancel()
+        currentGenerationTask = Task { [weak self] in
+            guard let self else { return }
 
-        executeStreamRequest(context: context, titleConfig: titleConfig)
+            var toolRound = 0
+            var currentMessage = assistantMessage
+
+            while true {
+                // Check cancellation at loop start
+                guard !Task.isCancelled else { return }
+
+                // Build fresh context for this round
+                let context = prepareRequestContext(
+                    assistantMessage: currentMessage,
+                    activeKey: activeKey,
+                    apiKeyString: apiKeyString,
+                    effectiveModelId: effectiveModelId,
+                    effectiveChannelId: effectiveChannelId,
+                    toolRound: toolRound,
+                    apiKeys: apiKeys
+                )
+
+                // Stream one round
+                let response = await streamSingleRound(context: context)
+
+                // Check for tool calls
+                let toolCalls = await response.toolCalls()
+                let shouldReenter = await response.needsToolReentry()
+
+                guard shouldReenter, !toolCalls.isEmpty else {
+                    await finishGeneration(context: context, titleConfig: titleConfig)
+                    break
+                }
+
+                // Check round limit
+                guard ChatEngine.canRunToolRound(toolRound, maxRounds: context.assistantSnapshot.maxToolCallRounds) else {
+                    handleToolCallLimitExceeded(currentMessage, context.assistantSnapshot.maxToolCallRounds)
+                    break
+                }
+
+                // Execute tools and get next message
+                currentMessage = await executeToolCallsForNextRound(toolCalls, context: context)
+                toolRound += 1
+
+                // Old context is now eligible for GC
+            }
+        }
     }
 
     private func validateAPIKey(
@@ -279,56 +314,14 @@ final class ChatViewModel {
         )
     }
 
-    private func executeStreamRequest(
-        context: StreamRequestContext,
-        titleConfig: ChatTitleConfig
-    ) {
-        currentGenerationTask?.cancel()
-        currentGenerationTask = Task { [weak self] in
-            guard let self else { return }
-            await processStreamEvents(context: context, titleConfig: titleConfig)
-        }
-    }
-
-    private func processStreamEvents(
-        context: StreamRequestContext,
-        titleConfig: ChatTitleConfig
-    ) async {
-        let aiMessages = ChatMessageAssembler.assemble(
-            messages: context.messageSnapshots,
-            systemPrompt: context.assistantSnapshot.systemPrompt,
-            assemblyConfig: context.chatEngine.messageAssemblyConfig(for: context.channelSnapshot.providerId)
+    private func handleToolCallLimitExceeded(_ message: ChatMessage, _ maxRounds: Int) {
+        message.content = ChatErrorFormatter.render(
+            .toolCallLimitExceeded(maxRounds: maxRounds),
+            existingContent: message.content
         )
-
-        let response = context.chatEngine.streamResponse(
-            request: ChatEngineRequest(
-                messages: aiMessages,
-                apiKey: context.channelSnapshot.apiKey,
-                baseURL: context.channelSnapshot.requestURL,
-                modelId: context.effectiveModelId,
-                temperature: context.assistantSnapshot.temperature,
-                reasoningEffort: context.assistantSnapshot.reasoningEffort,
-                apiType: context.channelSnapshot.apiType,
-                tools: context.toolDefinitions,
-                providerId: context.channelSnapshot.providerId,
-                endpointType: context.channelSnapshot.endpointType
-            )
-        )
-
-        let startTime = Date()
-        var hasReceivedFirstChunk = false
-
-        do {
-            for try await event in response.events {
-                handleStreamEvent(event, message: context.assistantMessage, startTime: startTime, hasReceivedFirstChunk: &hasReceivedFirstChunk)
-            }
-        } catch is CancellationError {
-            // 用户主动打断，保留已生成内容
-        } catch {
-            handleStreamError(error, message: context.assistantMessage)
-        }
-
-        await handleToolCallsIfNeeded(response: response, context: context, titleConfig: titleConfig)
+        isGenerating = false
+        session.lastModified = Date()
+        refreshSortedMessages()
     }
 
     private func handleStreamEvent(
@@ -370,42 +363,50 @@ final class ChatViewModel {
         }
     }
 
-    private func handleToolCallsIfNeeded(
-        response: ChatEngineResponse,
-        context: StreamRequestContext,
-        titleConfig: ChatTitleConfig
-    ) async {
-        let toolCalls = await response.toolCalls()
-        let shouldReenter = await response.needsToolReentry()
-
-        guard shouldReenter, !toolCalls.isEmpty else {
-            await finishGeneration(context: context, titleConfig: titleConfig)
-            return
-        }
-
-        guard ChatEngine.canRunToolRound(context.toolRound, maxRounds: context.assistantSnapshot.maxToolCallRounds) else {
-            handleToolCallLimitExceeded(context.assistantMessage, context.assistantSnapshot.maxToolCallRounds)
-            return
-        }
-
-        await executeToolCalls(toolCalls, context: context, titleConfig: titleConfig)
-    }
-
-    private func handleToolCallLimitExceeded(_ message: ChatMessage, _ maxRounds: Int) {
-        message.content = ChatErrorFormatter.render(
-            .toolCallLimitExceeded(maxRounds: maxRounds),
-            existingContent: message.content
+    private func streamSingleRound(
+        context: StreamRequestContext
+    ) async -> ChatEngineResponse {
+        let aiMessages = ChatMessageAssembler.assemble(
+            messages: context.messageSnapshots,
+            systemPrompt: context.assistantSnapshot.systemPrompt,
+            assemblyConfig: context.chatEngine.messageAssemblyConfig(for: context.channelSnapshot.providerId)
         )
-        isGenerating = false
-        session.lastModified = Date()
-        refreshSortedMessages()
+
+        let response = context.chatEngine.streamResponse(
+            request: ChatEngineRequest(
+                messages: aiMessages,
+                apiKey: context.channelSnapshot.apiKey,
+                baseURL: context.channelSnapshot.requestURL,
+                modelId: context.effectiveModelId,
+                temperature: context.assistantSnapshot.temperature,
+                reasoningEffort: context.assistantSnapshot.reasoningEffort,
+                apiType: context.channelSnapshot.apiType,
+                tools: context.toolDefinitions,
+                providerId: context.channelSnapshot.providerId,
+                endpointType: context.channelSnapshot.endpointType
+            )
+        )
+
+        let startTime = Date()
+        var hasReceivedFirstChunk = false
+
+        do {
+            for try await event in response.events {
+                handleStreamEvent(event, message: context.assistantMessage, startTime: startTime, hasReceivedFirstChunk: &hasReceivedFirstChunk)
+            }
+        } catch is CancellationError {
+            // 用户主动打断，保留已生成内容
+        } catch {
+            handleStreamError(error, message: context.assistantMessage)
+        }
+
+        return response
     }
 
-    private func executeToolCalls(
+    private func executeToolCallsForNextRound(
         _ toolCalls: [OpenAIToolCall],
-        context: StreamRequestContext,
-        titleConfig: ChatTitleConfig
-    ) async {
+        context: StreamRequestContext
+    ) async -> ChatMessage {
         if let toolData = try? JSONEncoder().encode(toolCalls) {
             context.assistantMessage.toolCallsData = toolData
         }
@@ -427,14 +428,7 @@ final class ChatViewModel {
         refreshSortedMessages()
         isGenerating = false
 
-        fetchAIResponse(
-            for: newAssistantMessage,
-            toolRound: context.toolRound + 1,
-            effectiveModelId: context.effectiveModelId,
-            effectiveChannelId: context.effectiveChannelId,
-            apiKeys: context.apiKeys,
-            titleConfig: titleConfig
-        )
+        return newAssistantMessage
     }
 
     private func finishGeneration(
