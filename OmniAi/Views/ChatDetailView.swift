@@ -33,16 +33,22 @@ struct ChatDetailView: View {
         )
     }
 
+    private var config: ChatDetailConfig {
+        ChatDetailConfig(
+            activeAPIKeyID: activeAPIKeyID,
+            defaultModelId: defaultModelId,
+            titleConfig: titleConfig,
+            apiKeys: apiKeys,
+            mcpServers: mcpServers
+        )
+    }
+
     var body: some View {
         ChatDetailContentView(
             session: session,
             modelContext: modelContext,
             appServices: appServices,
-            activeAPIKeyID: activeAPIKeyID,
-            defaultModelId: defaultModelId,
-            titleConfig: titleConfig,
-            apiKeys: apiKeys,
-            mcpServers: mcpServers,
+            config: config,
             onToggleSidebar: onToggleSidebar,
             onOpenSettings: onOpenSettings
         )
@@ -52,11 +58,7 @@ struct ChatDetailView: View {
 
 private struct ChatDetailContentView: View {
     let session: ChatSession
-    let activeAPIKeyID: String
-    let defaultModelId: String
-    let titleConfig: ChatTitleConfig
-    let apiKeys: [APIKeys]
-    let mcpServers: [MCPServerConfig]
+    let config: ChatDetailConfig
     let onToggleSidebar: (() -> Void)?
     let onOpenSettings: (() -> Void)?
 
@@ -67,35 +69,27 @@ private struct ChatDetailContentView: View {
         session: ChatSession,
         modelContext: ModelContext,
         appServices: AppServices,
-        activeAPIKeyID: String,
-        defaultModelId: String,
-        titleConfig: ChatTitleConfig,
-        apiKeys: [APIKeys],
-        mcpServers: [MCPServerConfig],
+        config: ChatDetailConfig,
         onToggleSidebar: (() -> Void)?,
         onOpenSettings: (() -> Void)?
     ) {
         self.session = session
-        self.activeAPIKeyID = activeAPIKeyID
-        self.defaultModelId = defaultModelId
-        self.titleConfig = titleConfig
-        self.apiKeys = apiKeys
-        self.mcpServers = mcpServers
+        self.config = config
         self.onToggleSidebar = onToggleSidebar
         self.onOpenSettings = onOpenSettings
         _viewModel = State(initialValue: ChatViewModel(session: session, modelContext: modelContext, appServices: appServices))
     }
 
     private var effectiveChannelId: String {
-        session.assistant?.channelId ?? activeAPIKeyID
+        session.assistant?.channelId ?? config.activeAPIKeyID
     }
 
     private var effectiveModelId: String {
-        session.assistant?.modelId ?? defaultModelId
+        session.assistant?.modelId ?? config.defaultModelId
     }
 
     private var effectiveChannel: APIKeys? {
-        apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
+        config.apiKeys.first(where: { $0.id.uuidString == effectiveChannelId })
     }
 
     private func messageContext(for message: ChatMessage, at index: Int) -> (showHeader: Bool, isIntermediateTool: Bool) {
@@ -135,8 +129,8 @@ private struct ChatDetailContentView: View {
                     message: message,
                     effectiveModelId: effectiveModelId,
                     effectiveChannelId: effectiveChannelId,
-                    apiKeys: apiKeys,
-                    titleConfig: titleConfig
+                    apiKeys: config.apiKeys,
+                    titleConfig: config.titleConfig
                 )
             },
             onTapImage: { data in
@@ -171,7 +165,7 @@ private struct ChatDetailContentView: View {
                     scrollProxy.scrollTo(lastID, anchor: .bottom)
                 }
                 Task {
-                    await viewModel.connectMCPServers(enabledConfigs: mcpServers)
+                    await viewModel.connectMCPServers(enabledConfigs: config.mcpServers)
                 }
             }
             .onChange(of: session.messages.count) { _, _ in
@@ -184,9 +178,9 @@ private struct ChatDetailContentView: View {
             }
         }
         .task(id: session.id) {
-            await viewModel.connectMCPServers(enabledConfigs: mcpServers)
+            await viewModel.connectMCPServers(enabledConfigs: config.mcpServers)
         }
-        .onChange(of: mcpServers) { _, newServers in
+        .onChange(of: config.mcpServers) { _, newServers in
             Task {
                 await viewModel.connectMCPServers(enabledConfigs: newServers)
             }
@@ -199,8 +193,8 @@ private struct ChatDetailContentView: View {
                         attachments: attachments,
                         effectiveModelId: effectiveModelId,
                         effectiveChannelId: effectiveChannelId,
-                        apiKeys: apiKeys,
-                        titleConfig: titleConfig
+                        apiKeys: config.apiKeys,
+                        titleConfig: config.titleConfig
                     )
                 },
                 isGenerating: viewModel.isGenerating,
@@ -261,13 +255,13 @@ private struct ChatDetailContentView: View {
 #endif
         .sheet(isPresented: $viewModel.showModelProviderSheet) {
             ModelProviderSheet(
-                apiKeys: Array(apiKeys),
+                apiKeys: Array(config.apiKeys),
                 activeAPIKeyID: Binding(
-                    get: { session.assistant?.channelId ?? activeAPIKeyID },
+                    get: { session.assistant?.channelId ?? config.activeAPIKeyID },
                     set: { session.assistant?.channelId = $0 }
                 ),
                 defaultModelId: Binding(
-                    get: { session.assistant?.modelId ?? defaultModelId },
+                    get: { session.assistant?.modelId ?? config.defaultModelId },
                     set: { session.assistant?.modelId = $0 }
                 )
             )

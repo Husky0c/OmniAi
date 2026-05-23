@@ -88,12 +88,23 @@ struct ImageViewer: View {
                 Spacer()
             }
         }
-        .statusBarHidden(true)
+        .imageViewerStatusBarHidden()
         .onAppear {
             scale = 1
             offset = .zero
             lastScale = 1
             lastOffset = .zero
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func imageViewerStatusBarHidden() -> some View {
+#if canImport(UIKit)
+        statusBarHidden(true)
+#else
+        self
+#endif
     }
 }
