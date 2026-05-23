@@ -35,13 +35,21 @@ final class MCPServerConfig {
 
     var arguments: [String] {
         get {
-            guard let data = argumentsJSON?.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([String].self, from: data)
-            else { return [] }
-            return arr
+            CodableJSONStorage.decode(
+                [String].self,
+                from: argumentsJSON,
+                fallback: [],
+                owner: "MCPServerConfig",
+                field: "argumentsJSON"
+            )
         }
         set {
-            argumentsJSON = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
+            argumentsJSON = CodableJSONStorage.encode(
+                newValue,
+                isEmpty: \.isEmpty,
+                owner: "MCPServerConfig",
+                field: "argumentsJSON"
+            )
         }
     }
 
@@ -59,7 +67,12 @@ final class MCPServerConfig {
         self.name = name
         self.transportTypeRaw = transportType.rawValue
         self.command = command
-        self.argumentsJSON = arguments.isEmpty ? nil : (try? JSONEncoder().encode(arguments)).flatMap { String(data: $0, encoding: .utf8) }
+        self.argumentsJSON = CodableJSONStorage.encode(
+            arguments,
+            isEmpty: \.isEmpty,
+            owner: "MCPServerConfig",
+            field: "argumentsJSON"
+        )
         self.serverURL = serverURL
         self.authToken = authToken
         self.isEnabled = isEnabled

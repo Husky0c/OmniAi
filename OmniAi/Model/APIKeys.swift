@@ -66,25 +66,41 @@ class APIKeys{
     
     var cachedCapabilities: [String: ModelCapability] {
         get {
-            guard let data = cachedCapabilitiesJSON?.data(using: .utf8),
-                  let dict = try? JSONDecoder().decode([String: ModelCapability].self, from: data)
-            else { return [:] }
-            return dict
+            CodableJSONStorage.decode(
+                [String: ModelCapability].self,
+                from: cachedCapabilitiesJSON,
+                fallback: [:],
+                owner: "APIKeys",
+                field: "cachedCapabilitiesJSON"
+            )
         }
         set {
-            cachedCapabilitiesJSON = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).map { String(data: $0, encoding: .utf8) } ?? nil
+            cachedCapabilitiesJSON = CodableJSONStorage.encode(
+                newValue,
+                isEmpty: \.isEmpty,
+                owner: "APIKeys",
+                field: "cachedCapabilitiesJSON"
+            )
         }
     }
     
     var selectedModelIDs: [String] {
         get {
-            guard let data = selectedModelIDsJSON?.data(using: .utf8),
-                  let ids = try? JSONDecoder().decode([String].self, from: data)
-            else { return [] }
-            return ids
+            CodableJSONStorage.decode(
+                [String].self,
+                from: selectedModelIDsJSON,
+                fallback: [],
+                owner: "APIKeys",
+                field: "selectedModelIDsJSON"
+            )
         }
         set {
-            selectedModelIDsJSON = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).map { String(data: $0, encoding: .utf8) } ?? nil
+            selectedModelIDsJSON = CodableJSONStorage.encode(
+                newValue,
+                isEmpty: \.isEmpty,
+                owner: "APIKeys",
+                field: "selectedModelIDsJSON"
+            )
         }
     }
     

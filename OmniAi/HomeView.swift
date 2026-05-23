@@ -1,8 +1,5 @@
 import SwiftUI
 import SwiftData
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
@@ -82,31 +79,17 @@ struct MainStageView: View {
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button(action: { onOpenSettings?() }) {
-#if canImport(UIKit)
-                                Group {
-                                    if let image = AvatarManager.loadAsync() {
-                                        Image(uiImage: image)
-                                            .resizable()
-                                            .scaledToFill()
-                                    } else {
-                                        Image(systemName: "person.crop.circle.fill")
-                                            .resizable()
-                                            .foregroundStyle(.blue)
-                                    }
-                                }
+                                AvatarImageView(image: AvatarManager.loadAsync())
                                 .frame(width: 28, height: 28)
                                 .clipShape(Circle())
-#else
-                                Image(systemName: "person.crop.circle.fill")
-                                    .foregroundStyle(.blue)
-#endif
                             }
                         }
 #else
                         ToolbarItem(placement: .primaryAction) {
                             Button(action: { onOpenSettings?() }) {
-                                Image(systemName: "person.crop.circle.fill")
-                                    .foregroundStyle(.blue)
+                                AvatarImageView(image: AvatarManager.loadAsync())
+                                    .frame(width: 28, height: 28)
+                                    .clipShape(Circle())
                             }
                         }
 #endif

@@ -27,8 +27,6 @@ final class ChatEngineTests: XCTestCase {
                 usage.append((promptTokens, completionTokens, totalTokens))
             case .toolCallName, .finishReason:
                 XCTFail("Unexpected tool call name")
-            case .failed(let error):
-                XCTFail("Unexpected failure: \(error.localizedDescription)")
             }
         }
 
@@ -102,7 +100,7 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(result, "Generated title")
     }
 
-    func testStreamErrorEmitsFailedEventBeforeThrowing() async {
+    func testStreamErrorThrowsChatEngineError() async {
         let mock = MockLLMService()
         let context = LLMRequestContext(providerId: "openai", endpointType: .openai, modelId: "gpt-4o", phase: .streamParse)
         mock.streamingError = AppError.streamParseFailure(context: context, snippet: "not-json", underlying: nil)
@@ -110,19 +108,16 @@ final class ChatEngineTests: XCTestCase {
 
         let response = engine.streamResponse(request: makeRequest())
 
-        var failedError: ChatEngineError?
         do {
             for try await event in response.events {
-                if case .failed(let error) = event {
-                    failedError = error
-                }
+                XCTFail("Unexpected event: \(event)")
             }
             XCTFail("Expected stream to throw")
+        } catch let error as ChatEngineError {
+            XCTAssertEqual(error.localizedDescription, "响应解析失败，请检查当前服务商是否兼容所选端点。")
         } catch {
-            // Expected. The failed event is emitted before the throwing finish.
+            XCTFail("Expected ChatEngineError, got \(error)")
         }
-
-        XCTAssertEqual(failedError?.localizedDescription, "响应解析失败，请检查当前服务商是否兼容所选端点。")
     }
 
     func testToolCallLimitExceededHasUserVisibleDescription() {

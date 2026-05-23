@@ -351,15 +351,12 @@ final class ChatViewModel {
             message.toolCallName = toolName
         case .finishReason:
             break
-        case .failed(let error):
-            message.content = ChatErrorFormatter.render(error, existingContent: message.content)
         }
     }
 
-    private func handleStreamError(_ error: Error, message: ChatMessage) {
-        let chatError = ChatEngineError.from(error)
-        if !message.content.contains(chatError.localizedDescription) {
-            message.content = ChatErrorFormatter.render(chatError, existingContent: message.content)
+    private func handleStreamError(_ error: ChatEngineError, message: ChatMessage) {
+        if !message.content.contains(error.localizedDescription) {
+            message.content = ChatErrorFormatter.render(error, existingContent: message.content)
         }
     }
 
@@ -396,8 +393,10 @@ final class ChatViewModel {
             }
         } catch is CancellationError {
             // 用户主动打断，保留已生成内容
-        } catch {
+        } catch let error as ChatEngineError {
             handleStreamError(error, message: context.assistantMessage)
+        } catch {
+            handleStreamError(.unknown(error.localizedDescription), message: context.assistantMessage)
         }
 
         return response

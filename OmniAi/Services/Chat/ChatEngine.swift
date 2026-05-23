@@ -119,7 +119,6 @@ enum ChatEngineEvent {
     case usage(promptTokens: Int, completionTokens: Int, totalTokens: Int)
     case toolCallName(String)
     case finishReason(String?)
-    case failed(ChatEngineError)
 }
 
 struct ChatEngineResponse {
@@ -194,8 +193,7 @@ final class ChatEngine {
                     }
                     continuation.finish()
                 } catch {
-                    continuation.yield(.failed(ChatEngineError.from(error)))
-                    continuation.finish(throwing: error)
+                    continuation.finish(throwing: ChatEngineError.from(error))
                 }
             }
         }

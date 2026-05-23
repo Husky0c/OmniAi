@@ -69,6 +69,13 @@ final class APIKeysTests: XCTestCase {
         XCTAssertEqual(key.selectedModelIDs, [])
     }
 
+    func testSelectedModelIDsDecodeFailureFallsBackToEmptyArray() {
+        let key = APIKeys(name: "Test")
+        key.selectedModelIDsJSON = "{not-json"
+
+        XCTAssertEqual(key.selectedModelIDs, [])
+    }
+
     func testCachedCapabilities() {
         let key = APIKeys(name: "Test")
         let caps = [
@@ -89,6 +96,13 @@ final class APIKeysTests: XCTestCase {
 
         key.cachedCapabilities = [:]
         XCTAssertNil(key.cachedCapabilitiesJSON)
+        XCTAssertEqual(key.cachedCapabilities, [:])
+    }
+
+    func testCachedCapabilitiesDecodeFailureFallsBackToEmptyDictionary() {
+        let key = APIKeys(name: "Test")
+        key.cachedCapabilitiesJSON = #"{"gpt-4o":{"reasoning":"yes"}}"#
+
         XCTAssertEqual(key.cachedCapabilities, [:])
     }
 
