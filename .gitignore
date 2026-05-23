@@ -8,6 +8,9 @@ CLAUDE.md
 .claude/
 .mcp.json
 
+# codex
+.codex/
+
 # macOS
 .DS_Store
 ._*
