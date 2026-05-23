@@ -34,9 +34,10 @@ final class ChatViewModel {
         apiKeys: [APIKeys],
         titleConfig: ChatTitleConfig
     ) {
-        guard !text.isEmpty || !attachments.isEmpty else { return }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
 
-        let userMessage = ChatMessage(content: text, role: .user, session: session, modelId: effectiveModelId)
+        let userMessage = ChatMessage(content: trimmedText, role: .user, session: session, modelId: effectiveModelId)
         if !attachments.isEmpty {
             userMessage.attachments = attachments.map { input in
                 MessageAttachment(type: input.type, name: input.name, data: input.data, thumbnailData: input.thumbnailData)
@@ -91,6 +92,19 @@ final class ChatViewModel {
                 titleConfig: titleConfig
             )
         } else {
+            // Delete all messages after this assistant message
+            let messages = sortedMessages
+            if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+                let toDelete = messages[(idx + 1)...]
+                for msg in toDelete {
+                    modelContext.delete(msg)
+                }
+                session.messages.removeAll { msg in
+                    toDelete.contains { $0.id == msg.id }
+                }
+            }
+
+            // Clear and regenerate this assistant message
             message.content = ""
             message.firstTokenLatency = nil
             message.promptTokens = nil
@@ -100,6 +114,7 @@ final class ChatViewModel {
             message.toolCallsData = nil
             message.toolCallId = nil
             message.toolCallName = nil
+            refreshSortedMessages()
             fetchAIResponse(
                 for: message,
                 effectiveModelId: effectiveModelId,
