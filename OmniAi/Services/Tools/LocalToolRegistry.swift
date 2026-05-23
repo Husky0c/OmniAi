@@ -1,6 +1,6 @@
 import Foundation
 
-final class LocalToolRegistry {
+nonisolated final class LocalToolRegistry {
     typealias ToolHandler = @Sendable (String) async -> String
 
     private var handlers: [String: ToolHandler] = [:]

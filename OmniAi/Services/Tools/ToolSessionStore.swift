@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import SwiftData
 
-final class ToolSessionStore: ToolServiceFactory {
+nonisolated final class ToolSessionStore: ToolServiceFactory {
     static let shared = ToolSessionStore()
 
     private let logger = Logger(subsystem: "com.omniai.tools", category: "ToolSessionStore")

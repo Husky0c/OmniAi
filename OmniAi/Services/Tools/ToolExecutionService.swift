@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-final class ToolExecutionService {
+nonisolated final class ToolExecutionService {
     private let logger = Logger(subsystem: "com.omniai.tools", category: "ToolExecutionService")
 
     let sessionId: UUID

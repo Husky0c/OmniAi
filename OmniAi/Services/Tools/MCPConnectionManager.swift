@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-final class MCPConnectionManager {
+nonisolated final class MCPConnectionManager {
     private let logger = Logger(subsystem: "com.omniai.mcp", category: "ConnectionManager")
 
     private var transports: [String: MCPTransport] = [:]
