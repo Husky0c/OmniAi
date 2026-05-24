@@ -21,15 +21,10 @@ struct ToolCallBlockView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if isExpanded {
-                        Image(systemName: "chevron.down")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Image(systemName: "chevron.forward")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -70,6 +65,10 @@ struct ToolCallBlockView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.95, anchor: .top).combined(with: .opacity),
+                    removal: .scale(scale: 0.95, anchor: .top).combined(with: .opacity)
+                ))
             }
         }
         .background(Color.orange.opacity(0.06))
@@ -78,5 +77,6 @@ struct ToolCallBlockView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.orange.opacity(0.2), lineWidth: 0.5)
         )
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isExpanded)
     }
 }

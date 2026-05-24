@@ -35,9 +35,10 @@ struct ChatSidebarView: View {
                                 }
                             }) {
                                 HStack {
-                                    Image(systemName: expandedIDs.contains(assistant.id) ? "chevron.down" : "chevron.right")
+                                    Image(systemName: "chevron.right")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .rotationEffect(.degrees(expandedIDs.contains(assistant.id) ? 90 : 0))
                                     Text(assistant.name)
                                         .font(.headline)
                                         .foregroundStyle(.primary)
@@ -58,7 +59,7 @@ struct ChatSidebarView: View {
                     
                     if expandedIDs.contains(assistant.id) {
                         let sortedSessions = assistant.sessions.sorted { $0.lastModified > $1.lastModified }
-                        
+
                         ForEach(sortedSessions) { session in
                             Button(action: {
                                 selectedSession = session
@@ -79,11 +80,15 @@ struct ChatSidebarView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
                         }
                         .onDelete { offsets in
                             deleteSessions(offsets, from: assistant)
                         }
-                        
+
                         Button(action: { addSession(to: assistant) }) {
                             Label("chat.new", systemImage: "plus.circle")
                                 .font(.subheadline)
@@ -92,6 +97,10 @@ struct ChatSidebarView: View {
                                 .padding(.vertical, 4)
                         }
                         .buttonStyle(.plain)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
                     }
                 }
             }

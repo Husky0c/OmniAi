@@ -17,17 +17,14 @@ struct ThinkingBlockView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if isExpanded {
-                        Image(systemName: "chevron.down")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else if isStreaming {
+                    if isStreaming {
                         ProgressView()
                             .scaleEffect(0.6)
                     } else {
-                        Image(systemName: "chevron.forward")
+                        Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
                     }
                 }
                 .padding(.horizontal, 12)
@@ -58,10 +55,15 @@ struct ThinkingBlockView: View {
                         scrollTrigger.send()
                     }
                 }
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.95, anchor: .top).combined(with: .opacity),
+                    removal: .scale(scale: 0.95, anchor: .top).combined(with: .opacity)
+                ))
             }
         }
         .background(Color.secondary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isExpanded)
         .onAppear { if isStreaming { isExpanded = true } }
         .onChange(of: isStreaming) { _, new in
             if !new { isExpanded = false }
