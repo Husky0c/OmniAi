@@ -106,7 +106,6 @@ final class MCPJSONRPCTests: XCTestCase {
     }
 
     func testNextIdThreadSafety() {
-        let expectation = XCTestExpectation(description: "concurrent ids")
         let iterations = 100
         let group = DispatchGroup()
         var ids = Set<Int>()

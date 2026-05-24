@@ -1,6 +1,6 @@
 import Foundation
 
-protocol MCPTransport: AnyObject {
+nonisolated protocol MCPTransport: AnyObject {
     var isConnected: Bool { get }
     var serverId: String { get }
     func connect() async throws

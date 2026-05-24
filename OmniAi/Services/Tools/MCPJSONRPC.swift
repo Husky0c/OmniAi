@@ -1,6 +1,6 @@
 import Foundation
 
-enum MCPJSONRPC {
+nonisolated enum MCPJSONRPC {
 
     // MARK: - Core types (dictionary-based for arbitrary JSON)
 

@@ -57,7 +57,7 @@ final class LLMServiceTests: XCTestCase {
         mockSession.mockLines = lines
         mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/chat/completions")!, statusCode: 200, httpVersion: nil, headerFields: nil)
 
-        let stream = service.sendMessageStream(
+        let stream = await service.sendMessageStream(
             messages: [OpenAIMessage(role: "user", content: .text("hi"))],
             apiKey: "test-key",
             baseURL: "https://test.com/v1",
@@ -85,7 +85,7 @@ final class LLMServiceTests: XCTestCase {
         mockSession.mockLines = lines
         mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/chat/completions")!, statusCode: 200, httpVersion: nil, headerFields: nil)
 
-        let stream = service.sendMessageStream(
+        let stream = await service.sendMessageStream(
             messages: [OpenAIMessage(role: "user", content: .text("hi"))],
             apiKey: "test-key",
             baseURL: "https://test.com/v1",
@@ -116,7 +116,7 @@ final class LLMServiceTests: XCTestCase {
         mockSession.mockLines = ["data: \(errorJSON)"]
         mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/chat/completions")!, statusCode: 401, httpVersion: nil, headerFields: nil)
 
-        let stream = service.sendMessageStream(
+        let stream = await service.sendMessageStream(
             messages: [OpenAIMessage(role: "user", content: .text("hi"))],
             apiKey: "bad-key",
             baseURL: "https://test.com/v1",
@@ -147,7 +147,7 @@ final class LLMServiceTests: XCTestCase {
         mockSession.mockLines = lines
         mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/chat/completions")!, statusCode: 200, httpVersion: nil, headerFields: nil)
 
-        let stream = service.sendMessageStream(
+        let stream = await service.sendMessageStream(
             messages: [OpenAIMessage(role: "user", content: .text("hi"))],
             apiKey: "test-key",
             baseURL: "https://test.com/v1",
@@ -197,8 +197,9 @@ final class LLMServiceTests: XCTestCase {
 
         let models = try await service.fetchAvailableModels(apiKey: "test-key", baseURL: "https://test.com/v1")
         XCTAssertEqual(models.count, 2)
-        XCTAssertEqual(models[0].id, "gpt-3.5-turbo")
-        XCTAssertEqual(models[1].id, "gpt-4o")
+        let modelIds = models.map(\.id)
+        XCTAssertEqual(modelIds[0], "gpt-3.5-turbo")
+        XCTAssertEqual(modelIds[1], "gpt-4o")
     }
 
     func testFetchModelsHTTPError() async throws {
@@ -222,7 +223,7 @@ final class LLMServiceTests: XCTestCase {
         mockSession.mockLines = ["data: {not-json"]
         mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/chat/completions")!, statusCode: 200, httpVersion: nil, headerFields: nil)
 
-        let stream = service.sendMessageStream(
+        let stream = await service.sendMessageStream(
             messages: [OpenAIMessage(role: "user", content: .text("hi"))],
             apiKey: "test-key",
             baseURL: "https://test.com/v1",

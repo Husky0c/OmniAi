@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-final class StreamableHTTPTransport {
+nonisolated final class StreamableHTTPTransport: @unchecked Sendable {
     private let logger = Logger(subsystem: "com.omniai.mcp", category: "StreamableHTTPTransport")
 
     let serverId: String
@@ -25,7 +25,7 @@ final class StreamableHTTPTransport {
     }
 }
 
-extension StreamableHTTPTransport: MCPTransport {
+nonisolated extension StreamableHTTPTransport: MCPTransport {
     func connect() async throws {
         guard !isConnected else { return }
         guard URL(string: endpointURL) != nil else {
@@ -125,7 +125,7 @@ extension StreamableHTTPTransport: MCPTransport {
     }
 }
 
-private extension StreamableHTTPTransport {
+private nonisolated extension StreamableHTTPTransport {
     func parseSSEResponse(_ text: String, requestId: Int) throws -> MCPJSONRPC.Response {
         var currentData: [String] = []
 

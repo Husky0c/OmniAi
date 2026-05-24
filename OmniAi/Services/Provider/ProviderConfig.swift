@@ -3,7 +3,7 @@ import OSLog
 
 // MARK: - Configuration Models
 
-struct ProviderConfigFile: Codable {
+nonisolated struct ProviderConfigFile: Codable {
     let providers: [ProviderMetadata]
     let reasoningStrategies: [String: ReasoningStrategy]
     let protocolDefaults: ProtocolConfig?
@@ -11,7 +11,7 @@ struct ProviderConfigFile: Codable {
 
 // MARK: - Protocol Config Models
 
-struct ProtocolConfig: Codable {
+nonisolated struct ProtocolConfig: Codable {
     let request: RequestConfig?
     let response: ResponseParserConfig?
     let messageAssembly: MessageAssemblyConfig?
@@ -54,7 +54,7 @@ extension ProtocolConfig {
     }
 }
 
-enum NullableCodable<Value: Codable>: Codable {
+nonisolated enum NullableCodable<Value: Codable>: Codable {
     case value(Value)
     case null
 
@@ -96,7 +96,7 @@ enum NullableCodable<Value: Codable>: Codable {
     }
 }
 
-struct RequestConfig: Codable {
+nonisolated struct RequestConfig: Codable {
     let stream: Bool?
     let streamOptions: NullableCodable<StreamOptions>?
     let temperatureRange: TemperatureRange?
@@ -152,7 +152,7 @@ struct RequestConfig: Codable {
     }
 }
 
-struct ResponseParserConfig: Codable {
+nonisolated struct ResponseParserConfig: Codable {
     let streamLinePrefix: String?
     let terminationSignal: NullableCodable<String>?
     let terminationFallback: String?
@@ -222,7 +222,7 @@ struct ResponseParserConfig: Codable {
     }
 }
 
-struct MessageAssemblyConfig: Codable {
+nonisolated struct MessageAssemblyConfig: Codable {
     let preserveAssistantContentWhenToolCalls: Bool?
     let includeReasoningContent: Bool?
     let reasoningFieldName: String?

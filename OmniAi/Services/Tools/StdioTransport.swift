@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-final class StdioTransport {
+nonisolated final class StdioTransport: @unchecked Sendable {
     private let logger = Logger(subsystem: "com.omniai.mcp", category: "StdioTransport")
 
     let serverId: String
@@ -32,7 +32,7 @@ final class StdioTransport {
     }
 }
 
-extension StdioTransport: MCPTransport {
+nonisolated extension StdioTransport: MCPTransport {
     func connect() async throws {
         #if os(macOS)
         guard !isConnected else { return }
@@ -159,7 +159,7 @@ extension StdioTransport: MCPTransport {
     }
 }
 
-private extension StdioTransport {
+private nonisolated extension StdioTransport {
     func handleStdoutData(_ data: Data) {
         stdoutBuffer += String(data: data, encoding: .utf8) ?? ""
 

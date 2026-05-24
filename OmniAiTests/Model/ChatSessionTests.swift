@@ -52,8 +52,6 @@ final class ChatSessionTests: XCTestCase {
     func testLastModifiedUpdates() {
         let session = ChatSession(title: "Test")
         context.insert(session)
-        let initial = session.lastModified
-
         try? context.save()
 
         // Touch the session by updating title

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-nonisolated final class MCPConnectionManager {
+nonisolated final class MCPConnectionManager: @unchecked Sendable {
     private let logger = Logger(subsystem: "com.omniai.mcp", category: "ConnectionManager")
 
     private var transports: [String: MCPTransport] = [:]
@@ -22,7 +22,7 @@ nonisolated final class MCPConnectionManager {
     }
 }
 
-extension MCPConnectionManager {
+nonisolated extension MCPConnectionManager {
     func connect(to config: MCPServerConfig) async throws {
         let serverId = config.id.uuidString
 
@@ -137,7 +137,7 @@ extension MCPConnectionManager {
     }
 }
 
-private extension MCPConnectionManager {
+private nonisolated extension MCPConnectionManager {
     func createTransport(from config: MCPServerConfig) throws -> MCPTransport {
         let serverId = config.id.uuidString
         switch config.transportType {

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-final class SSETransport {
+nonisolated final class SSETransport: @unchecked Sendable {
     private let logger = Logger(subsystem: "com.omniai.mcp", category: "SSETransport")
 
     let serverId: String
@@ -30,7 +30,7 @@ final class SSETransport {
     }
 }
 
-extension SSETransport: MCPTransport {
+nonisolated extension SSETransport: MCPTransport {
     func connect() async throws {
         guard !isConnected else { return }
         guard let url = URL(string: baseURL) else {
@@ -203,7 +203,7 @@ extension SSETransport: MCPTransport {
     }
 }
 
-private extension SSETransport {
+private nonisolated extension SSETransport {
     func readSSEStream(_ lines: AsyncThrowingStream<String, Error>) async throws {
         var currentEvent = "message"
         var currentData: [String] = []

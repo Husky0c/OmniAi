@@ -7,6 +7,7 @@ protocol ToolServiceFactory {
     func releaseService(for sessionId: UUID) async
     func releaseServices(excluding activeSessionIds: Set<UUID>) async
     func disconnectAll(for sessionId: UUID) async
+    @MainActor
     func connectAssistantMCPServers(for sessionId: UUID, assistant: Assistant?, enabledConfigs: [MCPServerConfig]) async
     func hasService(for sessionId: UUID) -> Bool
     func resetAll() async
@@ -42,6 +43,7 @@ struct DefaultToolServiceFactory: ToolServiceFactory {
         await store.disconnectAll(for: sessionId)
     }
 
+    @MainActor
     func connectAssistantMCPServers(for sessionId: UUID, assistant: Assistant?, enabledConfigs: [MCPServerConfig]) async {
         await store.connectAssistantMCPServers(for: sessionId, assistant: assistant, enabledConfigs: enabledConfigs)
     }

@@ -49,6 +49,7 @@ class MockToolServiceFactory: ToolServiceFactory {
         disconnectAllCalled = true
     }
 
+    @MainActor
     func connectAssistantMCPServers(for sessionId: UUID, assistant: Assistant?, enabledConfigs: [MCPServerConfig]) async {
         connectAssistantMCPServersCalled = true
     }

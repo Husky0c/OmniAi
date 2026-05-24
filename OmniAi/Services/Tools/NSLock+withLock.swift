@@ -1,6 +1,6 @@
 import Foundation
 
-extension NSLock {
+nonisolated extension NSLock {
     func withLock<T>(_ body: () throws -> T) rethrows -> T {
         lock()
         defer { unlock() }

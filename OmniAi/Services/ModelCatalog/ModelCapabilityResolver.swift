@@ -1,11 +1,11 @@
 import Foundation
 
-struct ModelInfo: Identifiable {
+nonisolated struct ModelInfo: Identifiable {
     let id: String
     let capabilities: ModelCapability
 }
 
-struct ModelCapability: Codable, Hashable {
+nonisolated struct ModelCapability: Codable, Hashable {
     var webSearch: Bool = false
     var reasoning: Bool = false
     var toolCalling: Bool = false
