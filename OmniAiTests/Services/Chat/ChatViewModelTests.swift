@@ -282,6 +282,35 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isGenerating)
     }
 
+    func testStreamingChunksUpdateTransientStateBeforePersistingMessageContent() async {
+        // Given
+        mockLLMService.streamingEvents = [
+            .chunk("Hello"),
+            .chunk(" world")
+        ]
+        mockLLMService.streamingEventDelayNanoseconds = 200_000_000
+        let apiKeys = [apiKey!]
+
+        // When
+        viewModel.sendMessage(
+            "Test",
+            attachments: [],
+            effectiveModelId: "gpt-4",
+            effectiveChannelId: apiKey.id.uuidString,
+            apiKeys: apiKeys,
+            titleConfig: ChatTitleConfig(interval: 0, modelId: "", apiKeyID: "", prompt: "")
+        )
+
+        try? await Task.sleep(nanoseconds: 75_000_000)
+
+        // Then
+        let assistantMessage = try? XCTUnwrap(session.messages.last)
+        XCTAssertEqual(assistantMessage?.content, "")
+        XCTAssertEqual(viewModel.streamingMessageStates[assistantMessage?.id ?? UUID()]?.content, "Hello")
+
+        viewModel.stopGeneration()
+    }
+
     // MARK: - MCP Connection Tests
 
     func testConnectMCPServersCallsToolServiceFactory() async {

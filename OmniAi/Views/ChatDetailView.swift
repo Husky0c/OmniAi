@@ -129,6 +129,7 @@ private struct ChatDetailContentView: View {
         MessageBubbleView(
             message: message,
             isGenerating: viewModel.isGenerating && message.id == viewModel.sortedMessages.last?.id,
+            streamingState: viewModel.streamingMessageStates[message.id],
             showHeader: showHeader,
             isIntermediateToolMessage: isIntermediateToolMessage,
             onCopy: {

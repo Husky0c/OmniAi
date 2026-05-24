@@ -9,10 +9,15 @@ final class ChatViewModel {
     private let modelContext: ModelContext
     private let appServices: AppServices
     private let titleService: ChatTitleService
+    private let streamPublishInterval: TimeInterval = 0.075
 
     private(set) var sortedMessages: [ChatMessage] = []
     private(set) var isGenerating: Bool = false
+    private(set) var streamingMessageStates: [UUID: StreamingMessageState] = [:]
     private var currentGenerationTask: Task<Void, Never>?
+    private var streamBuffers: [UUID: StreamingMessageState] = [:]
+    private var lastStreamPublishDates: [UUID: Date] = [:]
+    private var pendingStreamPublishTasks: [UUID: Task<Void, Never>] = [:]
 
     var editingMessage: ChatMessage?
     var editingText: String = ""
@@ -129,6 +134,7 @@ final class ChatViewModel {
     func stopGeneration() {
         currentGenerationTask?.cancel()
         currentGenerationTask = nil
+        flushAllStreamingStates()
         isGenerating = false
     }
 
@@ -244,6 +250,16 @@ final class ChatViewModel {
         refreshSortedMessages()
     }
 
+    struct StreamingMessageState: Equatable {
+        var content: String = ""
+        var thinkingContent: String?
+        var firstTokenLatency: Double?
+        var promptTokens: Int?
+        var completionTokens: Int?
+        var totalTokens: Int?
+        var toolCallName: String?
+    }
+
     private struct StreamRequestContext {
         let assistantMessage: ChatMessage
         let chatEngine: ChatEngine
@@ -331,34 +347,125 @@ final class ChatViewModel {
         startTime: Date,
         hasReceivedFirstChunk: inout Bool
     ) {
+        var state = streamBuffers[message.id] ?? StreamingMessageState(
+            content: message.content,
+            thinkingContent: message.thinkingContent,
+            firstTokenLatency: message.firstTokenLatency,
+            promptTokens: message.promptTokens,
+            completionTokens: message.completionTokens,
+            totalTokens: message.totalTokens,
+            toolCallName: message.toolCallName
+        )
+
         switch event {
         case .chunk(let text):
             if !hasReceivedFirstChunk {
                 hasReceivedFirstChunk = true
-                message.firstTokenLatency = Date().timeIntervalSince(startTime)
+                state.firstTokenLatency = Date().timeIntervalSince(startTime)
             }
-            message.content += text
+            state.content += text
         case .thinking(let text):
-            message.thinkingContent = (message.thinkingContent ?? "") + text
+            state.thinkingContent = (state.thinkingContent ?? "") + text
         case .usage(let promptTokens, let completionTokens, let totalTokens):
-            message.promptTokens = promptTokens
-            message.completionTokens = completionTokens
-            message.totalTokens = totalTokens
+            state.promptTokens = promptTokens
+            state.completionTokens = completionTokens
+            state.totalTokens = totalTokens
         case .toolCallName(let toolName):
             if !hasReceivedFirstChunk {
                 hasReceivedFirstChunk = true
-                message.firstTokenLatency = Date().timeIntervalSince(startTime)
+                state.firstTokenLatency = Date().timeIntervalSince(startTime)
             }
-            message.toolCallName = toolName
+            state.toolCallName = toolName
         case .finishReason:
             break
         }
+
+        streamBuffers[message.id] = state
+        scheduleStreamingStatePublish(for: message.id)
     }
 
     private func handleStreamError(_ error: ChatEngineError, message: ChatMessage) {
-        if !message.content.contains(error.localizedDescription) {
-            message.content = ChatErrorFormatter.render(error, existingContent: message.content)
+        var state = streamBuffers[message.id] ?? streamingMessageStates[message.id] ?? StreamingMessageState(
+            content: message.content,
+            thinkingContent: message.thinkingContent,
+            firstTokenLatency: message.firstTokenLatency,
+            promptTokens: message.promptTokens,
+            completionTokens: message.completionTokens,
+            totalTokens: message.totalTokens,
+            toolCallName: message.toolCallName
+        )
+        if !state.content.contains(error.localizedDescription) {
+            state.content = ChatErrorFormatter.render(error, existingContent: state.content)
         }
+        streamBuffers[message.id] = state
+        publishStreamingState(for: message.id)
+        persistStreamingState(for: message)
+    }
+
+    private func scheduleStreamingStatePublish(for messageID: UUID) {
+        let now = Date()
+        if let lastPublish = lastStreamPublishDates[messageID],
+           now.timeIntervalSince(lastPublish) < streamPublishInterval {
+            guard pendingStreamPublishTasks[messageID] == nil else { return }
+
+            let delay = streamPublishInterval - now.timeIntervalSince(lastPublish)
+            pendingStreamPublishTasks[messageID] = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                self?.publishStreamingState(for: messageID)
+            }
+            return
+        }
+
+        publishStreamingState(for: messageID)
+    }
+
+    private func publishStreamingState(for messageID: UUID) {
+        pendingStreamPublishTasks[messageID]?.cancel()
+        pendingStreamPublishTasks[messageID] = nil
+
+        guard let state = streamBuffers[messageID] else { return }
+        if streamingMessageStates[messageID] != state {
+            streamingMessageStates[messageID] = state
+        }
+        lastStreamPublishDates[messageID] = Date()
+    }
+
+    private func persistStreamingState(for message: ChatMessage) {
+        publishStreamingState(for: message.id)
+        guard let state = streamBuffers[message.id] ?? streamingMessageStates[message.id] else { return }
+
+        message.content = state.content
+        message.thinkingContent = state.thinkingContent
+        message.firstTokenLatency = state.firstTokenLatency
+        message.promptTokens = state.promptTokens
+        message.completionTokens = state.completionTokens
+        message.totalTokens = state.totalTokens
+        message.toolCallName = state.toolCallName
+
+        streamBuffers[message.id] = nil
+        streamingMessageStates[message.id] = nil
+        lastStreamPublishDates[message.id] = nil
+        pendingStreamPublishTasks[message.id]?.cancel()
+        pendingStreamPublishTasks[message.id] = nil
+    }
+
+    private func flushAllStreamingStates() {
+        for task in pendingStreamPublishTasks.values {
+            task.cancel()
+        }
+        pendingStreamPublishTasks.removeAll()
+
+        let messagesByID = Dictionary(uniqueKeysWithValues: session.messages.map { ($0.id, $0) })
+        for messageID in Set(streamBuffers.keys).union(streamingMessageStates.keys) {
+            if let message = messagesByID[messageID] {
+                persistStreamingState(for: message)
+            }
+        }
+
+        streamBuffers.removeAll()
+        streamingMessageStates.removeAll()
+        lastStreamPublishDates.removeAll()
     }
 
     private func streamSingleRound(
@@ -400,6 +507,7 @@ final class ChatViewModel {
             handleStreamError(.unknown(error.localizedDescription), message: context.assistantMessage)
         }
 
+        persistStreamingState(for: context.assistantMessage)
         return response
     }
 

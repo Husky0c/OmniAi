@@ -3,6 +3,7 @@ import Foundation
 
 class MockLLMService: LLMServiceProtocol {
     var streamingEvents: [LLMStreamEvent] = []
+    var streamingEventDelayNanoseconds: UInt64 = 0
     var streamingError: Error?
     var completionResult: String = ""
     var completionError: Error?
@@ -22,14 +23,19 @@ class MockLLMService: LLMServiceProtocol {
         endpointType: EndpointType
     ) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
-            if let error = streamingError {
-                continuation.finish(throwing: error)
-                return
+            Task {
+                if let error = streamingError {
+                    continuation.finish(throwing: error)
+                    return
+                }
+                for event in streamingEvents {
+                    continuation.yield(event)
+                    if streamingEventDelayNanoseconds > 0 {
+                        try? await Task.sleep(nanoseconds: streamingEventDelayNanoseconds)
+                    }
+                }
+                continuation.finish()
             }
-            for event in streamingEvents {
-                continuation.yield(event)
-            }
-            continuation.finish()
         }
     }
 

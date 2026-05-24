@@ -4,6 +4,7 @@ import MarkdownUI
 struct MessageBubbleView: View {
     let message: ChatMessage
     let isGenerating: Bool
+    let streamingState: ChatViewModel.StreamingMessageState?
     let showHeader: Bool
     let isIntermediateToolMessage: Bool
     var onCopy: (() -> Void)? = nil
@@ -35,6 +36,34 @@ struct MessageBubbleView: View {
         Self.dateFormatter.string(from: message.createdAt)
     }
 
+    private var displayContent: String {
+        streamingState?.content ?? message.content
+    }
+
+    private var displayThinkingContent: String? {
+        streamingState?.thinkingContent ?? message.thinkingContent
+    }
+
+    private var displayFirstTokenLatency: Double? {
+        streamingState?.firstTokenLatency ?? message.firstTokenLatency
+    }
+
+    private var displayPromptTokens: Int? {
+        streamingState?.promptTokens ?? message.promptTokens
+    }
+
+    private var displayCompletionTokens: Int? {
+        streamingState?.completionTokens ?? message.completionTokens
+    }
+
+    private var displayTotalTokens: Int? {
+        streamingState?.totalTokens ?? message.totalTokens
+    }
+
+    private var usesStreamingTextRendering: Bool {
+        !isUser && isGenerating && streamingState != nil
+    }
+
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
             if showHeader {
@@ -43,8 +72,8 @@ struct MessageBubbleView: View {
             thinkingBlock
             toolCallBlock
             if !isIntermediateToolMessage {
-                if !isUser && message.content.isEmpty
-                    && (message.thinkingContent?.isEmpty ?? true)
+                if !isUser && displayContent.isEmpty
+                    && (displayThinkingContent?.isEmpty ?? true)
                     && message.toolCallsData == nil
                     && isGenerating {
                     TypingIndicatorView()
@@ -52,11 +81,11 @@ struct MessageBubbleView: View {
                         .padding(.vertical, 14)
                         .background(isUser ? Color.blue : Color.gray.opacity(0.2))
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                } else if !(isUser || message.content.isEmpty) || isUser {
+                } else if !(isUser || displayContent.isEmpty) || isUser {
                     HStack {
                         if isUser { Spacer() }
                         Group {
-                            if isUser || !message.content.isEmpty {
+                            if isUser || !displayContent.isEmpty {
                                 VStack(alignment: .leading, spacing: 4) {
                                     let imageAttachments = (message.attachments ?? []).filter { $0.type == .image }
                                     if !imageAttachments.isEmpty {
@@ -83,20 +112,27 @@ struct MessageBubbleView: View {
 #endif
                                         }
                                     }
-                                    Markdown(message.content)
-                                        .textSelection(.enabled)
-                                        .padding(12)
-                                        .markdownTextStyle {
-                                            ForegroundColor(isUser ? .white : .primary)
-                                        }
-                                        .markdownTheme(
-                                            Theme.basic.bulletedListMarker { configuration in
-                                                let markers = ["•", "◦", "▪"]
-                                                let marker = markers[min(configuration.listLevel, markers.count) - 1]
-                                                Text(marker)
-                                                    .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+                                    if usesStreamingTextRendering {
+                                        Text(displayContent)
+                                            .textSelection(.enabled)
+                                            .foregroundStyle(.primary)
+                                            .padding(12)
+                                    } else {
+                                        Markdown(displayContent)
+                                            .textSelection(.enabled)
+                                            .padding(12)
+                                            .markdownTextStyle {
+                                                ForegroundColor(isUser ? .white : .primary)
                                             }
-                                        )
+                                            .markdownTheme(
+                                                Theme.basic.bulletedListMarker { configuration in
+                                                    let markers = ["•", "◦", "▪"]
+                                                    let marker = markers[min(configuration.listLevel, markers.count) - 1]
+                                                    Text(marker)
+                                                        .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+                                                }
+                                            )
+                                    }
                                 }
                             }
                         }
@@ -114,9 +150,9 @@ struct MessageBubbleView: View {
                 }
             }
 
-            if isUser || (!isIntermediateToolMessage && !message.content.isEmpty && !isGenerating && message.firstTokenLatency != nil) {
+            if isUser || (!isIntermediateToolMessage && !displayContent.isEmpty && !isGenerating && displayFirstTokenLatency != nil) {
                 let nonImageAttachments = (message.attachments ?? []).filter { $0.type != .image }
-                let hasStats = !isUser && !message.content.isEmpty && !isGenerating && message.firstTokenLatency != nil
+                let hasStats = !isUser && !displayContent.isEmpty && !isGenerating && displayFirstTokenLatency != nil
 
                 if isUser && !nonImageAttachments.isEmpty {
                     HStack {
@@ -143,17 +179,17 @@ struct MessageBubbleView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "clock")
                                 .font(.caption2)
-                            if let latency = message.firstTokenLatency {
+                            if let latency = displayFirstTokenLatency {
                                 Text(String(format: "%.1f", latency) + "s")
                                     .font(.caption2)
                             }
                             Image(systemName: "arrow.up")
                                 .font(.caption2)
-                            Text("\(message.promptTokens ?? 0)")
+                            Text("\(displayPromptTokens ?? 0)")
                                 .font(.caption2)
                             Image(systemName: "arrow.down")
                                 .font(.caption2)
-                            Text("\(message.completionTokens ?? 0)")
+                            Text("\(displayCompletionTokens ?? 0)")
                                 .font(.caption2)
                         }
                         .foregroundStyle(.secondary)
@@ -161,12 +197,12 @@ struct MessageBubbleView: View {
                     .buttonStyle(.plain)
                     .popover(isPresented: $showStats) {
                         VStack(alignment: .leading, spacing: 4) {
-                            if let latency = message.firstTokenLatency {
+                            if let latency = displayFirstTokenLatency {
                                 Text(L10n.format("message.first_token_latency_format", latency))
                             }
-                            Text(L10n.format("message.prompt_tokens_format", message.promptTokens ?? 0))
-                            Text(L10n.format("message.completion_tokens_format", message.completionTokens ?? 0))
-                            Text(L10n.format("message.total_tokens_format", message.totalTokens ?? 0))
+                            Text(L10n.format("message.prompt_tokens_format", displayPromptTokens ?? 0))
+                            Text(L10n.format("message.completion_tokens_format", displayCompletionTokens ?? 0))
+                            Text(L10n.format("message.total_tokens_format", displayTotalTokens ?? 0))
                         }
                         .font(.caption)
                         .padding()
@@ -198,10 +234,10 @@ struct MessageBubbleView: View {
 
     @ViewBuilder
     private var thinkingBlock: some View {
-        if !isUser, let thinking = message.thinkingContent, !thinking.isEmpty {
+        if !isUser, let thinking = displayThinkingContent, !thinking.isEmpty {
             ThinkingBlockView(
                 thinkingText: thinking,
-                isStreaming: isGenerating && message.content.isEmpty
+                isStreaming: isGenerating && displayContent.isEmpty
             )
             .frame(maxWidth: 400, alignment: .leading)
         }
