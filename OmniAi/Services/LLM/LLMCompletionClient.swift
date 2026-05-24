@@ -150,7 +150,7 @@ final class LLMCompletionClient {
                let message = err["message"] as? String {
                 throw AppError.serverFailure(statusCode: statusCode, message: message, context: requestContext)
             }
-            throw AppError.serverFailure(statusCode: statusCode, message: "无效响应", context: requestContext)
+            throw AppError.serverFailure(statusCode: statusCode, message: L10n.string("llm.invalid_response"), context: requestContext)
         }
 
         do {

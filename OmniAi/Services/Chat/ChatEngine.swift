@@ -59,9 +59,9 @@ enum ChatEngineError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            return "未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。"
+            return L10n.string("error.missing_api_channel")
         case .toolCallLimitExceeded(let maxRounds):
-            return "工具调用轮次超过上限（\(maxRounds) 轮），已停止继续执行。"
+            return L10n.format("error.tool_call_limit_exceeded_format", maxRounds)
         case .requestBuildFailure(let message):
             return message
         case .streamParseFailure(let message):

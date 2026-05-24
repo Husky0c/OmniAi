@@ -37,19 +37,19 @@ enum AppError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAPIChannel:
-            return "未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。"
+            return L10n.string("error.missing_api_channel")
         case .missingAPIKey:
-            return "未找到可用的 API Key，请检查当前渠道配置。"
+            return L10n.string("error.missing_api_key")
         case .requestBuildFailure:
-            return "请求构建失败，请检查模型、渠道或端点配置。"
+            return L10n.string("error.request_build_failure")
         case .streamParseFailure:
-            return "响应解析失败，请检查当前服务商是否兼容所选端点。"
+            return L10n.string("error.stream_parse_failure")
         case .providerConfigFailure(let error):
             return error.localizedDescription
         case .toolExecutionFailure(let toolName, let underlying):
-            return "工具 \(toolName) 执行失败：\(underlying.localizedDescription)"
+            return L10n.format("error.tool_execution_failure_format", toolName, underlying.localizedDescription)
         case .autoTitleFailure:
-            return "自动标题生成失败。"
+            return L10n.string("error.auto_title_failure")
         case .serverFailure(_, let message, _):
             return message
         case .transportFailure(_, let underlying):

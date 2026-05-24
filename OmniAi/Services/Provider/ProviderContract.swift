@@ -30,15 +30,15 @@ enum ProviderConfigError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .fileNotFound:
-            return "provider_config.json 文件未找到"
+            return L10n.string("provider_config.file_not_found")
         case .invalidJSON(let error):
-            return "provider_config.json 解析失败: \(error.localizedDescription)"
+            return L10n.format("provider_config.invalid_json_format", error.localizedDescription)
         case .duplicateProviderId(let id):
-            return "重复的提供商 ID: \(id)"
+            return L10n.format("provider_config.duplicate_provider_id_format", id)
         case .unsupportedEndpointType(let provider, let value):
-            return "提供商 '\(provider)' 使用了不支持的端点类型: \(value)"
+            return L10n.format("provider_config.unsupported_endpoint_type_format", provider, value)
         case .unsupportedReasoningStrategy(let provider, let strategy):
-            return "提供商 '\(provider)' 使用了不支持的推理策略: \(strategy)"
+            return L10n.format("provider_config.unsupported_reasoning_strategy_format", provider, strategy)
         }
     }
 }

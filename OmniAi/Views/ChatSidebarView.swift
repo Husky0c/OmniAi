@@ -16,9 +16,9 @@ struct ChatSidebarView: View {
         ZStack {
             if assistants.isEmpty {
                 ContentUnavailableView(
-                    "还没有助手",
+                    "assistant.empty.title",
                     systemImage: "person.2",
-                    description: Text("点击底部按钮创建第一个助手")
+                    description: Text("assistant.empty.description")
                 )
             } else {
                 List {
@@ -85,7 +85,7 @@ struct ChatSidebarView: View {
                         }
                         
                         Button(action: { addSession(to: assistant) }) {
-                            Label("新建对话", systemImage: "plus.circle")
+                            Label("chat.new", systemImage: "plus.circle")
                                 .font(.subheadline)
                                 .foregroundStyle(.blue)
                                 .padding(.leading, 20)
@@ -98,14 +98,14 @@ struct ChatSidebarView: View {
             }
             }
         }
-        .navigationTitle("助手")
+        .navigationTitle("assistant.list.title")
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
         .safeAreaInset(edge: .bottom) {
             Button(action: { showNewAssistant = true }) {
                 HStack {
-                    Label("新增助手", systemImage: "plus.circle.fill")
+                    Label("assistant.add", systemImage: "plus.circle.fill")
                         .font(.headline)
                         .foregroundStyle(.blue)
                     Spacer()
@@ -131,7 +131,7 @@ struct ChatSidebarView: View {
     
     private func addSession(to assistant: Assistant) {
         withAnimation {
-            let newSession = ChatSession(title: "新对话", assistant: assistant)
+            let newSession = ChatSession(title: L10n.string("chat.new_title"), assistant: assistant)
             modelContext.insert(newSession)
             assistant.sessions.append(newSession)
             selectedSession = newSession

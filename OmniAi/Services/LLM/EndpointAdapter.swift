@@ -20,24 +20,24 @@ enum LLMServiceError: LocalizedError {
         switch self {
         case .rateLimitExceeded(let retryAfter):
             if let retryAfter {
-                return "API 速率限制，请在 \(retryAfter) 秒后重试"
+                return L10n.format("llm.rate_limit_retry_format", retryAfter)
             }
-            return "API 速率限制，请稍后重试"
+            return L10n.string("llm.rate_limit")
         case .requestTooLarge(let size, let limit):
             let sizeMB = Double(size) / 1_048_576
             let limitMB = Double(limit) / 1_048_576
-            return "请求体过大 (\(String(format: "%.1f", sizeMB)) MB)，超过限制 (\(String(format: "%.1f", limitMB)) MB)"
+            return L10n.format("llm.request_too_large_format", sizeMB, limitMB)
         case .invalidResponse(let requestId):
             if let requestId {
-                return "无效响应 (request-id: \(requestId))"
+                return L10n.format("llm.invalid_response_request_id_format", requestId)
             }
-            return "无效响应"
+            return L10n.string("llm.invalid_response")
         case .authenticationFailed:
-            return "认证失败，请检查 API Key"
+            return L10n.string("llm.authentication_failed")
         case .invalidURL(let url):
-            return "无效的 URL: \(url)"
+            return L10n.format("llm.invalid_url_format", url)
         case .streamParseFailure:
-            return "响应解析失败，请检查当前服务商是否兼容所选端点。"
+            return L10n.string("error.stream_parse_failure")
         }
     }
 }

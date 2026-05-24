@@ -25,19 +25,19 @@ struct CapabilityEditSheet: View {
         NavigationStack {
             Form {
                 Section(header: Text(modelId)) {
-                    Toggle("联网搜索", isOn: $webSearch)
-                    Toggle("推理思考", isOn: $reasoning)
-                    Toggle("工具调用", isOn: $toolCalling)
-                    Toggle("视觉识别", isOn: $vision)
+                    Toggle("capability.web_search", isOn: $webSearch)
+                    Toggle("capability.reasoning", isOn: $reasoning)
+                    Toggle("capability.tool_calling", isOn: $toolCalling)
+                    Toggle("capability.vision", isOn: $vision)
                 }
             }
-            .navigationTitle("编辑能力标识")
+            .navigationTitle("capability.edit.title")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    Button("common.save") {
                         onSave(ModelCapability(webSearch: webSearch, reasoning: reasoning, toolCalling: toolCalling, vision: vision))
                         dismiss()
                     }

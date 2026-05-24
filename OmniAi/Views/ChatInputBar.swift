@@ -47,13 +47,13 @@ struct ChatInputBar: View{
 #if canImport(UIKit)
                 DynamicHeightTextView(
                     text: $messageText,
-                    placeholder: "聊你所想",
+                    placeholder: L10n.string("chat.input.placeholder"),
                     isFocused: $isFocused
                 )
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 38)
 #else
-                TextField("聊你所想", text: $messageText, axis: .vertical)
+                TextField("chat.input.placeholder", text: $messageText, axis: .vertical)
                     .focused($isFocused)
                     .padding(.top, 16)
                     .padding(.bottom, 8)
@@ -64,16 +64,16 @@ struct ChatInputBar: View{
                 HStack {
                     Menu {
                         Button(action: { showFileImporter = true }) {
-                            Label("文件", systemImage: "doc")
+                            Label("attachment.file", systemImage: "doc")
                         }
                         
                         Button(action: { showPhotoPicker = true }) {
-                            Label("照片", systemImage: "photo")
+                            Label("attachment.photo", systemImage: "photo")
                         }
                         
 #if canImport(UIKit)
                         Button(action: { showCamera = true }) {
-                            Label("相机", systemImage: "camera")
+                            Label("attachment.camera", systemImage: "camera")
                         }
 #endif
                     } label: {
@@ -95,7 +95,7 @@ struct ChatInputBar: View{
                             messageText = ""
                             attachments.removeAll()
                         } else {
-                            logger.debug("开始语音")
+                            logger.debug("Start voice input")
                         }
                     }){
                         Image(systemName: isGenerating ? "stop.fill" : (canSend ? "arrow.up" : "mic.fill"))
@@ -279,7 +279,7 @@ struct ChatInputBar: View{
                 }
             }
         case .failure(let error):
-            logger.error("文件选择失败: \(error.localizedDescription)")
+            logger.error("File selection failed: \(error.localizedDescription)")
         }
     }
 }

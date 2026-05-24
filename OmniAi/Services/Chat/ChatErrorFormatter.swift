@@ -2,7 +2,7 @@ import Foundation
 
 enum ChatErrorFormatter {
     static func render(_ error: ChatEngineError, existingContent: String) -> String {
-        let message = "⚠️ \(title(for: error))：\(detail(for: error))"
+        let message = L10n.format("chat_error.render_format", title(for: error), detail(for: error))
         if existingContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return message
         }
@@ -12,40 +12,40 @@ enum ChatErrorFormatter {
     private static func title(for error: ChatEngineError) -> String {
         switch error {
         case .missingAPIKey:
-            return "配置错误"
+            return L10n.string("chat_error.configuration")
         case .toolCallLimitExceeded, .toolExecutionFailure:
-            return "工具错误"
+            return L10n.string("chat_error.tool")
         case .requestBuildFailure:
-            return "请求错误"
+            return L10n.string("chat_error.request")
         case .streamParseFailure, .invalidResponse:
-            return "响应错误"
+            return L10n.string("chat_error.response")
         case .providerConfigFailure:
-            return "服务商配置错误"
+            return L10n.string("chat_error.provider_configuration")
         case .autoTitleFailure:
-            return "自动标题错误"
+            return L10n.string("chat_error.auto_title")
         case .serverFailure:
-            return "服务商错误"
+            return L10n.string("chat_error.provider")
         case .transportFailure:
-            return "网络连接错误"
+            return L10n.string("chat_error.network")
         case .unknown:
-            return "未知错误"
+            return L10n.string("common.unknown_error")
         }
     }
 
     private static func detail(for error: ChatEngineError) -> String {
         switch error {
         case .requestBuildFailure:
-            return "无法构建请求。\(error.localizedDescription)"
+            return L10n.format("chat_error.request_build_detail_format", error.localizedDescription)
         case .streamParseFailure:
-            return "无法解析服务商返回内容。\(error.localizedDescription)"
+            return L10n.format("chat_error.stream_parse_detail_format", error.localizedDescription)
         case .serverFailure:
-            return "服务商返回错误。\(error.localizedDescription)"
+            return L10n.format("chat_error.server_detail_format", error.localizedDescription)
         case .transportFailure:
-            return "请求未能完成。\(error.localizedDescription)"
+            return L10n.format("chat_error.transport_detail_format", error.localizedDescription)
         case .invalidResponse:
-            return "服务商返回了无法识别的响应。\(error.localizedDescription)"
+            return L10n.format("chat_error.invalid_response_detail_format", error.localizedDescription)
         case .unknown:
-            return "发生未分类错误。\(error.localizedDescription)"
+            return L10n.format("chat_error.unknown_detail_format", error.localizedDescription)
         default:
             return error.localizedDescription
         }

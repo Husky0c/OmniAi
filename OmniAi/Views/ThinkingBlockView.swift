@@ -13,7 +13,7 @@ struct ThinkingBlockView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "brain")
                         .font(.caption2)
-                    Text("深度思考")
+                    Text("thinking.title")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()

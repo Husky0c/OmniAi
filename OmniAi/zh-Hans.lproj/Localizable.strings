@@ -1,0 +1,211 @@
+"api.add_channel.title" = "添加新渠道";
+"api.auto_capability_probe" = "自动获取模型能力标识";
+"api.capability_probe.section" = "能力探测";
+"api.channel_name.placeholder" = "渠道名称 (如: 我的 OpenAI)";
+"api.channels.section" = "API 渠道";
+"api.configuration.section" = "API 配置";
+"api.edit_channel.title" = "编辑渠道";
+"api.endpoint_type" = "端点格式";
+"api.keychain_delete_failed_format" = "无法删除 %@ 的 Keychain 凭证：%@";
+"api.no_channels" = "暂无可用渠道，请先在设置中添加";
+"api.provider" = "提供商";
+"api.saved_channels.section" = "已保存的 API 渠道";
+"api.selected_models.section" = "已选模型";
+
+"assistant.add" = "新增助手";
+"assistant.context_count" = "上下文消息数量";
+"assistant.delete" = "删除此助手";
+"assistant.delete_message_format" = "删除「%@」将同时删除其所有历史会话，此操作不可撤销。";
+"assistant.edit.title" = "编辑助手";
+"assistant.empty.description" = "点击底部按钮创建第一个助手";
+"assistant.empty.title" = "还没有助手";
+"assistant.list.title" = "助手";
+"assistant.max_tool_rounds" = "最大工具调用轮数";
+"assistant.mcp_tool_calling" = "MCP 工具调用";
+"assistant.mcp_tools.section" = "MCP 工具";
+"assistant.model.section" = "模型";
+"assistant.model_parameters.section" = "模型参数";
+"assistant.name.placeholder" = "例如: 代码助手, 翻译助手";
+"assistant.name.section" = "助手名称";
+"assistant.new.title" = "新建助手";
+"assistant.reasoning_effort" = "思考强度";
+"assistant.stream_output" = "流式输出";
+"assistant.system_prompt.section" = "系统提示词";
+"assistant.temperature" = "模型温度";
+
+"attachment.camera" = "相机";
+"attachment.file" = "文件";
+"attachment.file_prefix_format" = "[文件: %@]";
+"attachment.photo" = "照片";
+
+"auto_rename_interval_every_format" = "每 %d 轮";
+"auto_rename_interval_label_format" = "触发间隔: %@";
+
+"capability.edit.title" = "编辑能力标识";
+"capability.reasoning" = "推理思考";
+"capability.tool_calling" = "工具调用";
+"capability.vision" = "视觉识别";
+"capability.web_search" = "联网搜索";
+
+"chat.input.placeholder" = "聊你所想";
+"chat.new" = "新建对话";
+"chat.new_title" = "新对话";
+"chat.role.assistant" = "助手";
+"chat.role.user" = "用户";
+
+"chat_error.auto_title" = "自动标题错误";
+"chat_error.configuration" = "配置错误";
+"chat_error.invalid_response_detail_format" = "服务商返回了无法识别的响应。%@";
+"chat_error.network" = "网络连接错误";
+"chat_error.provider" = "服务商错误";
+"chat_error.provider_configuration" = "服务商配置错误";
+"chat_error.render_format" = "⚠️ %@：%@";
+"chat_error.request" = "请求错误";
+"chat_error.request_build_detail_format" = "无法构建请求。%@";
+"chat_error.response" = "响应错误";
+"chat_error.server_detail_format" = "服务商返回错误。%@";
+"chat_error.stream_parse_detail_format" = "无法解析服务商返回内容。%@";
+"chat_error.tool" = "工具错误";
+"chat_error.transport_detail_format" = "请求未能完成。%@";
+"chat_error.unknown_detail_format" = "发生未分类错误。%@";
+
+"chat_title.content_format" = "对话内容：\n%@";
+
+"common.add" = "添加";
+"common.basic_info" = "基本信息";
+"common.cancel" = "取消";
+"common.confirm_delete" = "确认删除";
+"common.copy" = "复制";
+"common.create" = "创建";
+"common.delete" = "删除";
+"common.delete_failed" = "删除失败";
+"common.done" = "完成";
+"common.edit" = "编辑";
+"common.enabled" = "启用";
+"common.fetch_failed" = "获取失败";
+"common.not_selected" = "未选择";
+"common.off" = "关闭";
+"common.ok" = "确定";
+"common.save" = "保存";
+"common.save_failed" = "保存失败";
+"common.seconds" = "秒";
+"common.type" = "类型";
+"common.unknown_error" = "未知错误";
+"common.unnamed" = "未命名";
+
+"data_load.confirm_reset.message" = "此操作将永久删除所有本地数据（包括会话记录和 API 配置），且不可撤销。";
+"data_load.confirm_reset.title" = "确认重置";
+"data_load.erase_data" = "抹掉数据";
+"data_load.hide_details" = "隐藏详情";
+"data_load.message" = "应用无法读取本地存储数据，这可能是由于数据文件损坏或存储空间不足导致的。";
+"data_load.reset" = "抹掉数据并重置";
+"data_load.reset_success" = "重置成功，请手动重启应用";
+"data_load.show_details" = "显示详情";
+"data_load.title" = "本地数据加载失败";
+
+"default.auto_rename_prompt" = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。";
+"default.user_name" = "用户";
+
+"default_model.active_channel" = "当前激活渠道";
+"default_model.auto_title.footer" = "每 N 轮对话后自动生成会话标题，0=关闭。可单独指定渠道和模型（跟随则用对话的渠道/模型）";
+"default_model.auto_title.section" = "总结标题";
+"default_model.chat.footer" = "选择默认使用的模型和 API 渠道";
+"default_model.chat.section" = "对话";
+"default_model.chat_model" = "默认对话模型";
+"default_model.custom_title_prompt" = "自定义标题提示词";
+"default_model.follow_chat_channel" = "跟随对话渠道";
+"default_model.title" = "默认模型";
+"default_model.title_channel" = "标题 API 渠道";
+"default_model.title_model_optional" = "标题用模型 ID（可选）";
+
+"error.auto_title_failure" = "自动标题生成失败。";
+"error.missing_api_channel" = "未配置或未选择 API 渠道，请先在设置中添加并激活一个渠道。";
+"error.missing_api_key" = "未找到可用的 API Key，请检查当前渠道配置。";
+"error.request_build_failure" = "请求构建失败，请检查模型、渠道或端点配置。";
+"error.stream_parse_failure" = "响应解析失败，请检查当前服务商是否兼容所选端点。";
+"error.tool_call_limit_exceeded_format" = "工具调用轮次超过上限（%d 轮），已停止继续执行。";
+"error.tool_execution_failure_format" = "工具 %@ 执行失败：%@";
+
+"home.no_selected_chat.description" = "请在左侧选择一个对话或新建对话";
+"home.no_selected_chat.title" = "没有选中的对话";
+
+"keystore.encoding_failed" = "API Key 编码失败。";
+"keystore.keychain_failure_format" = "Keychain 操作失败（%d）。";
+
+"llm.authentication_failed" = "认证失败，请检查 API Key";
+"llm.invalid_response" = "无效响应";
+"llm.invalid_response_request_id_format" = "无效响应 (request-id: %@)";
+"llm.invalid_url_format" = "无效的 URL: %@";
+"llm.rate_limit" = "API 速率限制，请稍后重试";
+"llm.rate_limit_retry_format" = "API 速率限制，请在 %d 秒后重试";
+"llm.request_too_large_format" = "请求体过大 (%.1f MB)，超过限制 (%.1f MB)";
+
+"mcp.add.title" = "新增服务器";
+"mcp.advanced_options" = "高级选项";
+"mcp.arguments_placeholder" = "参数（空格分隔）";
+"mcp.auth_token_optional" = "认证 Token（可选）";
+"mcp.command_path" = "命令路径";
+"mcp.connection.section" = "连接配置";
+"mcp.connection_success_format" = "连接成功（发现 %d 个工具：%@）";
+"mcp.delete_server.message" = "删除后该服务器的工具将不再可用。";
+"mcp.delete_server.title" = "删除服务器";
+"mcp.edit.title" = "编辑服务器";
+"mcp.empty.description" = "点击右上角 + 添加一个 MCP 服务器";
+"mcp.empty.title" = "没有 MCP 服务器";
+"mcp.server_name" = "服务器名称";
+"mcp.server_url" = "服务器 URL";
+"mcp.test_connection" = "测试连接";
+"mcp.timeout" = "超时时间";
+"mcp.transport.section" = "传输协议";
+"mcp.transport.sse" = "SSE (服务端推送)";
+"mcp.transport.stdio" = "Stdio (子进程)";
+
+"message.completion_tokens_format" = "输出 Token: %d";
+"message.edit.section" = "编辑消息";
+"message.edit.title" = "编辑消息";
+"message.first_token_latency_format" = "首 Token 延迟: %.1fs";
+"message.prompt_tokens_format" = "输入 Token: %d";
+"message.regenerate" = "重新生成";
+"message.total_tokens_format" = "总 Token: %d";
+
+"model.fetching" = "正在获取模型列表...";
+"model.manual_input" = "手动输入模型 ID";
+"model.name.section" = "模型名称";
+"model.none" = "暂无可用模型";
+"model.refresh" = "刷新模型列表";
+"model.select.title" = "选择模型";
+"model.switch.title" = "切换模型";
+"model.switch_channel_hint" = "点击渠道右侧切换后可获取模型列表";
+"model_catalog.invalid_format_format" = "模型列表格式错误：%@";
+
+"provider_config.duplicate_provider_id_format" = "重复的提供商 ID: %@";
+"provider_config.file_not_found" = "provider_config.json 文件未找到";
+"provider_config.invalid_json_format" = "provider_config.json 解析失败: %@";
+"provider_config.unsupported_endpoint_type_format" = "提供商 '%@' 使用了不支持的端点类型: %@";
+"provider_config.unsupported_reasoning_strategy_format" = "提供商 '%@' 使用了不支持的推理策略: %@";
+
+"reasoning.default" = "跟随模型默认";
+"reasoning.high" = "高";
+"reasoning.low" = "低";
+"reasoning.medium" = "中";
+"reasoning.minimal" = "最低";
+
+"settings.about.section" = "关于";
+"settings.account.section" = "账户信息";
+"settings.api_channels" = "API 渠道配置";
+"settings.data.footer" = "即将支持将您的对话数据备份到本地，或通过 iCloud 跨设备同步。";
+"settings.data.section" = "数据管理";
+"settings.default_model" = "默认模型";
+"settings.export_backup" = "导出备份 (JSON)";
+"settings.mcp_servers" = "MCP 服务器";
+"settings.nickname.placeholder" = "昵称";
+"settings.remove_avatar" = "移除头像";
+"settings.restore_backup" = "从备份恢复";
+"settings.title" = "设置";
+"settings.version" = "版本";
+
+"thinking.title" = "深度思考";
+
+"tool_call.arguments_label" = "参数:";
+"tool_call.title" = "工具调用";
+"tool_call.tool_label" = "工具:";

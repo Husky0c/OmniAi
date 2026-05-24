@@ -14,9 +14,9 @@ struct MCPServerSettingsView: View {
         List {
             if servers.isEmpty {
                 ContentUnavailableView(
-                    "没有 MCP 服务器",
+                    "mcp.empty.title",
                     systemImage: "server.rack",
-                    description: Text("点击右上角 + 添加一个 MCP 服务器")
+                    description: Text("mcp.empty.description")
                 )
             } else {
                 ForEach(servers) { server in
@@ -27,7 +27,7 @@ struct MCPServerSettingsView: View {
                                 .frame(width: 8, height: 8)
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(server.name.isEmpty ? "未命名" : server.name)
+                                Text(server.name.isEmpty ? L10n.string("common.unnamed") : server.name)
                                     .font(.subheadline)
                                     .foregroundStyle(.primary)
                                 Text(transportLabel(for: server))
@@ -48,13 +48,13 @@ struct MCPServerSettingsView: View {
                         Button(role: .destructive) {
                             showDeleteConfirm = server
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label("common.delete", systemImage: "trash")
                         }
                     }
                 }
             }
         }
-        .navigationTitle("MCP 服务器")
+        .navigationTitle("settings.mcp_servers")
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -71,19 +71,19 @@ struct MCPServerSettingsView: View {
         .sheet(item: $editingServer) { server in
             MCPServerEditView(server: server)
         }
-        .alert("删除服务器", isPresented: .init(
+        .alert("mcp.delete_server.title", isPresented: .init(
             get: { showDeleteConfirm != nil },
             set: { if !$0 { showDeleteConfirm = nil } }
         )) {
-            Button("取消", role: .cancel) { showDeleteConfirm = nil }
-            Button("删除", role: .destructive) {
+            Button("common.cancel", role: .cancel) { showDeleteConfirm = nil }
+            Button("common.delete", role: .destructive) {
                 if let server = showDeleteConfirm {
                     modelContext.delete(server)
                     showDeleteConfirm = nil
                 }
             }
         } message: {
-            Text("删除后该服务器的工具将不再可用。")
+            Text("mcp.delete_server.message")
         }
     }
 

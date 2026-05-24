@@ -26,16 +26,23 @@ struct DefaultModelSettingsView: View {
         }
         return apiKeys.first(where: { $0.id.uuidString == autoRenameAPIKeyID })
     }
+
+    private var autoRenameIntervalText: String {
+        let value = autoRenameInterval == 0
+            ? L10n.string("common.off")
+            : L10n.format("auto_rename_interval_every_format", autoRenameInterval)
+        return L10n.format("auto_rename_interval_label_format", value)
+    }
     
     var body: some View {
         Form {
-            Section(header: Text("对话"), footer: Text("选择默认使用的模型和 API 渠道")) {
+            Section(header: Text("default_model.chat.section"), footer: Text("default_model.chat.footer")) {
                 if apiKeys.isEmpty {
-                    Text("暂无可用渠道，请先在设置中添加")
+                    Text("api.no_channels")
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker("当前激活渠道", selection: $activeAPIKeyID) {
-                        Text("未选择").tag("")
+                    Picker("default_model.active_channel", selection: $activeAPIKeyID) {
+                        Text("common.not_selected").tag("")
                         ForEach(apiKeys) { apiKey in
                             Text(apiKey.name).tag(apiKey.id.uuidString)
                         }
@@ -43,7 +50,7 @@ struct DefaultModelSettingsView: View {
                 }
                 
                 HStack {
-                    TextField("默认对话模型", text: $defaultModelId)
+                    TextField("default_model.chat_model", text: $defaultModelId)
                         .omniNoAutocapitalization()
                         .disableAutocorrection(true)
                     
@@ -57,14 +64,14 @@ struct DefaultModelSettingsView: View {
                 }
             }
             
-            Section(header: Text("总结标题"), footer: Text("每 N 轮对话后自动生成会话标题，0=关闭。可单独指定渠道和模型（跟随则用对话的渠道/模型）")) {
+            Section(header: Text("default_model.auto_title.section"), footer: Text("default_model.auto_title.footer")) {
                 Stepper(value: $autoRenameInterval, in: 0...10) {
-                    Text("触发间隔: \(autoRenameInterval == 0 ? "关闭" : "每 \(autoRenameInterval) 轮")")
+                    Text(autoRenameIntervalText)
                 }
                 
                 if !apiKeys.isEmpty {
-                    Picker("标题 API 渠道", selection: $autoRenameAPIKeyID) {
-                        Text("跟随对话渠道").tag("")
+                    Picker("default_model.title_channel", selection: $autoRenameAPIKeyID) {
+                        Text("default_model.follow_chat_channel").tag("")
                         ForEach(apiKeys) { apiKey in
                             Text(apiKey.name).tag(apiKey.id.uuidString)
                         }
@@ -72,7 +79,7 @@ struct DefaultModelSettingsView: View {
                 }
                 
                 HStack {
-                    TextField("标题用模型 ID（可选）", text: $autoRenameModelId)
+                    TextField("default_model.title_model_optional", text: $autoRenameModelId)
                         .omniNoAutocapitalization()
                         .disableAutocorrection(true)
                     
@@ -86,7 +93,7 @@ struct DefaultModelSettingsView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("自定义标题提示词")
+                    Text("default_model.custom_title_prompt")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $autoRenamePrompt)
@@ -95,7 +102,7 @@ struct DefaultModelSettingsView: View {
                 }
             }
         }
-        .navigationTitle("默认模型")
+        .navigationTitle("default_model.title")
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -160,12 +167,12 @@ struct ModelSelectionSheetFromChannel: View {
         NavigationStack {
             Group {
                 if isFetching {
-                    ProgressView("正在获取模型列表...")
+                    ProgressView("model.fetching")
                 } else if models.isEmpty {
                     VStack(spacing: 8) {
-                        Text("暂无可用模型")
+                        Text("model.none")
                             .foregroundStyle(.secondary)
-                        TextField("手动输入模型 ID", text: $selectedModel)
+                        TextField("model.manual_input", text: $selectedModel)
                             .textFieldStyle(.roundedBorder)
                             .omniNoAutocapitalization()
                             .disableAutocorrection(true)
@@ -191,20 +198,20 @@ struct ModelSelectionSheetFromChannel: View {
                             }
                         }
                         .contextMenu {
-                            Button("编辑能力标识", systemImage: "slider.horizontal.3") {
+                            Button("capability.edit.title", systemImage: "slider.horizontal.3") {
                                 // handled via onSaveCap
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("选择模型")
+            .navigationTitle("model.select.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
             }
             .task {

@@ -96,7 +96,7 @@ final class ModelCatalogService {
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw AppError.invalidResponse(context: context, message: "无效响应")
+            throw AppError.invalidResponse(context: context, message: L10n.string("llm.invalid_response"))
         }
 
         guard httpResponse.statusCode == 200 else {
@@ -125,7 +125,7 @@ final class ModelCatalogService {
             return models
         } catch {
             let raw = String(data: data, encoding: .utf8) ?? "Unable to parse response"
-            let appError = AppError.invalidResponse(context: context, message: "模型列表格式错误：\(raw.prefix(200))")
+            let appError = AppError.invalidResponse(context: context, message: L10n.format("model_catalog.invalid_format_format", String(raw.prefix(200))))
             logger.error("\(appError.logDescription)")
             throw appError
         }

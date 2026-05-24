@@ -39,10 +39,10 @@ struct AddAPIKeyView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("基本信息")) {
-                    TextField("渠道名称 (如: 我的 OpenAI)", text: $name)
+                Section(header: Text("common.basic_info")) {
+                    TextField("api.channel_name.placeholder", text: $name)
 
-                    Picker("提供商", selection: $selectedProviderID) {
+                    Picker("api.provider", selection: $selectedProviderID) {
                         ForEach(ProviderPreset.all) { preset in
                             Text(preset.name).tag(preset.id)
                         }
@@ -61,7 +61,7 @@ struct AddAPIKeyView: View {
                     }
                 }
 
-                Section(header: Text("API 配置")) {
+                Section(header: Text("api.configuration.section")) {
                     if selectedPreset.isCustom {
 #if os(iOS)
                         TextField("Base URL", text: $requestURL)
@@ -85,7 +85,7 @@ struct AddAPIKeyView: View {
                     SecureField("API Key", text: $key)
 
                     if availableEndpointTypes.count > 1 {
-                        Picker("端点格式", selection: $endpointType) {
+                        Picker("api.endpoint_type", selection: $endpointType) {
                             ForEach(availableEndpointTypes, id: \.self) { type in
                                 Text(type.displayName).tag(type)
                             }
@@ -100,7 +100,7 @@ struct AddAPIKeyView: View {
                     } else {
                         // Show read-only info when only one endpoint type is available
                         HStack {
-                            Text("端点格式")
+                            Text("api.endpoint_type")
                             Spacer()
                             Text(availableEndpointTypes.first?.displayName ?? "OpenAI")
                                 .foregroundStyle(.secondary)
@@ -108,21 +108,21 @@ struct AddAPIKeyView: View {
                     }
                 }
 
-                Section(header: Text("能力探测")) {
-                    Toggle("自动获取模型能力标识", isOn: $autoCapabilityProbe)
+                Section(header: Text("api.capability_probe.section")) {
+                    Toggle("api.auto_capability_probe", isOn: $autoCapabilityProbe)
                         .font(.subheadline)
                 }
 
                 if editingKey != nil {
-                    Section(header: Text("已选模型")) {
+                    Section(header: Text("api.selected_models.section")) {
                         if isFetchingModels {
                             HStack {
                                 ProgressView()
-                                Text("正在获取模型列表...")
+                                Text("model.fetching")
                                     .foregroundStyle(.secondary)
                             }
                         } else if availableModels.isEmpty {
-                            Button("刷新模型列表") {
+                            Button("model.refresh") {
                                 fetchModels()
                             }
                         } else {
@@ -138,7 +138,7 @@ struct AddAPIKeyView: View {
                                     }
                                 }
                                  .contextMenu {
-                                    Button("编辑能力标识", systemImage: "slider.horizontal.3") {
+                                    Button("capability.edit.title", systemImage: "slider.horizontal.3") {
                                         capEditModelId = model.id
                                         showCapEdit = true
                                     }
@@ -148,19 +148,19 @@ struct AddAPIKeyView: View {
                     }
                 }
             }
-            .navigationTitle(editingKey == nil ? "添加新渠道" : "编辑渠道")
+            .navigationTitle(editingKey == nil ? L10n.string("api.add_channel.title") : L10n.string("api.edit_channel.title"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button("common.cancel") {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    Button("common.save") {
                         saveAPIKey()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -206,10 +206,10 @@ struct AddAPIKeyView: View {
 
                 fetchModels()
             }
-            .alert("保存失败", isPresented: $showError) {
-                Button("确定", role: .cancel) { }
+            .alert("common.save_failed", isPresented: $showError) {
+                Button("common.ok", role: .cancel) { }
             } message: {
-                Text(errorMessage ?? "未知错误")
+                Text(errorMessage ?? L10n.string("common.unknown_error"))
             }
             .sheet(isPresented: $showCapEdit) {
                 CapabilityEditSheet(

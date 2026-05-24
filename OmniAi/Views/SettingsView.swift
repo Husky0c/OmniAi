@@ -11,7 +11,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("账户信息")) {
+                Section(header: Text("settings.account.section")) {
                     HStack {
                         PhotosPicker(selection: $photoItem, matching: .images) {
                             AvatarImageView(image: avatarImage)
@@ -21,10 +21,10 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            TextField("昵称", text: $userName)
+                            TextField("settings.nickname.placeholder", text: $userName)
                                 .font(.title3)
                             if avatarImage != nil {
-                                Button("移除头像", role: .destructive) {
+                                Button("settings.remove_avatar", role: .destructive) {
                                     avatarImage = nil
                                     photoItem = nil
                                     AvatarManager.remove()
@@ -51,45 +51,45 @@ struct SettingsView: View {
                 
                 Section {
                     NavigationLink(destination: LLMApiSettingsView()) {
-                        Label("API 渠道配置", systemImage: "cpu")
+                        Label("settings.api_channels", systemImage: "cpu")
                     }
                     NavigationLink(destination: DefaultModelSettingsView()) {
-                        Label("默认模型", systemImage: "sparkles")
+                        Label("settings.default_model", systemImage: "sparkles")
                     }
                     NavigationLink(destination: MCPServerSettingsView()) {
-                        Label("MCP 服务器", systemImage: "server.rack")
+                        Label("settings.mcp_servers", systemImage: "server.rack")
                     }
                 }
                 
-                Section(header: Text("数据管理"), footer: Text("即将支持将您的对话数据备份到本地，或通过 iCloud 跨设备同步。")) {
+                Section(header: Text("settings.data.section"), footer: Text("settings.data.footer")) {
                     Button(action: {
                         // TODO: 导出数据逻辑
                     }) {
-                        Label("导出备份 (JSON)", systemImage: "square.and.arrow.up")
+                        Label("settings.export_backup", systemImage: "square.and.arrow.up")
                     }
                     
                     Button(action: {
                         // TODO: 导入数据逻辑
                     }) {
-                        Label("从备份恢复", systemImage: "square.and.arrow.down")
+                        Label("settings.restore_backup", systemImage: "square.and.arrow.down")
                     }
                 }
                 
-                Section(header: Text("关于")) {
+                Section(header: Text("settings.about.section")) {
                     HStack {
-                        Text("版本")
+                        Text("settings.version")
                         Spacer()
                         Text("1.0.0").foregroundStyle(.secondary)
                     }
                 }
             }
-            .navigationTitle("设置")
+            .navigationTitle("settings.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    Button("common.done") {
                         dismiss()
                     }
                 }

@@ -26,7 +26,8 @@ struct MessageBubbleView: View {
 
     private var formattedTime: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy年M月d日 HH:mm:ss"
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
         return formatter.string(from: message.createdAt)
     }
 
@@ -157,11 +158,11 @@ struct MessageBubbleView: View {
                     .popover(isPresented: $showStats) {
                         VStack(alignment: .leading, spacing: 4) {
                             if let latency = message.firstTokenLatency {
-                                Text("首 Token 延迟: \(String(format: "%.1f", latency))s")
+                                Text(L10n.format("message.first_token_latency_format", latency))
                             }
-                            Text("输入 Token: \(message.promptTokens ?? 0)")
-                            Text("输出 Token: \(message.completionTokens ?? 0)")
-                            Text("总 Token: \(message.totalTokens ?? 0)")
+                            Text(L10n.format("message.prompt_tokens_format", message.promptTokens ?? 0))
+                            Text(L10n.format("message.completion_tokens_format", message.completionTokens ?? 0))
+                            Text(L10n.format("message.total_tokens_format", message.totalTokens ?? 0))
                         }
                         .font(.caption)
                         .padding()
@@ -172,18 +173,18 @@ struct MessageBubbleView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contextMenu {
             Button(action: { onCopy?() }) {
-                Label("复制", systemImage: "doc.on.doc")
+                Label("common.copy", systemImage: "doc.on.doc")
             }
             Button(action: { onEdit?() }) {
-                Label("编辑", systemImage: "pencil")
+                Label("common.edit", systemImage: "pencil")
             }
             if onRegenerate != nil {
                 Button(action: { onRegenerate?() }) {
-                    Label("重新生成", systemImage: "arrow.clockwise")
+                    Label("message.regenerate", systemImage: "arrow.clockwise")
                 }
             }
             Button(role: .destructive, action: { onDelete?() }) {
-                Label("删除", systemImage: "trash")
+                Label("common.delete", systemImage: "trash")
             }
         }
         .onAppear { userAvatar = AvatarManager.loadAsync() }

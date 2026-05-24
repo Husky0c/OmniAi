@@ -13,18 +13,18 @@ struct DataLoadErrorView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.orange)
 
-            Text("本地数据加载失败")
+            Text("data_load.title")
                 .font(.title2)
                 .bold()
 
-            Text("应用无法读取本地存储数据，这可能是由于数据文件损坏或存储空间不足导致的。")
+            Text("data_load.message")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
             if let error = error {
-                Button(showDetail ? "隐藏详情" : "显示详情") {
+                Button(showDetail ? L10n.string("data_load.hide_details") : L10n.string("data_load.show_details")) {
                     withAnimation { showDetail.toggle() }
                 }
                 .font(.footnote)
@@ -50,7 +50,7 @@ struct DataLoadErrorView: View {
             Button(role: .destructive) {
                 showResetConfirmation = true
             } label: {
-                Label("抹掉数据并重置", systemImage: "trash")
+                Label("data_load.reset", systemImage: "trash")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -58,19 +58,19 @@ struct DataLoadErrorView: View {
             .padding(.horizontal)
 
             if resetSuccess {
-                Label("重置成功，请手动重启应用", systemImage: "checkmark.circle.fill")
+                Label("data_load.reset_success", systemImage: "checkmark.circle.fill")
                     .foregroundColor(.green)
                     .font(.headline)
             }
         }
         .padding()
-        .alert("确认重置", isPresented: $showResetConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("抹掉数据", role: .destructive) {
+        .alert("data_load.confirm_reset.title", isPresented: $showResetConfirmation) {
+            Button("common.cancel", role: .cancel) {}
+            Button("data_load.erase_data", role: .destructive) {
                 performReset()
             }
         } message: {
-            Text("此操作将永久删除所有本地数据（包括会话记录和 API 配置），且不可撤销。")
+            Text("data_load.confirm_reset.message")
         }
     }
 

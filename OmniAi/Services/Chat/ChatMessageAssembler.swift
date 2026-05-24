@@ -169,7 +169,7 @@ enum ChatMessageAssembler {
         var finalContent = baseContent
         for attachment in attachments {
             guard let extracted = extractText(from: attachment) else { continue }
-            let prefix = imagePrefix ? "[文件: \(attachment.name)]" : "[\(attachment.name)]"
+            let prefix = imagePrefix ? L10n.format("attachment.file_prefix_format", attachment.name) : "[\(attachment.name)]"
             finalContent = "\(prefix)\n\(extracted)\n\n" + finalContent
         }
         return finalContent

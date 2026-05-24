@@ -10,12 +10,12 @@ enum ReasoningEffortOption: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .default: return "跟随模型默认"
-        case .none: return "关闭"
-        case .minimal: return "最低"
-        case .low: return "低"
-        case .medium: return "中"
-        case .high: return "高"
+        case .default: return L10n.string("reasoning.default")
+        case .none: return L10n.string("common.off")
+        case .minimal: return L10n.string("reasoning.minimal")
+        case .low: return L10n.string("reasoning.low")
+        case .medium: return L10n.string("reasoning.medium")
+        case .high: return L10n.string("reasoning.high")
         }
     }
 }

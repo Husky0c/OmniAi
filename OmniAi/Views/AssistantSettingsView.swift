@@ -34,16 +34,16 @@ struct AssistantSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("基本信息")) {
-                    TextField("助手名称", text: $assistant.name)
+                Section(header: Text("common.basic_info")) {
+                    TextField("assistant.name.section", text: $assistant.name)
                 }
                 
-                Section(header: Text("系统提示词")) {
+                Section(header: Text("assistant.system_prompt.section")) {
                     TextEditor(text: $assistant.systemPrompt)
                         .frame(minHeight: 120)
                 }
                 
-                Section(header: Text("模型")) {
+                Section(header: Text("assistant.model.section")) {
                     Button(action: { showModelProviderSheet = true }) {
                         HStack {
                             if let channel = effectiveChannel {
@@ -65,10 +65,10 @@ struct AssistantSettingsView: View {
                     }
                 }
                 
-                    Section(header: Text("模型参数")) {
+                    Section(header: Text("assistant.model_parameters.section")) {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text("上下文消息数量")
+                                Text("assistant.context_count")
                                 Spacer()
                                 Button(action: {
                                     contextInputText = String(assistant.contextCount)
@@ -93,10 +93,10 @@ struct AssistantSettingsView: View {
                             }
                         }
                         
-                        Toggle("流式输出", isOn: $assistant.streamEnabled)
+                        Toggle("assistant.stream_output", isOn: $assistant.streamEnabled)
                         
                         if ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]).reasoning {
-                            Picker("思考强度", selection: $assistant.reasoningEffort) {
+                            Picker("assistant.reasoning_effort", selection: $assistant.reasoningEffort) {
                                 ForEach(ReasoningEffortOption.allCases, id: \.rawValue) { option in
                                     Text(option.displayName).tag(option.rawValue)
                                 }
@@ -105,7 +105,7 @@ struct AssistantSettingsView: View {
                         
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text("模型温度")
+                                Text("assistant.temperature")
                                 Spacer()
                                 Button(action: {
                                     tempInputText = String(format: "%.1f", assistant.temperature)
@@ -120,12 +120,12 @@ struct AssistantSettingsView: View {
                         }
                     }
                     
-                    Section(header: Text("MCP 工具")) {
-                        Toggle("MCP 工具调用", isOn: $assistant.mcpEnabled)
+                    Section(header: Text("assistant.mcp_tools.section")) {
+                        Toggle("assistant.mcp_tool_calling", isOn: $assistant.mcpEnabled)
 
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text("最大工具调用轮数")
+                                Text("assistant.max_tool_rounds")
                                 Spacer()
                                 Button(action: {
                                     maxToolRoundsInputText = String(assistant.maxToolCallRounds)
@@ -153,56 +153,56 @@ struct AssistantSettingsView: View {
 
                     Section {
                         Button(role: .destructive, action: { showDeleteConfirmation = true }) {
-                            Label("删除此助手", systemImage: "trash")
+                            Label("assistant.delete", systemImage: "trash")
                         }
                     }
             }
-            .navigationTitle("编辑助手")
+            .navigationTitle("assistant.edit.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+                    Button("common.done") { dismiss() }
                 }
             }
-            .alert("确认删除", isPresented: $showDeleteConfirmation) {
-                Button("取消", role: .cancel) { }
-                Button("删除", role: .destructive, action: deleteAssistant)
+            .alert("common.confirm_delete", isPresented: $showDeleteConfirmation) {
+                Button("common.cancel", role: .cancel) { }
+                Button("common.delete", role: .destructive, action: deleteAssistant)
             } message: {
-                Text("删除「\(assistant.name)」将同时删除其所有历史会话，此操作不可撤销。")
+                Text(L10n.format("assistant.delete_message_format", assistant.name))
             }
-            .alert("上下文消息数量", isPresented: $showContextInput) {
+            .alert("assistant.context_count", isPresented: $showContextInput) {
                 TextField("2-200", text: $contextInputText)
 #if os(iOS)
                     .keyboardType(.numberPad)
 #endif
-                Button("取消", role: .cancel) { }
-                Button("确定") {
+                Button("common.cancel", role: .cancel) { }
+                Button("common.ok") {
                     if let v = Int(contextInputText), v >= 2, v <= 200 {
                         assistant.contextCount = v
                     }
                 }
             }
-            .alert("模型温度", isPresented: $showTempInput) {
+            .alert("assistant.temperature", isPresented: $showTempInput) {
                 TextField("0.0-2.0", text: $tempInputText)
 #if os(iOS)
                     .keyboardType(.decimalPad)
 #endif
-                Button("取消", role: .cancel) { }
-                Button("确定") {
+                Button("common.cancel", role: .cancel) { }
+                Button("common.ok") {
                     if let v = Double(tempInputText), v >= 0.0, v <= 2.0 {
                         assistant.temperature = v
                     }
                 }
             }
-            .alert("最大工具调用轮数", isPresented: $showMaxToolRoundsInput) {
+            .alert("assistant.max_tool_rounds", isPresented: $showMaxToolRoundsInput) {
                 TextField("\(ChatRuntimeDefaults.minToolCallRounds)-\(ChatRuntimeDefaults.maxToolCallRounds)", text: $maxToolRoundsInputText)
 #if os(iOS)
                     .keyboardType(.numberPad)
 #endif
-                Button("取消", role: .cancel) { }
-                Button("确定") {
+                Button("common.cancel", role: .cancel) { }
+                Button("common.ok") {
                     if let v = Int(maxToolRoundsInputText) {
                         assistant.maxToolCallRounds = Assistant.clampedMaxToolCallRounds(v)
                     }

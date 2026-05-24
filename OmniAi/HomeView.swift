@@ -65,9 +65,9 @@ struct MainStageView: View {
                     .id(session.id)
                 } else {
                     ContentUnavailableView(
-                        "没有选中的对话",
+                        "home.no_selected_chat.title",
                         systemImage: "message",
-                        description: Text("请在左侧选择一个对话或新建对话")
+                        description: Text("home.no_selected_chat.description")
                     )
                     .toolbar {
 #if os(iOS)

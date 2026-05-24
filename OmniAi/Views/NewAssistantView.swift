@@ -12,20 +12,20 @@ struct NewAssistantView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("助手名称")) {
-                    TextField("例如: 代码助手, 翻译助手", text: $name)
+                Section(header: Text("assistant.name.section")) {
+                    TextField("assistant.name.placeholder", text: $name)
                 }
             }
-            .navigationTitle("新建助手")
+            .navigationTitle("assistant.new.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("创建") {
+                    Button("common.create") {
                         let assistant = Assistant(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                             channelId: activeAPIKeyID.isEmpty ? nil : activeAPIKeyID,

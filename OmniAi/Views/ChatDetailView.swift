@@ -217,7 +217,7 @@ private struct ChatDetailContentView: View {
                                 CapabilityRowView(capabilities: ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]))
                             }
                         } else {
-                            Text("选择模型")
+                            Text("model.select.title")
                                 .font(.headline)
                         }
                     }
@@ -259,21 +259,21 @@ private struct ChatDetailContentView: View {
         .sheet(item: $viewModel.editingMessage) { message in
             NavigationStack {
                 Form {
-                    Section(header: Text("编辑消息")) {
+                    Section(header: Text("message.edit.section")) {
                         TextEditor(text: $viewModel.editingText)
                             .frame(minHeight: 150)
                     }
                 }
-                .navigationTitle("编辑消息")
+                .navigationTitle("message.edit.title")
 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
 #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") { viewModel.editingMessage = nil }
+                        Button("common.cancel") { viewModel.editingMessage = nil }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("保存") {
+                        Button("common.save") {
                             viewModel.saveEditing(message: message)
                         }
                     }

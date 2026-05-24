@@ -136,7 +136,7 @@ class LLMService: LLMServiceProtocol {
                     let (result, response) = try await session.bytes(for: request)
 
                     guard let httpResponse = response as? HTTPURLResponse else {
-                        throw AppError.invalidResponse(context: streamContext, message: "无效响应")
+                        throw AppError.invalidResponse(context: streamContext, message: L10n.string("llm.invalid_response"))
                     }
 
                     logger.info("Response status: \(httpResponse.statusCode), \(streamContext.logDescription)")

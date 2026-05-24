@@ -8,8 +8,8 @@ enum MCPTransportType: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .stdio: return "Stdio (子进程)"
-        case .sse: return "SSE (服务端推送)"
+        case .stdio: return L10n.string("mcp.transport.stdio")
+        case .sse: return L10n.string("mcp.transport.sse")
         case .streamableHTTP: return "Streamable HTTP"
         }
     }

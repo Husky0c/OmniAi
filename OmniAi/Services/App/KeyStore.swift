@@ -8,9 +8,9 @@ enum KeyStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .encodingFailed:
-            return "API Key 编码失败。"
+            return L10n.string("keystore.encoding_failed")
         case .keychainFailure(let status):
-            return "Keychain 操作失败（\(status)）。"
+            return L10n.format("keystore.keychain_failure_format", status)
         }
     }
 }

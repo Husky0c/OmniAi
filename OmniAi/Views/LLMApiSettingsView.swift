@@ -15,7 +15,7 @@ struct LLMApiSettingsView: View {
     
     var body: some View {
         Form {
-            Section(header: Text("已保存的 API 渠道")) {
+            Section(header: Text("api.saved_channels.section")) {
                 ForEach(apiKeys) { apiKey in
                     Button(action: {
                         editingKey = apiKey
@@ -38,11 +38,11 @@ struct LLMApiSettingsView: View {
                 Button(action: {
                     showingAddKeySheet = true
                 }) {
-                    Label("添加新渠道", systemImage: "plus.circle")
+                    Label("api.add_channel.title", systemImage: "plus.circle")
                 }
             }
         }
-        .navigationTitle("API 渠道配置")
+        .navigationTitle("settings.api_channels")
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -52,10 +52,10 @@ struct LLMApiSettingsView: View {
         .sheet(item: $editingKey) { key in
             AddAPIKeyView(editingKey: key)
         }
-        .alert("删除失败", isPresented: $showDeleteError) {
-            Button("确定", role: .cancel) { }
+        .alert("common.delete_failed", isPresented: $showDeleteError) {
+            Button("common.ok", role: .cancel) { }
         } message: {
-            Text(deleteErrorMessage ?? "未知错误")
+            Text(deleteErrorMessage ?? L10n.string("common.unknown_error"))
         }
     }
     
@@ -69,7 +69,7 @@ struct LLMApiSettingsView: View {
                 }
                 modelContext.delete(keyToDelete)
             } catch {
-                deleteErrorMessage = "无法删除 \(keyToDelete.name) 的 Keychain 凭证：\(error.localizedDescription)"
+                deleteErrorMessage = L10n.format("api.keychain_delete_failed_format", keyToDelete.name, error.localizedDescription)
                 showDeleteError = true
             }
         }
@@ -106,19 +106,19 @@ struct ModelSelectionSheet: View {
                     }
                 }
                 .contextMenu {
-                    Button("编辑能力标识", systemImage: "slider.horizontal.3") {
+                    Button("capability.edit.title", systemImage: "slider.horizontal.3") {
                         capEditModelId = model.id
                         showCapEdit = true
                     }
                 }
             }
-            .navigationTitle("选择模型")
+            .navigationTitle("model.select.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
             }
             .sheet(isPresented: $showCapEdit) {

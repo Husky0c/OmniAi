@@ -10,7 +10,7 @@ struct ChatTitleConfig: Equatable {
 
 struct ChatTitleService {
     private static let logger = Logger(subsystem: "com.omniai.chat", category: "ChatTitleService")
-    static let defaultUntitledSessionTitle = "新对话"
+    static let defaultUntitledSessionTitle = L10n.string("chat.new_title")
 
     private let appServices: AppServices
 
@@ -29,12 +29,12 @@ struct ChatTitleService {
         let recent = session.messages
             .filter { $0.role == .user || $0.role == .assistant }
             .suffix(4)
-            .map { "[\($0.role == .user ? "用户" : "助手")]: \($0.content.prefix(300))" }
+            .map { "[\($0.role == .user ? L10n.string("chat.role.user") : L10n.string("chat.role.assistant"))]: \($0.content.prefix(300))" }
             .joined(separator: "\n")
 
         let messages: [OpenAIMessage] = [
             OpenAIMessage(role: "system", content: .text(config.prompt)),
-            OpenAIMessage(role: "user", content: .text("对话内容：\n\(recent)"))
+            OpenAIMessage(role: "user", content: .text(L10n.format("chat_title.content_format", recent)))
         ]
 
         let modelId = config.modelId.isEmpty ? effectiveModelId : config.modelId
@@ -68,8 +68,8 @@ struct ChatTitleService {
             .replacingOccurrences(of: "\"", with: "")
             .replacingOccurrences(of: "「", with: "")
             .replacingOccurrences(of: "」", with: "")
-            .replacingOccurrences(of: "标题：", with: "")
-            .replacingOccurrences(of: "标题:", with: "")
+            .replacingOccurrences(of: "\u{6807}\u{9898}\u{ff1a}", with: "")
+            .replacingOccurrences(of: "\u{6807}\u{9898}:", with: "")
     }
 
     static func shouldGenerateTitle(currentTitle: String, userMessageCount rounds: Int, interval: Int) -> Bool {
@@ -77,7 +77,7 @@ struct ChatTitleService {
             return false
         }
 
-        if rounds == 1, currentTitle == defaultUntitledSessionTitle {
+        if rounds == 1, currentTitle == defaultUntitledSessionTitle || currentTitle == "\u{65b0}\u{5bf9}\u{8bdd}" {
             return true
         }
 

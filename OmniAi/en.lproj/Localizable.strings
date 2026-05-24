@@ -1,0 +1,211 @@
+"api.add_channel.title" = "Add Channel";
+"api.auto_capability_probe" = "Automatically fetch model capability tags";
+"api.capability_probe.section" = "Capability Probe";
+"api.channel_name.placeholder" = "Channel name (for example: My OpenAI)";
+"api.channels.section" = "API Channels";
+"api.configuration.section" = "API Configuration";
+"api.edit_channel.title" = "Edit Channel";
+"api.endpoint_type" = "Endpoint Format";
+"api.keychain_delete_failed_format" = "Could not delete the Keychain credential for %@: %@";
+"api.no_channels" = "No channels available. Add one in Settings first.";
+"api.provider" = "Provider";
+"api.saved_channels.section" = "Saved API Channels";
+"api.selected_models.section" = "Selected Models";
+
+"assistant.add" = "Add Assistant";
+"assistant.context_count" = "Context Messages";
+"assistant.delete" = "Delete This Assistant";
+"assistant.delete_message_format" = "Deleting \"%@\" will also delete all of its chat history. This cannot be undone.";
+"assistant.edit.title" = "Edit Assistant";
+"assistant.empty.description" = "Use the bottom button to create your first assistant.";
+"assistant.empty.title" = "No Assistants";
+"assistant.list.title" = "Assistants";
+"assistant.max_tool_rounds" = "Max Tool Call Rounds";
+"assistant.mcp_tool_calling" = "MCP Tool Calling";
+"assistant.mcp_tools.section" = "MCP Tools";
+"assistant.model.section" = "Model";
+"assistant.model_parameters.section" = "Model Parameters";
+"assistant.name.placeholder" = "For example: Coding Assistant, Translator";
+"assistant.name.section" = "Assistant Name";
+"assistant.new.title" = "New Assistant";
+"assistant.reasoning_effort" = "Reasoning Effort";
+"assistant.stream_output" = "Stream Output";
+"assistant.system_prompt.section" = "System Prompt";
+"assistant.temperature" = "Model Temperature";
+
+"attachment.camera" = "Camera";
+"attachment.file" = "File";
+"attachment.file_prefix_format" = "[File: %@]";
+"attachment.photo" = "Photo";
+
+"auto_rename_interval_every_format" = "Every %d rounds";
+"auto_rename_interval_label_format" = "Trigger interval: %@";
+
+"capability.edit.title" = "Edit Capability Tags";
+"capability.reasoning" = "Reasoning";
+"capability.tool_calling" = "Tool Calling";
+"capability.vision" = "Vision";
+"capability.web_search" = "Web Search";
+
+"chat.input.placeholder" = "Ask anything";
+"chat.new" = "New Chat";
+"chat.new_title" = "New Chat";
+"chat.role.assistant" = "Assistant";
+"chat.role.user" = "User";
+
+"chat_error.auto_title" = "Auto Title Error";
+"chat_error.configuration" = "Configuration Error";
+"chat_error.invalid_response_detail_format" = "The provider returned an unrecognized response. %@";
+"chat_error.network" = "Network Error";
+"chat_error.provider" = "Provider Error";
+"chat_error.provider_configuration" = "Provider Configuration Error";
+"chat_error.render_format" = "⚠️ %@: %@";
+"chat_error.request" = "Request Error";
+"chat_error.request_build_detail_format" = "Could not build the request. %@";
+"chat_error.response" = "Response Error";
+"chat_error.server_detail_format" = "The provider returned an error. %@";
+"chat_error.stream_parse_detail_format" = "Could not parse the provider response. %@";
+"chat_error.tool" = "Tool Error";
+"chat_error.transport_detail_format" = "The request could not be completed. %@";
+"chat_error.unknown_detail_format" = "An unclassified error occurred. %@";
+
+"chat_title.content_format" = "Chat content:\n%@";
+
+"common.add" = "Add";
+"common.basic_info" = "Basic Info";
+"common.cancel" = "Cancel";
+"common.confirm_delete" = "Confirm Delete";
+"common.copy" = "Copy";
+"common.create" = "Create";
+"common.delete" = "Delete";
+"common.delete_failed" = "Delete Failed";
+"common.done" = "Done";
+"common.edit" = "Edit";
+"common.enabled" = "Enabled";
+"common.fetch_failed" = "Fetch Failed";
+"common.not_selected" = "Not Selected";
+"common.off" = "Off";
+"common.ok" = "OK";
+"common.save" = "Save";
+"common.save_failed" = "Save Failed";
+"common.seconds" = "sec";
+"common.type" = "Type";
+"common.unknown_error" = "Unknown Error";
+"common.unnamed" = "Unnamed";
+
+"data_load.confirm_reset.message" = "This will permanently delete all local data, including chats and API configuration. This cannot be undone.";
+"data_load.confirm_reset.title" = "Confirm Reset";
+"data_load.erase_data" = "Erase Data";
+"data_load.hide_details" = "Hide Details";
+"data_load.message" = "The app could not read local storage. The data file may be corrupted, or storage may be full.";
+"data_load.reset" = "Erase Data and Reset";
+"data_load.reset_success" = "Reset complete. Restart the app manually.";
+"data_load.show_details" = "Show Details";
+"data_load.title" = "Local Data Failed to Load";
+
+"default.auto_rename_prompt" = "Generate a short title for the conversation in English, no more than 15 words. Return only the title text, with no quotes, explanation, or reasoning.";
+"default.user_name" = "User";
+
+"default_model.active_channel" = "Active Channel";
+"default_model.auto_title.footer" = "Automatically generate a session title every N chat rounds. 0 disables it. You can specify a separate channel and model; following uses the chat channel and model.";
+"default_model.auto_title.section" = "Title Summary";
+"default_model.chat.footer" = "Choose the default model and API channel.";
+"default_model.chat.section" = "Chat";
+"default_model.chat_model" = "Default Chat Model";
+"default_model.custom_title_prompt" = "Custom Title Prompt";
+"default_model.follow_chat_channel" = "Follow Chat Channel";
+"default_model.title" = "Default Model";
+"default_model.title_channel" = "Title API Channel";
+"default_model.title_model_optional" = "Title Model ID (Optional)";
+
+"error.auto_title_failure" = "Automatic title generation failed.";
+"error.missing_api_channel" = "No API channel is configured or selected. Add and activate a channel in Settings first.";
+"error.missing_api_key" = "No usable API Key was found. Check the current channel configuration.";
+"error.request_build_failure" = "Request build failed. Check the model, channel, or endpoint configuration.";
+"error.stream_parse_failure" = "Response parsing failed. Check whether the current provider is compatible with the selected endpoint.";
+"error.tool_call_limit_exceeded_format" = "Tool call rounds exceeded the limit (%d rounds). Execution stopped.";
+"error.tool_execution_failure_format" = "Tool %@ failed: %@";
+
+"home.no_selected_chat.description" = "Select a chat on the left or create a new one.";
+"home.no_selected_chat.title" = "No Chat Selected";
+
+"keystore.encoding_failed" = "API Key encoding failed.";
+"keystore.keychain_failure_format" = "Keychain operation failed (%d).";
+
+"llm.authentication_failed" = "Authentication failed. Check the API Key.";
+"llm.invalid_response" = "Invalid response";
+"llm.invalid_response_request_id_format" = "Invalid response (request-id: %@)";
+"llm.invalid_url_format" = "Invalid URL: %@";
+"llm.rate_limit" = "API rate limit exceeded. Try again later.";
+"llm.rate_limit_retry_format" = "API rate limit exceeded. Try again in %d seconds.";
+"llm.request_too_large_format" = "Request body is too large (%.1f MB), exceeding the limit (%.1f MB).";
+
+"mcp.add.title" = "Add Server";
+"mcp.advanced_options" = "Advanced Options";
+"mcp.arguments_placeholder" = "Arguments (space-separated)";
+"mcp.auth_token_optional" = "Auth Token (Optional)";
+"mcp.command_path" = "Command Path";
+"mcp.connection.section" = "Connection";
+"mcp.connection_success_format" = "Connected successfully (found %d tools: %@)";
+"mcp.delete_server.message" = "After deletion, this server's tools will no longer be available.";
+"mcp.delete_server.title" = "Delete Server";
+"mcp.edit.title" = "Edit Server";
+"mcp.empty.description" = "Tap + in the upper right to add an MCP server.";
+"mcp.empty.title" = "No MCP Servers";
+"mcp.server_name" = "Server Name";
+"mcp.server_url" = "Server URL";
+"mcp.test_connection" = "Test Connection";
+"mcp.timeout" = "Timeout";
+"mcp.transport.section" = "Transport";
+"mcp.transport.sse" = "SSE (Server-Sent Events)";
+"mcp.transport.stdio" = "Stdio (Subprocess)";
+
+"message.completion_tokens_format" = "Output Tokens: %d";
+"message.edit.section" = "Edit Message";
+"message.edit.title" = "Edit Message";
+"message.first_token_latency_format" = "First Token Latency: %.1fs";
+"message.prompt_tokens_format" = "Input Tokens: %d";
+"message.regenerate" = "Regenerate";
+"message.total_tokens_format" = "Total Tokens: %d";
+
+"model.fetching" = "Fetching model list...";
+"model.manual_input" = "Enter model ID manually";
+"model.name.section" = "Model Name";
+"model.none" = "No models available";
+"model.refresh" = "Refresh Model List";
+"model.select.title" = "Select Model";
+"model.switch.title" = "Switch Model";
+"model.switch_channel_hint" = "Switch from the channel control to fetch the model list.";
+"model_catalog.invalid_format_format" = "Model list has an invalid format: %@";
+
+"provider_config.duplicate_provider_id_format" = "Duplicate provider ID: %@";
+"provider_config.file_not_found" = "provider_config.json was not found";
+"provider_config.invalid_json_format" = "provider_config.json parsing failed: %@";
+"provider_config.unsupported_endpoint_type_format" = "Provider '%@' uses an unsupported endpoint type: %@";
+"provider_config.unsupported_reasoning_strategy_format" = "Provider '%@' uses an unsupported reasoning strategy: %@";
+
+"reasoning.default" = "Follow Model Default";
+"reasoning.high" = "High";
+"reasoning.low" = "Low";
+"reasoning.medium" = "Medium";
+"reasoning.minimal" = "Minimal";
+
+"settings.about.section" = "About";
+"settings.account.section" = "Account";
+"settings.api_channels" = "API Channels";
+"settings.data.footer" = "Local backup and iCloud sync for chat data will be supported later.";
+"settings.data.section" = "Data Management";
+"settings.default_model" = "Default Model";
+"settings.export_backup" = "Export Backup (JSON)";
+"settings.mcp_servers" = "MCP Servers";
+"settings.nickname.placeholder" = "Nickname";
+"settings.remove_avatar" = "Remove Avatar";
+"settings.restore_backup" = "Restore from Backup";
+"settings.title" = "Settings";
+"settings.version" = "Version";
+
+"thinking.title" = "Deep Thinking";
+
+"tool_call.arguments_label" = "Arguments:";
+"tool_call.title" = "Tool Call";
+"tool_call.tool_label" = "Tool:";

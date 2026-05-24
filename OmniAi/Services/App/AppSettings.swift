@@ -14,10 +14,10 @@ enum AppSettings {
     enum Defaults {
         static let activeAPIKeyID = ""
         static let defaultModelId = "gpt-4o"
-        static let userName = "用户"
+        static let userName = L10n.string("default.user_name")
         static let autoRenameInterval = 2
         static let autoRenameModelId = ""
         static let autoRenameAPIKeyID = ""
-        static let autoRenamePrompt = "根据对话内容用简体中文生成一个简短标题（不超过15字）。只返回标题文本，不要加引号、解释或思考过程。"
+        static let autoRenamePrompt = L10n.string("default.auto_rename_prompt")
     }
 }

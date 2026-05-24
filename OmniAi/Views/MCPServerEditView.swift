@@ -24,39 +24,39 @@ struct MCPServerEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("基本信息")) {
-                    TextField("服务器名称", text: $name)
-                    Toggle("启用", isOn: $isEnabled)
+                Section(header: Text("common.basic_info")) {
+                    TextField("mcp.server_name", text: $name)
+                    Toggle("common.enabled", isOn: $isEnabled)
                 }
 
-                Section(header: Text("传输协议")) {
-                    Picker("类型", selection: $transportType) {
+                Section(header: Text("mcp.transport.section")) {
+                    Picker("common.type", selection: $transportType) {
                         ForEach(MCPTransportType.allCases, id: \.rawValue) { type in
                             Text(type.displayName).tag(type)
                         }
                     }
                 }
 
-                Section(header: Text("连接配置")) {
+                Section(header: Text("mcp.connection.section")) {
                     switch transportType {
                     case .stdio:
-                        TextField("命令路径", text: $command)
+                        TextField("mcp.command_path", text: $command)
                             .omniNoAutocapitalization()
                             .disableAutocorrection(true)
-                        TextField("参数（空格分隔）", text: $argumentsText)
+                        TextField("mcp.arguments_placeholder", text: $argumentsText)
                             .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                     case .sse:
-                        TextField("服务器 URL", text: $serverURL)
+                        TextField("mcp.server_url", text: $serverURL)
                             .omniURLKeyboard()
                             .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                     case .streamableHTTP:
-                        TextField("服务器 URL", text: $serverURL)
+                        TextField("mcp.server_url", text: $serverURL)
                             .omniURLKeyboard()
                             .omniNoAutocapitalization()
                             .disableAutocorrection(true)
-                        SecureField("认证 Token（可选）", text: $authToken)
+                        SecureField("mcp.auth_token_optional", text: $authToken)
                             .omniNoAutocapitalization()
                             .disableAutocorrection(true)
                     }
@@ -65,7 +65,7 @@ struct MCPServerEditView: View {
                 Section {
                     Button(action: testConnection) {
                         HStack {
-                            Text("测试连接")
+                            Text("mcp.test_connection")
                             Spacer()
                             if isTesting {
                                 ProgressView()
@@ -84,29 +84,29 @@ struct MCPServerEditView: View {
                 Section {
                     DisclosureGroup(isExpanded: $showAdvanced) {
                         HStack {
-                            Text("超时时间")
+                            Text("mcp.timeout")
                             Spacer()
-                            TextField("秒", value: $timeoutSeconds, format: .number)
+                            TextField("common.seconds", value: $timeoutSeconds, format: .number)
                                 .frame(width: 60)
                                 .multilineTextAlignment(.trailing)
-                            Text("秒")
+                            Text("common.seconds")
                                 .foregroundStyle(.secondary)
                         }
                     } label: {
-                        Label("高级选项", systemImage: "gearshape")
+                        Label("mcp.advanced_options", systemImage: "gearshape")
                     }
                 }
             }
-            .navigationTitle(isEditing ? "编辑服务器" : "新增服务器")
+            .navigationTitle(isEditing ? L10n.string("mcp.edit.title") : L10n.string("mcp.add.title"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isEditing ? "保存" : "添加") {
+                    Button(isEditing ? L10n.string("common.save") : L10n.string("common.add")) {
                         save()
                         dismiss()
                     }
@@ -204,7 +204,7 @@ struct MCPServerEditView: View {
                 transport.disconnect()
 
                 await MainActor.run {
-                    testResult = "✅ 连接成功（发现 \(count) 个工具：\(toolNames)）"
+                    testResult = "✅ " + L10n.format("mcp.connection_success_format", count, toolNames)
                     isTesting = false
                 }
             } catch {

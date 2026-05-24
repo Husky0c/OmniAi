@@ -6,7 +6,7 @@ struct ToolCallBlockView: View {
 
     private var toolSummary: String {
         let names = toolCalls.compactMap { $0.function?.name }
-        if names.isEmpty { return "工具调用" }
+        if names.isEmpty { return L10n.string("tool_call.title") }
         return names.joined(separator: ", ")
     }
 
@@ -43,7 +43,7 @@ struct ToolCallBlockView: View {
                     ForEach(Array(toolCalls.enumerated()), id: \.offset) { _, tc in
                         if let name = tc.function?.name {
                             HStack(spacing: 4) {
-                                Text("工具:")
+                                Text("tool_call.tool_label")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                 Text(name)
@@ -54,7 +54,7 @@ struct ToolCallBlockView: View {
                         }
                         if let args = tc.function?.arguments, !args.isEmpty, args != "{}" {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("参数:")
+                                Text("tool_call.arguments_label")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                 Text(args)

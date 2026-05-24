@@ -27,9 +27,9 @@ struct ModelProviderSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("API 渠道")) {
+                Section(header: Text("api.channels.section")) {
                     if apiKeys.isEmpty {
-                        Text("暂无可用渠道，请先在设置中添加")
+                        Text("api.no_channels")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(apiKeys) { key in
@@ -56,15 +56,15 @@ struct ModelProviderSheet: View {
                     }
                 }
 
-                Section(header: Text("模型名称")) {
+                Section(header: Text("model.name.section")) {
                     if isFetchingModels {
                         HStack {
                             ProgressView()
-                            Text("正在获取模型列表...")
+                            Text("model.fetching")
                                 .foregroundStyle(.secondary)
                         }
                     } else if availableModels.isEmpty {
-                        Text("点击渠道右侧切换后可获取模型列表")
+                        Text("model.switch_channel_hint")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(availableModels) { model in
@@ -86,7 +86,7 @@ struct ModelProviderSheet: View {
                                 }
                             }
                             .contextMenu {
-                                Button("编辑能力标识", systemImage: "slider.horizontal.3") {
+                                Button("capability.edit.title", systemImage: "slider.horizontal.3") {
                                     editingCapModel = model.id
                                     showCapEdit = true
                                 }
@@ -95,19 +95,19 @@ struct ModelProviderSheet: View {
                     }
                 }
             }
-            .navigationTitle("切换模型")
+            .navigationTitle("model.switch.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+                    Button("common.done") { dismiss() }
                 }
             }
-            .alert("获取失败", isPresented: $showError) {
-                Button("确定", role: .cancel) { }
+            .alert("common.fetch_failed", isPresented: $showError) {
+                Button("common.ok", role: .cancel) { }
             } message: {
-                Text(errorMessage ?? "未知错误")
+                Text(errorMessage ?? L10n.string("common.unknown_error"))
             }
             .sheet(isPresented: $showCapEdit) {
                 if let modelId = editingCapModel {
