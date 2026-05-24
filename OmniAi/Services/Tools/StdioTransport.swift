@@ -15,10 +15,16 @@ nonisolated final class StdioTransport: @unchecked Sendable {
     private var stderrPipe: Pipe?
     private let queue = DispatchQueue(label: "com.omniai.mcp.stdio.\(UUID().uuidString)")
     private var stdoutBuffer = ""
-    private(set) var isConnected: Bool = false
+    private var _isConnected = false
+    private var isConnecting = false
+    private let stateLock = NSLock()
 
     private var pendingRequests: [Int: CheckedContinuation<MCPJSONRPC.Response, Error>] = [:]
     private let pendingLock = NSLock()
+
+    var isConnected: Bool {
+        stateLock.withLock { _isConnected }
+    }
 
     init(serverId: String, command: String, arguments: [String] = [], timeoutSeconds: Int = 60) {
         self.serverId = serverId
@@ -35,7 +41,12 @@ nonisolated final class StdioTransport: @unchecked Sendable {
 nonisolated extension StdioTransport: MCPTransport {
     func connect() async throws {
         #if os(macOS)
-        guard !isConnected else { return }
+        let shouldConnect = stateLock.withLock {
+            guard !_isConnected, !isConnecting else { return false }
+            isConnecting = true
+            return true
+        }
+        guard shouldConnect else { return }
 
         let proc = Process()
         let stdin = Pipe()
@@ -67,30 +78,42 @@ nonisolated extension StdioTransport: MCPTransport {
 
         proc.terminationHandler = { [weak self] _ in
             self?.queue.async {
-                self?.isConnected = false
-                self?.failAllPending(error: MCPJSONRPC.MCPError(code: -32000, message: "Process terminated", data: nil))
+                guard let self else { return }
+                self.stateLock.withLock {
+                    self._isConnected = false
+                    self.isConnecting = false
+                }
+                self.failAllPending(error: MCPJSONRPC.MCPError(code: -32000, message: "Process terminated", data: nil))
             }
         }
 
         do {
             try proc.run()
         } catch {
+            stateLock.withLock { isConnecting = false }
             throw MCPJSONRPC.MCPError(code: -32000, message: "Failed to launch process: \(error.localizedDescription)", data: nil)
         }
 
-        process = proc
-        stdinPipe = stdin
-        stdoutPipe = stdout
-        stderrPipe = stderr
-        isConnected = true
+        stateLock.withLock {
+            process = proc
+            stdinPipe = stdin
+            stdoutPipe = stdout
+            stderrPipe = stderr
+            _isConnected = true
+            isConnecting = false
+        }
         #else
+        stateLock.withLock { isConnecting = false }
         throw MCPJSONRPC.MCPError(code: -32000, message: "Stdio transport is only available on macOS", data: nil)
         #endif
     }
 
     func send(_ request: MCPJSONRPC.Request) async throws -> MCPJSONRPC.Response {
-        guard isConnected, let stdin = stdinPipe else {
-            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        let stdin = try stateLock.withLock {
+            guard _isConnected, let stdinPipe else {
+                throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+            }
+            return stdinPipe
         }
 
         let data = try request.toJSONData()
@@ -123,8 +146,11 @@ nonisolated extension StdioTransport: MCPTransport {
     }
 
     func send(notification: MCPJSONRPC.Notification) async throws {
-        guard isConnected, let stdin = stdinPipe else {
-            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        let stdin = try stateLock.withLock {
+            guard _isConnected, let stdinPipe else {
+                throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+            }
+            return stdinPipe
         }
         let data = try notification.toJSONData()
         let line = String(data: data, encoding: .utf8)! + "\n"
@@ -134,6 +160,22 @@ nonisolated extension StdioTransport: MCPTransport {
     }
 
     func disconnect() {
+        let state = stateLock.withLock {
+            let state = (
+                process: process,
+                stdoutPipe: stdoutPipe,
+                stderrPipe: stderrPipe
+            )
+            process = nil
+            stdinPipe = nil
+            stdoutPipe = nil
+            stderrPipe = nil
+            stdoutBuffer = ""
+            _isConnected = false
+            isConnecting = false
+            return state
+        }
+
         let pending = pendingLock.withLock {
             let result = pendingRequests
             pendingRequests.removeAll()
@@ -144,29 +186,32 @@ nonisolated extension StdioTransport: MCPTransport {
         }
 
         #if os(macOS)
-        if let proc = process as? Process, proc.isRunning {
+        if let proc = state.process as? Process, proc.isRunning {
             proc.terminate()
             proc.waitUntilExit()
         }
         #endif
-        stdoutPipe?.fileHandleForReading.readabilityHandler = nil
-        stderrPipe?.fileHandleForReading.readabilityHandler = nil
-        stdinPipe = nil
-        stdoutPipe = nil
-        stderrPipe = nil
-        process = nil
-        isConnected = false
+        state.stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+        state.stderrPipe?.fileHandleForReading.readabilityHandler = nil
     }
 }
 
 private nonisolated extension StdioTransport {
     func handleStdoutData(_ data: Data) {
-        stdoutBuffer += String(data: data, encoding: .utf8) ?? ""
+        let lines = stateLock.withLock {
+            stdoutBuffer += String(data: data, encoding: .utf8) ?? ""
+            var lines: [String] = []
 
-        while let newlineIndex = stdoutBuffer.firstIndex(of: "\n") {
-            let line = String(stdoutBuffer[..<newlineIndex])
-            stdoutBuffer = String(stdoutBuffer[stdoutBuffer.index(after: newlineIndex)...])
+            while let newlineIndex = stdoutBuffer.firstIndex(of: "\n") {
+                let line = String(stdoutBuffer[..<newlineIndex])
+                stdoutBuffer = String(stdoutBuffer[stdoutBuffer.index(after: newlineIndex)...])
+                lines.append(line)
+            }
 
+            return lines
+        }
+
+        for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
 

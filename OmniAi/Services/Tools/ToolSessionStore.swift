@@ -67,6 +67,7 @@ nonisolated final class ToolSessionStore: ToolServiceFactory, @unchecked Sendabl
         }
     }
 
+    @MainActor
     func connectAssistantMCPServers(
         for sessionId: UUID,
         assistant: Assistant?,

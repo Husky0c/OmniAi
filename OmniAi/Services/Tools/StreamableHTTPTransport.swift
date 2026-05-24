@@ -11,7 +11,13 @@ nonisolated final class StreamableHTTPTransport: @unchecked Sendable {
 
     private var urlSession: URLSessionProtocol?
     private var sessionId: String?
-    private(set) var isConnected: Bool = false
+    private var _isConnected = false
+    private var isConnecting = false
+    private let stateLock = NSLock()
+
+    var isConnected: Bool {
+        stateLock.withLock { _isConnected }
+    }
 
     init(serverId: String, url: String, authToken: String? = nil, timeoutSeconds: Int = 60) {
         self.serverId = serverId
@@ -27,21 +33,35 @@ nonisolated final class StreamableHTTPTransport: @unchecked Sendable {
 
 nonisolated extension StreamableHTTPTransport: MCPTransport {
     func connect() async throws {
-        guard !isConnected else { return }
+        let shouldConnect = stateLock.withLock {
+            guard !_isConnected, !isConnecting else { return false }
+            isConnecting = true
+            return true
+        }
+        guard shouldConnect else { return }
+
         guard URL(string: endpointURL) != nil else {
+            stateLock.withLock { isConnecting = false }
             throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid URL: \(endpointURL)", data: nil)
         }
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = Double(timeoutSeconds)
         config.timeoutIntervalForResource = Double(timeoutSeconds * 2)
-        urlSession = URLSession(configuration: config)
-        isConnected = true
+        let session = URLSession(configuration: config)
+        stateLock.withLock {
+            urlSession = session
+            _isConnected = true
+            isConnecting = false
+        }
     }
 
     func send(_ mcpRequest: MCPJSONRPC.Request) async throws -> MCPJSONRPC.Response {
-        guard isConnected, let urlSession else {
-            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        let state = try stateLock.withLock {
+            guard _isConnected, let urlSession else {
+                throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+            }
+            return (urlSession: urlSession, sessionId: sessionId)
         }
         guard let url = URL(string: endpointURL) else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid URL: \(endpointURL)", data: nil)
@@ -54,13 +74,13 @@ nonisolated extension StreamableHTTPTransport: MCPTransport {
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        if let sessionId {
+        if let sessionId = state.sessionId {
             request.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
         }
         request.httpBody = try mcpRequest.toJSONData()
         request.timeoutInterval = Double(timeoutSeconds)
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await state.urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid response from Streamable HTTP server", data: nil)
         }
@@ -72,7 +92,7 @@ nonisolated extension StreamableHTTPTransport: MCPTransport {
         }
 
         if let newSessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
-            sessionId = newSessionId
+            stateLock.withLock { sessionId = newSessionId }
         }
 
         let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? ""
@@ -91,8 +111,11 @@ nonisolated extension StreamableHTTPTransport: MCPTransport {
     }
 
     func send(notification: MCPJSONRPC.Notification) async throws {
-        guard isConnected, let urlSession else {
-            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        let state = try stateLock.withLock {
+            guard _isConnected, let urlSession else {
+                throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+            }
+            return (urlSession: urlSession, sessionId: sessionId)
         }
         guard let url = URL(string: endpointURL) else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid URL: \(endpointURL)", data: nil)
@@ -105,23 +128,26 @@ nonisolated extension StreamableHTTPTransport: MCPTransport {
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        if let sessionId {
+        if let sessionId = state.sessionId {
             request.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
         }
         request.httpBody = try notification.toJSONData()
         request.timeoutInterval = Double(timeoutSeconds)
 
-        let (_, response) = try await urlSession.data(for: request)
+        let (_, response) = try await state.urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { return }
         if let newSessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
-            sessionId = newSessionId
+            stateLock.withLock { sessionId = newSessionId }
         }
     }
 
     func disconnect() {
-        urlSession = nil
-        sessionId = nil
-        isConnected = false
+        stateLock.withLock {
+            urlSession = nil
+            sessionId = nil
+            _isConnected = false
+            isConnecting = false
+        }
     }
 }
 

@@ -25,15 +25,18 @@ nonisolated final class MCPConnectionManager: @unchecked Sendable {
 nonisolated extension MCPConnectionManager {
     func connect(to config: MCPServerConfig) async throws {
         let serverId = config.id.uuidString
+        let transport: MCPTransport = try createTransport(from: config)
 
-        if lock.withLock({ transports[serverId] != nil }) {
+        let didInsert = lock.withLock {
+            guard transports[serverId] == nil else { return false }
+            transports[serverId] = transport
+            return true
+        }
+
+        guard didInsert else {
             logger.debug("MCP server '\(config.name)' already connected, skipping")
             return
         }
-
-        let transport: MCPTransport = try createTransport(from: config)
-
-        lock.withLock { transports[serverId] = transport }
 
         try await transport.connect()
 
@@ -43,7 +46,13 @@ nonisolated extension MCPConnectionManager {
             registerTools(serverId: serverId, tools: tools)
         } catch {
             transport.disconnect()
-            _ = lock.withLock { transports.removeValue(forKey: serverId) }
+            lock.withLock {
+                if transports[serverId] === transport {
+                    transports.removeValue(forKey: serverId)
+                    serverTools.removeValue(forKey: serverId)
+                    toolRouting = toolRouting.filter { $0.value != serverId }
+                }
+            }
             throw error
         }
     }
@@ -55,15 +64,12 @@ nonisolated extension MCPConnectionManager {
             transport = transports.removeValue(forKey: serverId)
             let serverToolList = serverTools.removeValue(forKey: serverId) ?? []
             toolsToRemove = Set(serverToolList.map { $0.name })
-        }
-
-        transport?.disconnect()
-
-        lock.withLock {
             for toolName in toolsToRemove {
                 toolRouting.removeValue(forKey: toolName)
             }
         }
+
+        transport?.disconnect()
     }
 
     func disconnectAll() async {
@@ -103,9 +109,11 @@ nonisolated extension MCPConnectionManager {
     }
 
     func forward(toolName: String, argumentsJSON: String) async throws -> String {
-        let serverId = lock.withLock { toolRouting[toolName] }
+        let transport = lock.withLock {
+            toolRouting[toolName].flatMap { transports[$0] }
+        }
 
-        guard let serverId, let transport = transports[serverId] else {
+        guard let transport else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "No server available for tool: \(toolName)", data: nil)
         }
 

@@ -12,11 +12,16 @@ nonisolated final class SSETransport: @unchecked Sendable {
     private var urlSession: URLSessionProtocol?
     private var sseTask: Task<Void, Error>?
     private var sessionId: String?
-    private(set) var isConnected: Bool = false
+    private var _isConnected = false
+    private var isConnecting = false
 
     private var endpointFound = false
     private var capturedSid: String?
     private let stateLock = NSLock()
+
+    var isConnected: Bool {
+        stateLock.withLock { _isConnected }
+    }
 
     init(serverId: String, url: String, authToken: String? = nil, timeoutSeconds: Int = 60) {
         self.serverId = serverId
@@ -32,7 +37,25 @@ nonisolated final class SSETransport: @unchecked Sendable {
 
 nonisolated extension SSETransport: MCPTransport {
     func connect() async throws {
-        guard !isConnected else { return }
+        let shouldConnect = stateLock.withLock {
+            guard !_isConnected, !isConnecting else { return false }
+            isConnecting = true
+            return true
+        }
+        guard shouldConnect else { return }
+        var didFinishConnecting = false
+        defer {
+            if !didFinishConnecting {
+                stateLock.withLock {
+                    isConnecting = false
+                    if !_isConnected {
+                        urlSession = nil
+                        sseTask = nil
+                    }
+                }
+            }
+        }
+
         guard let url = URL(string: baseURL) else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid URL: \(baseURL)", data: nil)
         }
@@ -41,7 +64,7 @@ nonisolated extension SSETransport: MCPTransport {
         config.timeoutIntervalForRequest = Double(timeoutSeconds)
         config.timeoutIntervalForResource = Double(timeoutSeconds * 2)
         let session: URLSessionProtocol = URLSession(configuration: config)
-        self.urlSession = session
+        stateLock.withLock { self.urlSession = session }
 
         let initReq = MCPJSONRPC.Request(
             id: MCPJSONRPC.nextId(),
@@ -71,20 +94,29 @@ nonisolated extension SSETransport: MCPTransport {
         let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? ""
 
         if contentType.contains("text/event-stream") {
-            endpointFound = false
-            capturedSid = nil
+            stateLock.withLock {
+                endpointFound = false
+                capturedSid = nil
+            }
 
             if let sid = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
-                self.sessionId = sid
-                self.isConnected = true
-                sseTask = Task { try await readSSEStream(bytes) }
+                let task = Task { try await readSSEStream(bytes) }
+                stateLock.withLock {
+                    self.sessionId = sid
+                    self._isConnected = true
+                    self.isConnecting = false
+                    sseTask = task
+                }
+                didFinishConnecting = true
             } else {
-                sseTask = Task { try await readSSEStream(bytes) }
+                let task = Task { try await readSSEStream(bytes) }
+                stateLock.withLock { sseTask = task }
 
                 let deadline = Date(timeIntervalSinceNow: Double(timeoutSeconds))
                 while true {
                     if Task.isCancelled {
-                        sseTask?.cancel()
+                        stateLock.withLock { sseTask }?.cancel()
+                        stateLock.withLock { isConnecting = false }
                         throw CancellationError()
                     }
 
@@ -93,13 +125,21 @@ nonisolated extension SSETransport: MCPTransport {
                     }
 
                     if found, let sid {
-                        self.sessionId = sid
-                        self.isConnected = true
+                        stateLock.withLock {
+                            self.sessionId = sid
+                            self._isConnected = true
+                            self.isConnecting = false
+                        }
+                        didFinishConnecting = true
                         return
                     }
 
                     if Date() >= deadline {
-                        sseTask?.cancel()
+                        stateLock.withLock {
+                            sseTask?.cancel()
+                            sseTask = nil
+                            isConnecting = false
+                        }
                         throw MCPJSONRPC.MCPError(
                             code: -32000, message: "Timed out waiting for SSE endpoint event after \(timeoutSeconds)s", data: nil
                         )
@@ -109,18 +149,25 @@ nonisolated extension SSETransport: MCPTransport {
                 }
             }
         } else {
-            sessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id")
-            isConnected = true
+            stateLock.withLock {
+                sessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id")
+                _isConnected = true
+                isConnecting = false
+            }
+            didFinishConnecting = true
         }
     }
 
     func send(_ mcpRequest: MCPJSONRPC.Request) async throws -> MCPJSONRPC.Response {
-        guard isConnected, let urlSession else {
-            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        let state = try stateLock.withLock {
+            guard _isConnected, let urlSession else {
+                throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+            }
+            return (urlSession: urlSession, sessionId: sessionId)
         }
 
         let messageURL: URL
-        if let sessionId, var components = URLComponents(string: baseURL) {
+        if let sessionId = state.sessionId, var components = URLComponents(string: baseURL) {
             components.queryItems = [URLQueryItem(name: "sessionId", value: sessionId)]
             guard let url = components.url else {
                 throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid message URL", data: nil)
@@ -142,7 +189,7 @@ nonisolated extension SSETransport: MCPTransport {
         urlRequest.httpBody = try mcpRequest.toJSONData()
         urlRequest.timeoutInterval = Double(timeoutSeconds)
 
-        let (data, response) = try await urlSession.data(for: urlRequest)
+        let (data, response) = try await state.urlSession.data(for: urlRequest)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MCPJSONRPC.MCPError(code: -32000, message: "No response from SSE server", data: nil)
         }
@@ -161,12 +208,15 @@ nonisolated extension SSETransport: MCPTransport {
     }
 
     func send(notification: MCPJSONRPC.Notification) async throws {
-        guard isConnected, let urlSession else {
-            throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+        let state = try stateLock.withLock {
+            guard _isConnected, let urlSession else {
+                throw MCPJSONRPC.MCPError(code: -32000, message: "Not connected", data: nil)
+            }
+            return (urlSession: urlSession, sessionId: sessionId)
         }
 
         let messageURL: URL
-        if let sessionId, var components = URLComponents(string: baseURL) {
+        if let sessionId = state.sessionId, var components = URLComponents(string: baseURL) {
             components.queryItems = [URLQueryItem(name: "sessionId", value: sessionId)]
             guard let url = components.url else {
                 throw MCPJSONRPC.MCPError(code: -32000, message: "Invalid message URL", data: nil)
@@ -187,19 +237,26 @@ nonisolated extension SSETransport: MCPTransport {
         urlRequest.httpBody = try notification.toJSONData()
         urlRequest.timeoutInterval = Double(timeoutSeconds)
 
-        let (_, response) = try await urlSession.data(for: urlRequest)
+        let (_, response) = try await state.urlSession.data(for: urlRequest)
         guard let httpResponse = response as? HTTPURLResponse else { return }
         if let newSessionId = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
-            sessionId = newSessionId
+            stateLock.withLock { sessionId = newSessionId }
         }
     }
 
     func disconnect() {
-        sseTask?.cancel()
-        sseTask = nil
-        urlSession = nil
-        sessionId = nil
-        isConnected = false
+        let task = stateLock.withLock {
+            let task = sseTask
+            sseTask = nil
+            urlSession = nil
+            sessionId = nil
+            _isConnected = false
+            isConnecting = false
+            endpointFound = false
+            capturedSid = nil
+            return task
+        }
+        task?.cancel()
     }
 }
 
@@ -219,7 +276,8 @@ private nonisolated extension SSETransport {
                 if !currentData.isEmpty {
                     let joined = currentData.joined(separator: "\n")
 
-                    if !endpointFound, currentEvent == "endpoint" {
+                    let endpointAlreadyFound = stateLock.withLock { endpointFound }
+                    if !endpointAlreadyFound, currentEvent == "endpoint" {
                         let trimmed = joined.trimmingCharacters(in: .whitespacesAndNewlines)
                         let sid: String
                         if let components = URLComponents(string: trimmed),
@@ -232,7 +290,7 @@ private nonisolated extension SSETransport {
                             endpointFound = true
                             capturedSid = sid
                         }
-                    } else if endpointFound {
+                    } else if endpointAlreadyFound {
                         handleNotification(event: currentEvent, data: joined)
                     }
                 }
