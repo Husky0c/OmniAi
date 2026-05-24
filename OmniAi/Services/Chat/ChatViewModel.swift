@@ -106,6 +106,7 @@ final class ChatViewModel {
 
             // Clear and regenerate this assistant message
             message.content = ""
+            message.modelId = effectiveModelId
             message.firstTokenLatency = nil
             message.promptTokens = nil
             message.completionTokens = nil
