@@ -1,5 +1,6 @@
 "api.add_channel.title" = "添加新渠道";
 "api.auto_capability_probe" = "自动获取模型能力标识";
+"api.base_url_required" = "自定义提供商必须填写有效的 Base URL。";
 "api.capability_probe.section" = "能力探测";
 "api.channel_name.placeholder" = "渠道名称 (如: 我的 OpenAI)";
 "api.channels.section" = "API 渠道";

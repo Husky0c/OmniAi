@@ -40,6 +40,18 @@ struct AddAPIKeyView: View {
         selectedPreset.supportedEndpointTypes
     }
 
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedRequestURL: String {
+        requestURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSave: Bool {
+        !trimmedName.isEmpty && (!selectedPreset.isCustom || isValidBaseURL(trimmedRequestURL))
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -167,7 +179,7 @@ struct AddAPIKeyView: View {
                     Button("common.save") {
                         saveAPIKey()
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!canSave)
                 }
             }
             .onAppear {
@@ -228,12 +240,12 @@ struct AddAPIKeyView: View {
     }
 
     private func fetchModels() {
-        guard !requestURL.isEmpty, !key.isEmpty else { return }
+        guard isValidBaseURL(trimmedRequestURL), !key.isEmpty else { return }
         isFetchingModels = true
         availableModels = []
         Task {
             do {
-                let models = try await appServices.llmService.fetchAvailableModels(apiKey: key, baseURL: requestURL, apiType: apiType, providerId: selectedProviderID, endpointType: endpointType)
+                let models = try await appServices.llmService.fetchAvailableModels(apiKey: key, baseURL: trimmedRequestURL, apiType: apiType, providerId: selectedProviderID, endpointType: endpointType)
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
@@ -256,11 +268,20 @@ struct AddAPIKeyView: View {
 
     private func saveAPIKey() {
         do {
+            let normalizedRequestURL = selectedPreset.isCustom
+                ? cleanEndpointURL(trimmedRequestURL)
+                : selectedPreset.baseURL(for: endpointType)
+            guard !selectedPreset.isCustom || isValidBaseURL(normalizedRequestURL) else {
+                errorMessage = L10n.string("api.base_url_required")
+                showError = true
+                return
+            }
+
             if let existing = editingKey {
                 try appServices.keyStore.saveAPIKey(key, for: existing)
-                existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                existing.name = trimmedName
                 existing.company = selectedPreset.name
-                existing.requestURL = requestURL.isEmpty ? nil : requestURL
+                existing.requestURL = normalizedRequestURL
                 existing.apiType = apiType
                 existing.providerID = selectedProviderID
                 existing.autoCapabilityProbe = autoCapabilityProbe
@@ -269,9 +290,9 @@ struct AddAPIKeyView: View {
                 existing.timestamp = Date()
             } else {
                 let newKey = APIKeys(
-                    name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                    name: trimmedName,
                     company: selectedPreset.name,
-                    requestURL: requestURL.isEmpty ? nil : requestURL,
+                    requestURL: normalizedRequestURL,
                     invisible: false,
                     autoCapabilityProbe: autoCapabilityProbe,
                     apiType: apiType,
@@ -302,5 +323,17 @@ struct AddAPIKeyView: View {
             }
         }
         return cleaned
+    }
+
+    private func isValidBaseURL(_ url: String) -> Bool {
+        guard let components = URLComponents(string: url),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              let host = components.host,
+              !host.isEmpty
+        else {
+            return false
+        }
+        return true
     }
 }

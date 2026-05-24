@@ -12,10 +12,13 @@ struct BaseURLResolver {
         let endpoint = contract.endpoint(endpointType)
         var base = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if base.isEmpty {
+            if contract.isCustom, providerId != nil {
+                return ""
+            }
             if !endpoint.defaultBaseURL.isEmpty {
                 return endpoint.defaultBaseURL
             }
-            return "https://api.openai.com/v1"
+            return ""
         }
         while base.hasSuffix("/") {
             base.removeLast()

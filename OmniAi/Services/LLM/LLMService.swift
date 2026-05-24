@@ -88,6 +88,13 @@ class LLMService: LLMServiceProtocol {
         )
 
         let resolvedBaseURL = baseURLResolver.resolve(customURL: baseURL, providerId: providerId, apiType: apiType, endpointType: endpointType)
+        guard !resolvedBaseURL.isEmpty else {
+            return AsyncThrowingStream { continuation in
+                let appError = AppError.requestBuildFailure(context: requestBuildContext, underlying: LLMServiceError.invalidURL(resolvedBaseURL))
+                logger.error("\(appError.logDescription)")
+                continuation.finish(throwing: appError)
+            }
+        }
 
         let reasoningParams = ReasoningConfigBuilder.build(
             contract: contract,
@@ -255,6 +262,9 @@ class LLMService: LLMServiceProtocol {
             modelId: modelId,
             phase: .completion
         )
+        guard !resolvedBaseURL.isEmpty else {
+            throw AppError.requestBuildFailure(context: context, underlying: LLMServiceError.invalidURL(resolvedBaseURL))
+        }
         return try await LLMCompletionClient(session: session).sendMessageCompletion(
             messages: messages,
             apiKey: apiKey,

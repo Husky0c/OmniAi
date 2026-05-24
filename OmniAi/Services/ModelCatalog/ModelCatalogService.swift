@@ -26,11 +26,10 @@ final class ModelCatalogService {
     ) async throws -> [ModelInfo] {
         let contract = providerRegistry.getContract(for: providerId)
         if endpointType == .anthropic {
-            if contract.supportsEndpointType(.openai) {
-                let openAIBase = contract.endpoint(.openai).defaultBaseURL
+            if let baseURL, !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 if let models = try? await fetchModelsWithOpenAI(
                     apiKey: apiKey,
-                    openAIBaseURL: openAIBase,
+                    openAIBaseURL: baseURL,
                     apiType: apiType,
                     providerId: providerId,
                     capabilityStrategy: contract.capability.strategy
@@ -38,10 +37,10 @@ final class ModelCatalogService {
                     return models
                 }
             }
-            if let baseURL, !baseURL.isEmpty {
+            if let openAIBase = catalogBaseURLForProviderOpenAIEndpoint(contract) {
                 if let models = try? await fetchModelsWithOpenAI(
                     apiKey: apiKey,
-                    openAIBaseURL: baseURL,
+                    openAIBaseURL: openAIBase,
                     apiType: apiType,
                     providerId: providerId,
                     capabilityStrategy: contract.capability.strategy
@@ -76,6 +75,9 @@ final class ModelCatalogService {
         )
         let resolvedURL = baseURLResolver.resolve(customURL: openAIBaseURL, providerId: providerId, apiType: apiType, endpointType: .openai)
         let urlString = "\(resolvedURL)/models"
+        guard !resolvedURL.isEmpty else {
+            throw AppError.requestBuildFailure(context: context, underlying: LLMServiceError.invalidURL(urlString))
+        }
         guard let url = URL(string: urlString) else {
             throw AppError.requestBuildFailure(context: context, underlying: LLMServiceError.invalidURL(urlString))
         }
@@ -147,6 +149,24 @@ final class ModelCatalogService {
         case .none:
             return ModelCapability()
         }
+    }
+
+    private func catalogBaseURLForProviderOpenAIEndpoint(_ contract: ProviderContract) -> String? {
+        guard contract.supportsEndpointType(.openai), !contract.isCustom else {
+            return nil
+        }
+
+        let openAIBase = contract.endpoint(.openai).defaultBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !openAIBase.isEmpty else {
+            return nil
+        }
+
+        let selectedEndpointBase = contract.endpoint(contract.defaultEndpointType).defaultBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if contract.defaultEndpointType == .anthropic, openAIBase == selectedEndpointBase {
+            return nil
+        }
+
+        return openAIBase
     }
 
     static func anthropicKnownModels() -> [ModelInfo] {

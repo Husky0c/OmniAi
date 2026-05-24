@@ -7,8 +7,10 @@ final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
     var mockError: Error?
     var mockLines: [String] = []
     var mockStreamError: Error?
+    private(set) var requests: [URLRequest] = []
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        requests.append(request)
         if let error = mockError { throw error }
         let data = mockData ?? Data()
         let response = mockResponse ?? HTTPURLResponse(
@@ -21,6 +23,7 @@ final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
     }
 
     func bytes(for request: URLRequest) async throws -> (AsyncThrowingStream<String, Error>, URLResponse) {
+        requests.append(request)
         if let error = mockError { throw error }
         let response = mockResponse ?? HTTPURLResponse(
             url: request.url!,

@@ -17,6 +17,15 @@ final class MockProviderRegistry: ProviderRegistryProtocol {
     }
 
     func getContract(for providerId: String?) -> ProviderContract {
+        if let contracts {
+            if let providerId, let contract = contracts.first(where: { $0.id == providerId }) {
+                return contract
+            }
+            if providerId == nil, let contract = contracts.first {
+                return contract
+            }
+        }
+
         var contract = ProviderContract.openAICompatibleDefault
         if protocolConfig.request != nil || protocolConfig.response != nil || protocolConfig.messageAssembly != nil {
             contract = ProviderContract(

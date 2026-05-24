@@ -219,6 +219,67 @@ final class LLMServiceTests: XCTestCase {
         }
     }
 
+    func testFetchModelsForAnthropicEndpointPrefersUserBaseURL() async throws {
+        let registry = MockProviderRegistry()
+        registry.contracts = [Self.makeDualEndpointContract()]
+        let session = MockURLSession()
+        let service = LLMService(providerRegistry: registry, session: session)
+        let modelsJSON = #"{"data":[{"id":"user-model"}]}"#
+        session.mockData = modelsJSON.data(using: .utf8)
+        session.mockResponse = HTTPURLResponse(url: URL(string: "https://user.example/v1/models")!, statusCode: 200, httpVersion: nil, headerFields: nil)
+
+        let models = try await service.fetchAvailableModels(
+            apiKey: "test-key",
+            baseURL: "https://user.example",
+            providerId: "dual",
+            endpointType: .anthropic
+        )
+
+        XCTAssertEqual(models.map(\.id), ["user-model"])
+        XCTAssertEqual(session.requests.map { $0.url?.absoluteString }, ["https://user.example/v1/models"])
+    }
+
+    func testFetchModelsForEmptyCustomOpenAIEndpointDoesNotSendNetworkRequest() async throws {
+        let registry = MockProviderRegistry()
+        registry.contracts = [Self.makeCustomProviderContract()]
+        let session = MockURLSession()
+        let service = LLMService(providerRegistry: registry, session: session)
+
+        do {
+            _ = try await service.fetchAvailableModels(
+                apiKey: "test-key",
+                baseURL: nil,
+                providerId: "newapi",
+                endpointType: .openai
+            )
+            XCTFail("Expected request build failure")
+        } catch let error as AppError {
+            XCTAssertTrue(error.logDescription.contains("provider=newapi"))
+            XCTAssertTrue(error.logDescription.contains("phase=modelCatalog"))
+        } catch {
+            XCTFail("Expected AppError, got \(error)")
+        }
+
+        XCTAssertTrue(session.requests.isEmpty)
+    }
+
+    func testFetchModelsForEmptyCustomAnthropicEndpointDoesNotFallbackToOpenAI() async throws {
+        let registry = MockProviderRegistry()
+        registry.contracts = [Self.makeCustomProviderContract()]
+        let session = MockURLSession()
+        let service = LLMService(providerRegistry: registry, session: session)
+
+        let models = try await service.fetchAvailableModels(
+            apiKey: "test-key",
+            baseURL: nil,
+            providerId: "newapi",
+            endpointType: .anthropic
+        )
+
+        XCTAssertTrue(models.contains { $0.id.hasPrefix("claude-") })
+        XCTAssertTrue(session.requests.isEmpty)
+    }
+
     func testStreamMalformedJSONThrowsParseFailureWithContext() async {
         mockSession.mockLines = ["data: {not-json"]
         mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/chat/completions")!, statusCode: 200, httpVersion: nil, headerFields: nil)
@@ -248,5 +309,74 @@ final class LLMServiceTests: XCTestCase {
         } catch {
             XCTFail("Expected AppError, got \(error)")
         }
+    }
+
+    private static func makeCustomProviderContract() -> ProviderContract {
+        let protocolConfig = ProtocolConfig.openAICompatibleDefaults
+        let urlRule = URLNormalizationRule(appendVersion: true, versionPath: "/v1")
+        let endpoints: [EndpointType: ProviderEndpointContract] = [
+            .openai: ProviderEndpointContract(
+                type: .openai,
+                adapterKind: .openAICompatible,
+                defaultBaseURL: "",
+                urlNormalization: urlRule,
+                stripSuffixes: ["/chat/completions"]
+            ),
+            .anthropic: ProviderEndpointContract(
+                type: .anthropic,
+                adapterKind: .anthropicMessages,
+                defaultBaseURL: "",
+                urlNormalization: urlRule,
+                stripSuffixes: ["/messages"]
+            )
+        ]
+        return ProviderContract(
+            id: "newapi",
+            name: "NewAPI",
+            category: .openAI,
+            isCustom: true,
+            defaultBaseURL: "",
+            defaultEndpointType: .openai,
+            endpoints: endpoints,
+            request: protocolConfig.request,
+            response: protocolConfig.response,
+            messageAssembly: protocolConfig.messageAssembly,
+            protocolConfig: protocolConfig,
+            reasoning: ProviderReasoningContract(strategyName: "openai-standard", strategy: .openAIStandard),
+            capability: .openAICompatibleDefault
+        )
+    }
+
+    private static func makeDualEndpointContract() -> ProviderContract {
+        let protocolConfig = ProtocolConfig.openAICompatibleDefaults
+        let openAIEndpoint = ProviderEndpointContract(
+            type: .openai,
+            adapterKind: .openAICompatible,
+            defaultBaseURL: "https://provider.example/openai",
+            urlNormalization: URLNormalizationRule(appendVersion: true, versionPath: "/v1"),
+            stripSuffixes: ["/chat/completions"]
+        )
+        let anthropicEndpoint = ProviderEndpointContract(
+            type: .anthropic,
+            adapterKind: .anthropicMessages,
+            defaultBaseURL: "https://provider.example/anthropic",
+            urlNormalization: URLNormalizationRule(appendVersion: true, versionPath: "/v1"),
+            stripSuffixes: ["/messages"]
+        )
+        return ProviderContract(
+            id: "dual",
+            name: "Dual",
+            category: .openAI,
+            isCustom: false,
+            defaultBaseURL: "https://provider.example/openai",
+            defaultEndpointType: .openai,
+            endpoints: [.openai: openAIEndpoint, .anthropic: anthropicEndpoint],
+            request: protocolConfig.request,
+            response: protocolConfig.response,
+            messageAssembly: protocolConfig.messageAssembly,
+            protocolConfig: protocolConfig,
+            reasoning: ProviderReasoningContract(strategyName: "openai-standard", strategy: .openAIStandard),
+            capability: .openAICompatibleDefault
+        )
     }
 }

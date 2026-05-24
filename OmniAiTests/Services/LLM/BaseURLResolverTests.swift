@@ -40,4 +40,64 @@ final class BaseURLResolverTests: XCTestCase {
         // Empty custom URL → use contract's defaultBaseURL
         XCTAssertEqual(resolver.resolve(customURL: "", endpointType: .openai), "https://api.openai.com/v1")
     }
+
+    func testEmptyURLForExplicitCustomProviderDoesNotFallbackToOpenAI() {
+        let mockRegistry = MockProviderRegistry()
+        mockRegistry.contracts = [Self.makeCustomProviderContract()]
+        let resolver = BaseURLResolver(providerRegistry: mockRegistry)
+
+        XCTAssertEqual(
+            resolver.resolve(customURL: "", providerId: "newapi", endpointType: .openai),
+            ""
+        )
+        XCTAssertEqual(
+            resolver.resolve(customURL: nil, providerId: "newapi", endpointType: .anthropic),
+            ""
+        )
+    }
+
+    func testEmptyURLForUnknownExplicitProviderDoesNotFallbackToOpenAI() {
+        let resolver = BaseURLResolver(providerRegistry: MockProviderRegistry())
+
+        XCTAssertEqual(
+            resolver.resolve(customURL: nil, providerId: "unknown-provider", endpointType: .openai),
+            ""
+        )
+    }
+
+    private static func makeCustomProviderContract() -> ProviderContract {
+        let protocolConfig = ProtocolConfig.openAICompatibleDefaults
+        let urlRule = URLNormalizationRule(appendVersion: true, versionPath: "/v1")
+        let endpoints: [EndpointType: ProviderEndpointContract] = [
+            .openai: ProviderEndpointContract(
+                type: .openai,
+                adapterKind: .openAICompatible,
+                defaultBaseURL: "",
+                urlNormalization: urlRule,
+                stripSuffixes: ["/chat/completions"]
+            ),
+            .anthropic: ProviderEndpointContract(
+                type: .anthropic,
+                adapterKind: .anthropicMessages,
+                defaultBaseURL: "",
+                urlNormalization: urlRule,
+                stripSuffixes: ["/messages"]
+            )
+        ]
+        return ProviderContract(
+            id: "newapi",
+            name: "NewAPI",
+            category: .openAI,
+            isCustom: true,
+            defaultBaseURL: "",
+            defaultEndpointType: .openai,
+            endpoints: endpoints,
+            request: protocolConfig.request,
+            response: protocolConfig.response,
+            messageAssembly: protocolConfig.messageAssembly,
+            protocolConfig: protocolConfig,
+            reasoning: ProviderReasoningContract(strategyName: "openai-standard", strategy: .openAIStandard),
+            capability: .openAICompatibleDefault
+        )
+    }
 }

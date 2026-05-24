@@ -1,5 +1,6 @@
 "api.add_channel.title" = "Add Channel";
 "api.auto_capability_probe" = "Automatically fetch model capability tags";
+"api.base_url_required" = "Custom providers require a valid Base URL.";
 "api.capability_probe.section" = "Capability Probe";
 "api.channel_name.placeholder" = "Channel name (for example: My OpenAI)";
 "api.channels.section" = "API Channels";
