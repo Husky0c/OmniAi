@@ -52,6 +52,7 @@ struct MainStageView: View {
     var selectedSession: ChatSession?
     var onToggleSidebar: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    @Environment(\.avatarManager) private var avatarManager
     
     var body: some View {
         NavigationStack {
@@ -79,7 +80,7 @@ struct MainStageView: View {
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button(action: { onOpenSettings?() }) {
-                                AvatarImageView(image: AvatarManager.loadAsync())
+                                AvatarImageView(image: avatarManager.cachedImage)
                                 .frame(width: 28, height: 28)
                                 .clipShape(Circle())
                             }
@@ -87,7 +88,7 @@ struct MainStageView: View {
 #else
                         ToolbarItem(placement: .primaryAction) {
                             Button(action: { onOpenSettings?() }) {
-                                AvatarImageView(image: AvatarManager.loadAsync())
+                                AvatarImageView(image: avatarManager.cachedImage)
                                     .frame(width: 28, height: 28)
                                     .clipShape(Circle())
                             }
@@ -96,6 +97,9 @@ struct MainStageView: View {
                     }
                 }
             }
+        }
+        .task {
+            _ = await avatarManager.loadAsync()
         }
     }
 }

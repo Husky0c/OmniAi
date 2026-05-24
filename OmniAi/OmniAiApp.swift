@@ -12,6 +12,7 @@ import SwiftData
 struct OmniAiApp: App {
     let container: ModelContainer?
     let initializationError: Error?
+    let avatarManager = AvatarManager()
 
     init() {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
@@ -44,6 +45,7 @@ struct OmniAiApp: App {
             if let container = container {
                 HomeView()
                     .modelContainer(container)
+                    .environment(\.avatarManager, avatarManager)
             } else {
                 DataLoadErrorView(error: initializationError)
             }

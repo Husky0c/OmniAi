@@ -3,9 +3,9 @@ import PhotosUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    
+    @Environment(\.avatarManager) private var avatarManager
+
     @AppStorage(AppSettings.Keys.userName) private var userName: String = AppSettings.Defaults.userName
-    @State private var avatarImage: AvatarPlatformImage? = nil
     @State private var photoItem: PhotosPickerItem? = nil
     
     var body: some View {
@@ -14,20 +14,19 @@ struct SettingsView: View {
                 Section(header: Text("settings.account.section")) {
                     HStack {
                         PhotosPicker(selection: $photoItem, matching: .images) {
-                            AvatarImageView(image: avatarImage)
+                            AvatarImageView(image: avatarManager.cachedImage)
                                 .frame(width: 50, height: 50)
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
-                        
+
                         VStack(alignment: .leading, spacing: 4) {
                             TextField("settings.nickname.placeholder", text: $userName)
                                 .font(.title3)
-                            if avatarImage != nil {
+                            if avatarManager.cachedImage != nil {
                                 Button("settings.remove_avatar", role: .destructive) {
-                                    avatarImage = nil
                                     photoItem = nil
-                                    AvatarManager.remove()
+                                    avatarManager.remove()
                                 }
                                 .font(.caption)
                             }
@@ -39,14 +38,13 @@ struct SettingsView: View {
                 .onChange(of: photoItem) { _, newItem in
                     Task {
                         guard let data = try? await newItem?.loadTransferable(type: Data.self) else { return }
-                        AvatarManager.save(data)
-                        await MainActor.run {
-                            avatarImage = AvatarManager.image(from: data)
-                        }
+                        await avatarManager.save(data)
                     }
                 }
                 .onAppear {
-                    avatarImage = AvatarManager.loadAsync()
+                    Task {
+                        _ = await avatarManager.loadAsync()
+                    }
                 }
                 
                 Section {

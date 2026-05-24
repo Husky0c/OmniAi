@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import SwiftUI
 #if canImport(UIKit)
 import UIKit
 typealias AvatarPlatformImage = UIImage
@@ -7,42 +9,45 @@ import AppKit
 typealias AvatarPlatformImage = NSImage
 #endif
 
-struct AvatarManager {
+@Observable final class AvatarManager {
     static let fileName = "user_avatar.jpg"
     static var avatarDirectoryProvider: () -> URL? = {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
     }
 
-    private static var _cachedImage: AvatarPlatformImage?
-    private static var _hasLoadedCache = false
+    @MainActor private(set) var cachedImage: AvatarPlatformImage?
+    @MainActor private var hasLoadedCache = false
 
     static var avatarURL: URL? {
         avatarDirectoryProvider()?.appendingPathComponent(fileName)
     }
 
-    static func save(_ data: Data) {
-        guard let url = avatarURL else { return }
+    @MainActor
+    func save(_ data: Data) {
+        guard let url = Self.avatarURL else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: url)
-        _cachedImage = image(from: data)
-        _hasLoadedCache = true
+        cachedImage = Self.image(from: data)
+        hasLoadedCache = true
     }
 
-    static func loadAsync() -> AvatarPlatformImage? {
-        if _hasLoadedCache {
-            return _cachedImage
+    @MainActor
+    func loadAsync() -> AvatarPlatformImage? {
+        if hasLoadedCache {
+            return cachedImage
         }
-        _hasLoadedCache = true
-        guard let url = avatarURL, let data = try? Data(contentsOf: url) else { return nil }
-        _cachedImage = image(from: data)
-        return _cachedImage
+        hasLoadedCache = true
+        guard let url = Self.avatarURL, let data = try? Data(contentsOf: url) else { return nil }
+        cachedImage = Self.image(from: data)
+        return cachedImage
     }
 
-    static func remove() {
-        guard let url = avatarURL else { return }
+    @MainActor
+    func remove() {
+        guard let url = Self.avatarURL else { return }
         try? FileManager.default.removeItem(at: url)
-        _cachedImage = nil
-        _hasLoadedCache = false
+        cachedImage = nil
+        hasLoadedCache = false
     }
 
     static func image(from data: Data) -> AvatarPlatformImage? {
@@ -65,8 +70,21 @@ struct AvatarManager {
 #endif
     }
 
-    static func resetCacheForTesting() {
-        _cachedImage = nil
-        _hasLoadedCache = false
+    @MainActor
+    func resetCacheForTesting() {
+        cachedImage = nil
+        hasLoadedCache = false
+    }
+}
+
+// MARK: - Environment Key
+private struct AvatarManagerKey: EnvironmentKey {
+    static let defaultValue = AvatarManager()
+}
+
+extension EnvironmentValues {
+    var avatarManager: AvatarManager {
+        get { self[AvatarManagerKey.self] }
+        set { self[AvatarManagerKey.self] = newValue }
     }
 }

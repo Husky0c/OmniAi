@@ -13,7 +13,7 @@ struct MessageBubbleView: View {
     var onTapImage: ((Data) -> Void)? = nil
     @State private var showStats = false
     @State private var showActionMenu = false
-    @State private var userAvatar: AvatarPlatformImage? = nil
+    @Environment(\.avatarManager) private var avatarManager
     @AppStorage(AppSettings.Keys.userName) private var userName: String = AppSettings.Defaults.userName
 
     var isUser: Bool {
@@ -187,7 +187,9 @@ struct MessageBubbleView: View {
                 Label("common.delete", systemImage: "trash")
             }
         }
-        .onAppear { userAvatar = AvatarManager.loadAsync() }
+        .task {
+            _ = await avatarManager.loadAsync()
+        }
     }
 
     @ViewBuilder
@@ -229,7 +231,7 @@ struct MessageBubbleView: View {
             }
 
             if isUser {
-                AvatarImageView(image: userAvatar)
+                AvatarImageView(image: avatarManager.cachedImage)
                 .frame(width: 22, height: 22)
                 .clipShape(Circle())
             }

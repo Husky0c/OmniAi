@@ -10,6 +10,7 @@ import UIKit
 struct ChatDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appServices) private var appServices
+    @Environment(\.avatarManager) private var avatarManager
 
     var session: ChatSession
     var onToggleSidebar: (() -> Void)? = nil
@@ -62,6 +63,7 @@ private struct ChatDetailContentView: View {
     let onToggleSidebar: (() -> Void)?
     let onOpenSettings: (() -> Void)?
 
+    @Environment(\.avatarManager) private var avatarManager
     @State private var viewModel: ChatViewModel
     @State private var previewImageData: Data?
 
@@ -241,7 +243,7 @@ private struct ChatDetailContentView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { onOpenSettings?() }) {
-                    AvatarImageView(image: AvatarManager.loadAsync())
+                    AvatarImageView(image: avatarManager.cachedImage)
                     .frame(width: 28, height: 28)
                     .clipShape(Circle())
                 }

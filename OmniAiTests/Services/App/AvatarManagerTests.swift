@@ -1,39 +1,41 @@
 import XCTest
 @testable import OmniAi
 
+@MainActor
 final class AvatarManagerTests: XCTestCase {
     private var directory: URL!
+    private var avatarManager: AvatarManager!
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("AvatarManagerTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         AvatarManager.avatarDirectoryProvider = { self.directory }
-        AvatarManager.resetCacheForTesting()
+        avatarManager = AvatarManager()
     }
 
     override func tearDownWithError() throws {
-        AvatarManager.remove()
+        avatarManager.remove()
         AvatarManager.avatarDirectoryProvider = {
             FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         }
-        AvatarManager.resetCacheForTesting()
         try? FileManager.default.removeItem(at: directory)
         directory = nil
+        avatarManager = nil
     }
 
     func testSaveLoadAndRemoveAvatarData() throws {
         let data = try XCTUnwrap(Self.samplePNGData)
 
-        AvatarManager.save(data)
+        avatarManager.save(data)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(AvatarManager.avatarURL).path))
-        XCTAssertNotNil(AvatarManager.loadAsync())
+        XCTAssertNotNil(avatarManager.cachedImage)
 
-        AvatarManager.remove()
+        avatarManager.remove()
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: try XCTUnwrap(AvatarManager.avatarURL).path))
-        XCTAssertNil(AvatarManager.loadAsync())
+        XCTAssertNil(avatarManager.cachedImage)
     }
 
     func testCreatesPlatformImageFromStoredData() throws {
