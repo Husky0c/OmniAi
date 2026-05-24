@@ -16,7 +16,8 @@ struct ModelIconManager {
         ("llama", "meta"),
         ("hunyuan", "hunyuan"),
         ("ernie", "baidu"),
-        ("glm|zhipu|zai", "zai"),
+        ("glm|zhipu", "zhipu"),
+        ("zai", "zai"),
         ("moonshot", "moonshot"),
         ("minimax", "minimax"),
         ("yi-", "yi"),
@@ -29,7 +30,9 @@ struct ModelIconManager {
     static func iconName(forModelId modelId: String) -> String? {
         let lowercased = modelId.lowercased()
         for (pattern, iconName) in modelRules {
-            if lowercased.contains(pattern) {
+            // 使用正则表达式匹配，支持 | 分隔的多个模式
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+               regex.firstMatch(in: lowercased, range: NSRange(lowercased.startIndex..., in: lowercased)) != nil {
                 return iconName
             }
         }
