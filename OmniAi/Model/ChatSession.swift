@@ -8,7 +8,8 @@ final class ChatSession {
     var createdAt: Date = Date()
     var lastModified: Date = Date()
     
-    // 独立模型配置
+    // Legacy provider/model fields kept for SwiftData compatibility.
+    // Runtime chat requests resolve channel/model from Assistant overrides and app defaults.
     var provider: String = "openai"
     var modelId: String = "gpt-4o"
     var customBaseURL: String? = nil

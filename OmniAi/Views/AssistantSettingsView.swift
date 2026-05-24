@@ -18,13 +18,21 @@ struct AssistantSettingsView: View {
     @State private var tempInputText = ""
     @State private var maxToolRoundsInputText = ""
     @State private var showModelProviderSheet = false
+
+    private var runtimeConfiguration: ChatRuntimeConfiguration {
+        ChatRuntimeConfiguration.resolve(
+            assistant: assistant,
+            activeAPIKeyID: activeAPIKeyID,
+            defaultModelId: defaultModelId
+        )
+    }
     
     private var effectiveChannelId: String {
-        assistant.channelId ?? activeAPIKeyID
+        runtimeConfiguration.channelId
     }
     
     private var effectiveModelId: String {
-        assistant.modelId ?? defaultModelId
+        runtimeConfiguration.modelId
     }
     
     private var effectiveChannel: APIKeys? {
@@ -212,11 +220,11 @@ struct AssistantSettingsView: View {
                 ModelProviderSheet(
                     apiKeys: Array(apiKeys),
                     activeAPIKeyID: Binding(
-                        get: { assistant.channelId ?? activeAPIKeyID },
+                        get: { effectiveChannelId },
                         set: { assistant.channelId = $0 }
                     ),
                     defaultModelId: Binding(
-                        get: { assistant.modelId ?? defaultModelId },
+                        get: { effectiveModelId },
                         set: { assistant.modelId = $0 }
                     )
                 )

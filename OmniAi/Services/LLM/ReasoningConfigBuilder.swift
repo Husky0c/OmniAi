@@ -56,8 +56,8 @@ enum ReasoningConfigBuilder {
     /// Builds reasoning parameters based on provider contract and model configuration.
     ///
     /// - Parameters:
-    ///   - contract: The provider contract (preferred). If nil, falls back to providerId lookup.
-    ///   - providerId: Provider ID for fallback lookup (deprecated, pass contract instead).
+    ///   - contract: The provider contract. If nil or missing a reasoning strategy, uses legacy inference.
+    ///   - providerId: Provider ID retained for call-site context; no registry lookup is performed here.
     ///   - apiType: API type for legacy fallback.
     ///   - baseURL: Base URL for legacy fallback.
     ///   - modelId: Model identifier.
@@ -83,19 +83,7 @@ enum ReasoningConfigBuilder {
             return buildEnableFromStrategy(strategy: strategy, effort: effort, budget: budget)
         }
 
-        // Deprecated fallback: lookup contract by providerId
-        if let pid = providerId {
-            let resolvedContract = ProviderRegistry.shared.getContract(for: pid)
-            if !resolvedContract.isCustom, let strategy = resolvedContract.reasoning.strategy {
-                let budget = computeThinkingBudget(modelId: lower, effort: effort)
-                if effort == "none" {
-                    return buildDisableFromStrategy(strategy: strategy, modelId: lower)
-                }
-                return buildEnableFromStrategy(strategy: strategy, effort: effort, budget: budget)
-            }
-        }
-
-        // Legacy fallback for unknown/custom providers
+        // Legacy fallback for unknown/custom providers.
         return buildLegacy(apiType: apiType, baseURL: baseURL, modelId: lower, effort: effort)
     }
 

@@ -27,8 +27,12 @@ struct AddAPIKeyView: View {
     /// Track whether we just switched providers (to avoid re-applying defaults incorrectly)
     @State private var didJustSwitchProvider = false
 
+    private var providerPresets: [ProviderPreset] {
+        ProviderPreset.all(using: appServices.providerRegistry)
+    }
+
     private var selectedPreset: ProviderPreset {
-        ProviderPreset.all.first { $0.id == selectedProviderID } ?? ProviderPreset.all[0]
+        providerPresets.first { $0.id == selectedProviderID } ?? providerPresets[0]
     }
 
     /// Endpoint types supported by the currently selected provider
@@ -43,12 +47,12 @@ struct AddAPIKeyView: View {
                     TextField("api.channel_name.placeholder", text: $name)
 
                     Picker("api.provider", selection: $selectedProviderID) {
-                        ForEach(ProviderPreset.all) { preset in
+                        ForEach(providerPresets) { preset in
                             Text(preset.name).tag(preset.id)
                         }
                     }
                     .onChange(of: selectedProviderID) { _, newID in
-                        if let preset = ProviderPreset.all.first(where: { $0.id == newID }) {
+                        if let preset = providerPresets.first(where: { $0.id == newID }) {
                             apiType = preset.apiType
                             if !preset.supportsEndpointType(endpointType) {
                                 endpointType = preset.defaultEndpointType
@@ -187,9 +191,10 @@ struct AddAPIKeyView: View {
 
                 let matched = ProviderPreset.matching(existing.apiType,
                     requestURL: existing.requestURL ?? "",
-                    providerId: existing.providerID)
+                    providerId: existing.providerID,
+                    using: appServices.providerRegistry)
                 let pid = matched?.id ?? existing.providerID ?? "newapi"
-                let preset = ProviderPreset.all.first { $0.id == pid }
+                let preset = providerPresets.first { $0.id == pid }
                 selectedProviderID = pid
 
                 // Ensure the restored endpointType is supported by the matched provider

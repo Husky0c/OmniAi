@@ -274,9 +274,28 @@ final class ReasoningConfigBuilderTests: XCTestCase {
         XCTAssertEqual(params.reasoning_effort, "none")
     }
 
+    func testContractWithoutStrategyUsesLegacyFallbackInsteadOfSharedRegistryLookup() {
+        let contract = makeContract(reasoning: nil)
+        let params = ReasoningConfigBuilder.build(
+            contract: contract,
+            providerId: "openai",
+            apiType: .anthropic,
+            baseURL: "https://api.anthropic.com/v1",
+            modelId: "claude-sonnet-4-6",
+            effort: "none"
+        )
+
+        XCTAssertEqual(params.thinking?.type, "disabled")
+        XCTAssertNil(params.reasoning_effort)
+    }
+
     // MARK: - Helpers
 
     private func makeContract(reasoning: ReasoningStrategy) -> ProviderContract {
+        makeContract(reasoning: reasoning as ReasoningStrategy?)
+    }
+
+    private func makeContract(reasoning: ReasoningStrategy?) -> ProviderContract {
         let protocolConfig = ProtocolConfig.openAICompatibleDefaults
         return ProviderContract(
             id: "test",

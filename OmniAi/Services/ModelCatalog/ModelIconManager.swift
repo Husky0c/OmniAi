@@ -38,9 +38,16 @@ struct ModelIconManager {
 
     // MARK: - Channel → icon name
 
-    static func iconName(forChannel channel: APIKeys) -> String? {
+    @MainActor
+    static func iconName(
+        forChannel channel: APIKeys,
+        providerRegistry: ProviderRegistryProtocol
+    ) -> String? {
+        if let providerID = channel.providerID, !providerID.isEmpty {
+            return providerID
+        }
         guard let company = channel.company,
-              let preset = ProviderPreset.all.first(where: { $0.name == company })
+              let preset = ProviderPreset.all(using: providerRegistry).first(where: { $0.name == company })
         else { return nil }
         return preset.id
     }
@@ -57,9 +64,14 @@ struct ModelIconManager {
     }
 
     @ViewBuilder
-    static func view(forChannel channel: APIKeys, size: CGFloat = 28) -> some View {
+    @MainActor
+    static func view(
+        forChannel channel: APIKeys,
+        size: CGFloat = 28,
+        providerRegistry: ProviderRegistryProtocol
+    ) -> some View {
         AdaptiveIcon(
-            name: iconName(forChannel: channel),
+            name: iconName(forChannel: channel, providerRegistry: providerRegistry),
             size: size,
             clipCircle: false
         )

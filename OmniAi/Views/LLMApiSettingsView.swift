@@ -21,7 +21,11 @@ struct LLMApiSettingsView: View {
                         editingKey = apiKey
                     }) {
                         HStack(alignment: .center, spacing: 12) {
-                            ModelIconManager.view(forChannel: apiKey, size: 28)
+                            ModelIconManager.view(
+                                forChannel: apiKey,
+                                size: 28,
+                                providerRegistry: appServices.providerRegistry
+                            )
                             VStack(alignment: .leading) {
                                 Text(apiKey.name)
                                     .font(.headline)

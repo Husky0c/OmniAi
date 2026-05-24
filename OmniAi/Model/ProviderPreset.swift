@@ -24,31 +24,42 @@ struct ProviderPreset: Identifiable, Hashable {
         return supportedEndpointTypes.contains(type)
     }
 
-    static let all: [ProviderPreset] = {
-        let registry = ProviderRegistry.shared
-        return registry.getAllContracts().map { contract in
-            let endpointTypes = EndpointType.allCases.filter { contract.supportsEndpointType($0) }
-            var urls: [EndpointType: String] = [:]
-            for et in endpointTypes {
-                urls[et] = contract.endpoint(et).defaultBaseURL
-            }
-            return ProviderPreset(
-                id: contract.id,
-                name: contract.name,
-                apiType: contract.category,
-                defaultBaseURL: contract.defaultBaseURL,
-                supportedEndpointTypes: endpointTypes,
-                defaultEndpointType: contract.defaultEndpointType,
-                endpointURLs: urls,
-                custom: contract.isCustom
-            )
-        }
-    }()
+    @MainActor
+    static func all(using registry: ProviderRegistryProtocol) -> [ProviderPreset] {
+        let presets = registry.getAllContracts().map(makePreset)
+        return presets.isEmpty ? [makePreset(from: ProviderContract.openAICompatibleDefault)] : presets
+    }
 
-    static func matching(_ apiType: APIType, requestURL: String, providerId: String? = nil) -> ProviderPreset? {
+    @MainActor
+    static func matching(
+        _ apiType: APIType,
+        requestURL: String,
+        providerId: String? = nil,
+        using registry: ProviderRegistryProtocol
+    ) -> ProviderPreset? {
+        let presets = all(using: registry)
         if let pid = providerId {
-            return all.first { $0.id == pid }
+            return presets.first { $0.id == pid }
         }
-        return all.first { $0.apiType == apiType && !$0.isCustom && $0.defaultBaseURL == requestURL }
+        return presets.first { $0.apiType == apiType && !$0.isCustom && $0.defaultBaseURL == requestURL }
+    }
+
+    @MainActor
+    private static func makePreset(from contract: ProviderContract) -> ProviderPreset {
+        let endpointTypes = EndpointType.allCases.filter { contract.supportsEndpointType($0) }
+        var urls: [EndpointType: String] = [:]
+        for et in endpointTypes {
+            urls[et] = contract.endpoint(et).defaultBaseURL
+        }
+        return ProviderPreset(
+            id: contract.id,
+            name: contract.name,
+            apiType: contract.category,
+            defaultBaseURL: contract.defaultBaseURL,
+            supportedEndpointTypes: endpointTypes,
+            defaultEndpointType: contract.defaultEndpointType,
+            endpointURLs: urls,
+            custom: contract.isCustom
+        )
     }
 }

@@ -8,6 +8,7 @@ final class MockProviderRegistry: ProviderRegistryProtocol {
         messageAssembly: nil
     )
     var requestedProviderIds: [String] = []
+    var contracts: [ProviderContract]?
     var lastLoadError: ProviderConfigError?
 
     func getProtocolConfig(for providerId: String) -> ProtocolConfig {
@@ -46,7 +47,10 @@ final class MockProviderRegistry: ProviderRegistryProtocol {
     }
 
     func getAllContracts() -> [ProviderContract] {
-        [getContract(for: nil)]
+        if let contracts {
+            return contracts
+        }
+        return [getContract(for: nil)]
     }
 
     func getReasoningStrategy(name: String?) -> ReasoningStrategy? {

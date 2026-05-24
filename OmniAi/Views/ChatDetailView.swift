@@ -80,12 +80,20 @@ private struct ChatDetailContentView: View {
         _viewModel = State(initialValue: ChatViewModel(session: session, modelContext: modelContext, appServices: appServices))
     }
 
+    private var runtimeConfiguration: ChatRuntimeConfiguration {
+        ChatRuntimeConfiguration.resolve(
+            session: session,
+            activeAPIKeyID: config.activeAPIKeyID,
+            defaultModelId: config.defaultModelId
+        )
+    }
+
     private var effectiveChannelId: String {
-        session.assistant?.channelId ?? config.activeAPIKeyID
+        runtimeConfiguration.channelId
     }
 
     private var effectiveModelId: String {
-        session.assistant?.modelId ?? config.defaultModelId
+        runtimeConfiguration.modelId
     }
 
     private var effectiveChannel: APIKeys? {
@@ -247,11 +255,11 @@ private struct ChatDetailContentView: View {
             ModelProviderSheet(
                 apiKeys: Array(config.apiKeys),
                 activeAPIKeyID: Binding(
-                    get: { session.assistant?.channelId ?? config.activeAPIKeyID },
+                    get: { effectiveChannelId },
                     set: { session.assistant?.channelId = $0 }
                 ),
                 defaultModelId: Binding(
-                    get: { session.assistant?.modelId ?? config.defaultModelId },
+                    get: { effectiveModelId },
                     set: { session.assistant?.modelId = $0 }
                 )
             )
