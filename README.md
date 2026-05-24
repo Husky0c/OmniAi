@@ -48,11 +48,13 @@ OmniAi 是一款基于 SwiftUI + SwiftData 的跨平台 AI 聊天客户端，支
 
 ### 错误与可观测性
 
-- `AppError` 定义 app-level 错误：缺少 API 渠道/Key、请求构建失败、流解析失败、服务商配置失败、工具执行失败、自动标题失败、服务端错误、传输错误和无效响应。
-- 日志上下文使用 `LLMRequestContext`，包含 provider ID、endpoint type、model ID 和 request phase。
-- `ChatEngineEvent.failed(ChatEngineError)` 让聊天错误可以作为事件测试。
-- `ChatErrorFormatter` 统一生成用户可见中文错误文案。
-- 自动标题失败只记录日志，不打扰用户。
+- **`AppError`** 定义 app-level 错误：缺少 API 渠道/Key、请求构建失败、流解析失败、服务商配置失败、工具执行失败、自动标题失败、服务端错误、传输错误和无效响应。
+- **`ChatEngineError`** 定义 chat-specific 错误，带有本地化的中文描述。
+- **`LLMRequestContext`** 日志上下文，包含 provider ID、endpoint type、model ID 和 request phase。
+- **`ChatErrorFormatter`** 统一生成用户可见的中文错误文案。
+- **`ChatEngineEvent.failed(ChatEngineError)`** 让聊天错误可以作为事件测试。
+
+自动标题失败只记录日志，不打扰用户。
 
 ## 技术栈
 
@@ -95,7 +97,8 @@ OmniAi/
 │   │   ├── ProviderPreset.swift
 │   │   ├── InputAttachment.swift
 │   │   ├── MessageAttachment.swift
-│   │   └── MCPServerConfig.swift
+│   │   ├── MCPServerConfig.swift
+│   │   └── CodableJSONStorage.swift   # JSON 编解码工具
 │   │
 │   ├── Views/
 │   │   ├── ChatDetailView.swift
@@ -123,6 +126,7 @@ OmniAi/
 │   │   │   ├── ChatErrorFormatter.swift
 │   │   │   ├── ChatRuntimeDefaults.swift
 │   │   │   ├── ChatTitleService.swift
+│   │   │   ├── ChatDetailConfig.swift
 │   │   │   └── ChatViewModel.swift
 │   │   ├── LLM/
 │   │   │   ├── LLMService.swift        # 网络 facade
@@ -158,6 +162,9 @@ OmniAi/
 │   │       ├── MCPJSONRPC.swift
 │   │       └── NSLock+withLock.swift
 │   │
+│   ├── Utilities/
+│   │   └── ImageProcessor.swift
+│   │
 │   └── Resources/
 │       ├── provider_config.json
 │       ├── model_capability_rules.json
@@ -170,41 +177,50 @@ OmniAi/
 
 ```text
 ChatInputBar
-  -> ChatDetailView 创建用户消息和空 assistant 消息
-  -> ChatDetailView 快照 SwiftData 对象
-  -> ChatMessageAssembler 组装 OpenAIMessage
-  -> ChatEngine.streamResponse()
-  -> LLMService facade
-  -> EndpointAdapter 构建请求
-  -> StreamParser 解析 SSE
-  -> ChatEngineEvent
-       ├── chunk
-       ├── thinking
-       ├── usage
-       ├── toolCallName
-       ├── finishReason
-       └── failed
-  -> ChatDetailView 在 MainActor 写回 SwiftData
+  -> ChatDetailView.sendMessage() 创建用户消息和空 assistant 消息
+  -> ChatDetailView 快照 SwiftData 对象避免线程问题
+  -> ChatMessageAssembler.assemble() 组装 [OpenAIMessage] 并遵守 contextCount
+  -> ChatEngine.streamResponse() 编排请求
+  -> EndpointAdapter (OpenAI/Anthropic) 构建服务商特定请求
+  -> StreamParser 解析 SSE（OpenAI 单行或 Anthropic 双行格式）
+  -> ChatEngineEvent 流
+       ├── chunk（内容片段）
+       ├── thinking（推理内容）
+       ├── usage（Token 统计）
+       ├── toolCallName（工具调用名称）
+       ├── finishReason（完成原因）
+       └── failed（错误）
+  -> ChatDetailView 在 @MainActor 更新 SwiftData
 ```
+
+**工具调用循环**：如果完成原因是 `tool_calls`，`ChatEngine` 通过 `ToolExecutionService` 执行工具，将工具结果作为消息追加，并重新流式请求，直到非工具完成或超过 `maxToolCallRounds` 上限。
+
+**推理内容**：从 `reasoning_content`（DeepSeek R1）、`thinking` 字段（Claude）或内联 `<think>`/`<thought>` 标签（通过 `ThinkTagParser` 处理跨 chunk 边界）解析。
 
 ### 网络层分工
 
-- `Services/LLM/LLMService`：保持对外 facade 和协议兼容。
-- `Services/LLM/BaseURLResolver`：处理 provider/custom base URL 规范化。
-- `Services/ModelCatalog/ModelCatalogService`：拉取模型列表并构建能力信息。
-- `Services/LLM/LLMCompletionClient`：处理非流式 completion，主要用于自动标题。
-- `Services/LLM/StreamParser`：解析 OpenAI 单行 SSE 和 Anthropic 双行 SSE。
-- `Services/LLM/OpenAIEndpointAdapter` / `AnthropicEndpointAdapter`：构建请求并解析 endpoint-specific 响应片段。
-- `Services/Provider/ProviderContract`：运行时 provider 行为的 typed contract。
+- **`Services/LLM/LLMService`**：单例 facade（`LLMService.shared`），使用 `URLSession`，请求超时 300s / 资源超时 3600s。
+- **`Services/LLM/EndpointAdapter`**：协议，`OpenAIEndpointAdapter` 和 `AnthropicEndpointAdapter` 构建服务商特定请求并解析响应。
+- **`Services/LLM/StreamParser`**：解析 SSE 流（OpenAI 单行 `data: {...}` 或 Anthropic 双行格式）。
+- **`Services/LLM/ThinkTagParser`**：提取跨 chunk 边界的内联 `<think>` / `<thought>` 标签。
+- **`Services/LLM/BaseURLResolver`**：规范化自定义 URL：去除尾部斜杠，按需追加 `/v1`，去除意外的 `/chat/completions` 后缀。
+- **`Services/LLM/LLMCompletionClient`**：非流式 completion 处理，主要用于自动标题。
+- **`Services/LLM/ReasoningConfigBuilder`**：根据服务商策略构建推理参数（extended thinking、o1-style 等）。
+- **`Services/ModelCatalog/ModelCatalogService`**：拉取模型列表并构建能力信息。
+- **`Services/ModelCatalog/ModelCapabilityResolver`**：解析服务器提供的能力或基于模型 ID 正则推断。
+- **`Services/Provider/ProviderRegistry`**：从 `provider_config.json` 加载服务商配置。
+- **`Services/Provider/ProviderContract`**：运行时 provider 行为的类型化契约。
+
+所有服务商使用 OpenAI 兼容的 `/v1/chat/completions` SSE 协议，除非被 `EndpointAdapter` 覆盖。
 
 ### 依赖注入
 
-`AppServices` 通过 SwiftUI environment 提供：
+`AppServices` 通过 SwiftUI environment 提供协议：
 
-- `LLMServiceProtocol`
-- `ProviderRegistryProtocol`
-- `ToolServiceFactory`
-- `KeyStoreProtocol`
+- `LLMServiceProtocol` — 网络 facade
+- `ProviderRegistryProtocol` — 服务商配置
+- `ToolServiceFactory` — 创建每会话工具服务
+- `KeyStoreProtocol` — 基于 Keychain 的 API key 存储（生产：`KeychainKeyStore`，测试：mock）
 
 测试可以注入 mock，不需要触碰全局 singleton。
 
@@ -212,12 +228,12 @@ ChatInputBar
 
 当前 disk-backed `ModelContainer` 注册 6 个模型：
 
-- `Assistant`
-- `ChatSession`
-- `ChatMessage`
-- `APIKeys`
-- `MessageAttachment`
-- `MCPServerConfig`
+- `Assistant` — 系统提示词、温度、上下文数量、`isBuiltIn` 标志、可选的每助手 `modelId`、`renameInterval` 自动标题触发轮次、`maxToolCallRounds`（3-50，默认 15）。级联删除关联的 `[ChatSession]`。
+- `ChatSession` — 标题、`lastModified` 时间戳、每会话 `provider`/`modelId`/`customBaseURL` 覆写。级联删除关联的 `[ChatMessage]`。
+- `ChatMessage` — 内容、`role`（user/assistant/system）、`firstTokenLatency`、Token 统计、可选 `thinkingContent`、工具调用数据。反向关系到 `ChatSession`。
+- `APIKeys` — 渠道元数据、模型能力缓存、Keychain account 引用（**不保存明文 API Key**）。API Key 通过 `KeyStoreProtocol` 存储在 Keychain。
+- `MessageAttachment` — 文件附件（图片、PDF、文档），使用 `@Attribute(.externalStorage)` 存储 data/thumbnails。反向关系到 `ChatMessage`。
+- `MCPServerConfig` — MCP 服务器配置，包含传输类型（stdio/SSE/streamableHTTP）、stdio 的 command/args、远程传输的 serverURL/authToken、超时设置。
 
 核心关系：
 
@@ -228,24 +244,26 @@ ChatInputBar
 
 ## Provider 配置
 
-服务商来自 `OmniAi/Resources/provider_config.json`。配置项覆盖：
+服务商来自 `OmniAi/Resources/provider_config.json`，由 `ProviderRegistry` 在运行时解析。配置项覆盖：
 
-- supported endpoint types
-- default endpoint type
-- endpoint URLs
-- base URL normalization
-- request extras
-- response parser options
-- message assembly options
-- reasoning strategy
-- model capability strategy
+- supported endpoint types（支持的端点类型）
+- default endpoint type（默认端点类型）
+- endpoint URLs（端点 URL）
+- base URL normalization（基础 URL 规范化）
+- request extras（请求额外字段）
+- response parser options（响应解析选项）
+- message assembly options（消息组装选项）
+- reasoning strategy（推理策略）
+- model capability strategy（模型能力策略）
 
 添加 OpenAI 兼容服务商的推荐路径：
 
-1. 在 `provider_config.json` 增加 provider。
+1. 在 `provider_config.json` 增加 provider 条目。
 2. 配置 reasoning strategy 和 protocol overrides。
 3. 如果需要图标，加入 `Resources/ProviderIcons/`。
-4. 补 provider config / base URL / reasoning tests。
+4. 补充 provider config / base URL / reasoning tests。
+
+**当前内置服务商**：OpenAI、DeepSeek、Anthropic、Gemini、OpenRouter、MiniMax、Zhipu、Z.AI、NewAPI（自定义）。
 
 ## @AppStorage 配置
 
@@ -274,9 +292,11 @@ ChatInputBar
 
 测试使用 XCTest，主要覆盖：
 
-- Chat：`ChatEngineTests`、`ChatMessageAssemblerTests`
-- Network：`LLMServiceTests`、`StreamParserTests`、`BaseURLResolverTests`
-- Provider：`ProviderConfigTests`、`ReasoningConfigBuilderTests`
-- Model：SwiftData in-memory model tests
-- Security：`KeyStoreTests`
-- Tools / MCP：`LocalToolRegistryTests`、`ToolExecutionServiceTests`、`ToolSessionStoreTests`、`MCPJSONRPCTests`
+- **Chat**：`ChatEngineTests`、`ChatMessageAssemblerTests`、`ChatTitleServiceTests`
+- **Network**：`LLMServiceTests`、`StreamParserTests`、`BaseURLResolverTests`、`ReasoningConfigBuilderTests`
+- **Provider**：`ProviderConfigTests`、`ProviderRegistryTests`
+- **Model**：SwiftData in-memory model tests（通过 `TestModelContainer`）
+- **Security**：`KeyStoreTests`（Keychain 集成）
+- **Tools / MCP**：`LocalToolRegistryTests`、`ToolExecutionServiceTests`、`ToolSessionStoreTests`、`MCPJSONRPCTests`
+
+测试辅助工具位于 `OmniAiTests/Helpers/`：`MockURLSession`、`MockLLMService`、`MockKeyStore`、`TestModelContainer`。
