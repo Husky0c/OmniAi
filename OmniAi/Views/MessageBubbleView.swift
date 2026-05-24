@@ -24,11 +24,15 @@ struct MessageBubbleView: View {
         isUser ? userName : (message.modelId ?? "Unknown")
     }
 
-    private var formattedTime: String {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .medium
-        return formatter.string(from: message.createdAt)
+        return formatter
+    }()
+
+    private var formattedTime: String {
+        Self.dateFormatter.string(from: message.createdAt)
     }
 
     var body: some View {

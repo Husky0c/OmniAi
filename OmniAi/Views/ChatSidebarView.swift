@@ -7,10 +7,11 @@ struct ChatSidebarView: View {
     @Query(sort: \Assistant.createdAt) private var assistants: [Assistant]
     @Binding var selectedSession: ChatSession?
     var onSessionSelected: (() -> Void)? = nil
-    
+
     @State private var expandedIDs: Set<UUID> = []
     @State private var showNewAssistant = false
     @State private var editingAssistant: Assistant? = nil
+    @State private var sortedSessionsCache: [UUID: [ChatSession]] = [:]
     
     var body: some View {
         ZStack {

@@ -66,6 +66,7 @@ private struct ChatDetailContentView: View {
     @Environment(\.avatarManager) private var avatarManager
     @State private var viewModel: ChatViewModel
     @State private var previewImageData: Data?
+    @State private var messageContextCache: [UUID: (showHeader: Bool, isIntermediateTool: Bool)] = [:]
 
     init(
         session: ChatSession,
@@ -103,15 +104,25 @@ private struct ChatDetailContentView: View {
     }
 
     private func messageContext(for message: ChatMessage, at index: Int) -> (showHeader: Bool, isIntermediateTool: Bool) {
-        let idx = viewModel.sortedMessages.firstIndex(where: { $0.id == message.id }) ?? index
-        let isLast = idx == viewModel.sortedMessages.count - 1
-        let nextIsAssistant = !isLast && viewModel.sortedMessages[idx + 1].role == .assistant
+        if let cached = messageContextCache[message.id] {
+            return cached
+        }
+
+        let messages = viewModel.sortedMessages
+        let isLast = index == messages.count - 1
+        let nextIsAssistant = !isLast && messages[index + 1].role == .assistant
         let isIntermediateTool = message.role == .assistant
             && message.content.isEmpty
             && message.toolCallsData != nil
             && nextIsAssistant
-        let showHeader = index == 0 || viewModel.sortedMessages[index - 1].role != message.role
-        return (showHeader: showHeader, isIntermediateTool: isIntermediateTool)
+        let showHeader = index == 0 || messages[index - 1].role != message.role
+        let result = (showHeader: showHeader, isIntermediateTool: isIntermediateTool)
+        messageContextCache[message.id] = result
+        return result
+    }
+
+    private func invalidateContextCache() {
+        messageContextCache.removeAll()
     }
 
     private func bubbleView(for message: ChatMessage, showHeader: Bool = true, isIntermediateToolMessage: Bool = false) -> MessageBubbleView {
@@ -170,6 +181,7 @@ private struct ChatDetailContentView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear {
+                invalidateContextCache()
                 viewModel.refreshSortedMessages()
                 if let lastID = viewModel.sortedMessages.last?.id {
                     scrollProxy.scrollTo(lastID, anchor: .bottom)
@@ -179,6 +191,7 @@ private struct ChatDetailContentView: View {
                 }
             }
             .onChange(of: session.messages.count) { _, _ in
+                invalidateContextCache()
                 viewModel.refreshSortedMessages()
                 if let lastID = viewModel.sortedMessages.last?.id {
                     withAnimation {

@@ -27,15 +27,28 @@ struct ModelIconManager {
         ("phi", "phind"),
     ]
 
+    private static var iconNameCache: [String: String?] = [:]
+    private static let cacheLock = NSLock()
+
     static func iconName(forModelId modelId: String) -> String? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+
+        if let cached = iconNameCache[modelId] {
+            return cached
+        }
+
         let lowercased = modelId.lowercased()
         for (pattern, iconName) in modelRules {
             // 使用正则表达式匹配，支持 | 分隔的多个模式
             if let regex = try? NSRegularExpression(pattern: pattern, options: []),
                regex.firstMatch(in: lowercased, range: NSRange(lowercased.startIndex..., in: lowercased)) != nil {
+                iconNameCache[modelId] = iconName
                 return iconName
             }
         }
+
+        iconNameCache[modelId] = nil
         return nil
     }
 
@@ -91,14 +104,14 @@ private struct AdaptiveIcon: View {
 
     @ViewBuilder
     var body: some View {
-        if let name, let url = resolvedURL(for: name) {
+        if let name, let url = resolvedURL(for: name), let svg = SVGIconCache.node(for: url) {
             if clipCircle {
-                SVGView(contentsOf: url)
+                SVGView(svg: svg)
                     .frame(width: size, height: size)
                     .clipShape(Circle())
                     .invertIf(colorScheme == .dark)
             } else {
-                SVGView(contentsOf: url)
+                SVGView(svg: svg)
                     .frame(width: size, height: size)
                     .invertIf(colorScheme == .dark)
             }
@@ -128,6 +141,24 @@ private struct AdaptiveIcon: View {
                 .frame(width: size, height: size)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+@MainActor
+private enum SVGIconCache {
+    private static var nodes: [URL: SVGNode] = [:]
+
+    static func node(for url: URL) -> SVGNode? {
+        if let cached = nodes[url] {
+            return cached
+        }
+
+        guard let parsed = SVGParser.parse(contentsOf: url) else {
+            return nil
+        }
+
+        nodes[url] = parsed
+        return parsed
     }
 }
 
