@@ -161,10 +161,18 @@ private struct ChatDetailContentView: View {
         )
     }
 
+    private var platformSpacing: CGFloat {
+#if os(macOS)
+        return 16
+#else
+        return 12
+#endif
+    }
+
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: platformSpacing) {
                     ForEach(Array(viewModel.sortedMessages.enumerated()), id: \.element.id) { index, message in
                         let ctx = messageContext(for: message, at: index)
                         bubbleView(for: message, showHeader: ctx.showHeader, isIntermediateToolMessage: ctx.isIntermediateTool)
@@ -229,23 +237,34 @@ private struct ChatDetailContentView: View {
             ToolbarItem(placement: .principal) {
                 Button(action: { viewModel.showModelProviderSheet = true }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "chevron.down")
-                            .font(.caption2)
+                        // Breadcrumb: Assistant Name > Model Name
+                        Text(session.assistant?.name ?? "Unknown")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                        if let channel = effectiveChannel {
-                            VStack(alignment: .center, spacing: 1) {
-                                Text("\(channel.name) / \(effectiveModelId)")
-                                    .font(.footnote)
-                                    .fontWeight(.medium)
-                                    .lineLimit(1)
-                                CapabilityRowView(capabilities: ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]))
+
+                        HStack(spacing: 4) {
+                            if let channel = effectiveChannel {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(effectiveModelId)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .lineLimit(1)
+                                    CapabilityRowView(capabilities: ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]))
+                                }
+                            } else {
+                                Text("model.select.title")
+                                    .font(.subheadline)
                             }
-                        } else {
-                            Text("model.select.title")
-                                .font(.headline)
+
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .foregroundStyle(.primary)
                 }
             }
 #if os(iOS)

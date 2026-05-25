@@ -7,7 +7,10 @@ struct HomeView: View {
     @State private var selectedSession: ChatSession?
     @State private var isSidebarOpen: Bool = false
     @State private var showSettings: Bool = false
-    
+#if os(macOS)
+    @State private var selectedTab: NavigationTab = .chat
+#endif
+
     var body: some View {
         ZStack {
 #if os(iOS)
@@ -27,96 +30,44 @@ struct HomeView: View {
                 )
             }
 #else
-            NavigationSplitView {
-                ChatSidebarView(selectedSession: $selectedSession)
-                    .navigationSplitViewColumnWidth(min: 200, ideal: 250)
-            } detail: {
-                MainStageView(
-                    selectedSession: selectedSession,
-                    onToggleSidebar: nil,
-                    onOpenSettings: { showSettings = true }
+            HStack(spacing: 0) {
+                // Left: Icon navigation sidebar
+                NavigationSidebarView(
+                    selectedTab: $selectedTab,
+                    onOpenSettings: { selectedTab = .settings }
                 )
+
+                Divider()
+
+                // Right: Main content area
+                if selectedTab == .chat {
+                    NavigationSplitView {
+                        // Assistant list
+                        ChatSidebarView(selectedSession: $selectedSession)
+                            .navigationSplitViewColumnWidth(min: 200, ideal: 250)
+                    } detail: {
+                        // Chat messages
+                        MainStageView(
+                            selectedSession: selectedSession,
+                            onToggleSidebar: nil,
+                            onOpenSettings: nil
+                        )
+                    }
+                } else if selectedTab == .settings {
+                    SettingsView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
 #endif
         }
+#if os(iOS)
         .sheet(isPresented: $showSettings) {
             SettingsView()
-#if os(macOS)
-                .frame(minWidth: 560, idealWidth: 640, minHeight: 520, idealHeight: 620)
-#endif
         }
+#endif
         .task {
             await appServices.toolServiceFactory.releaseServicesNotInModelContext(modelContext)
         }
-    }
-}
-
-struct MainStageView: View {
-    var selectedSession: ChatSession?
-    var onToggleSidebar: (() -> Void)?
-    var onOpenSettings: (() -> Void)?
-    @Environment(\.avatarManager) private var avatarManager
-    
-    var body: some View {
-        NavigationStack {
-            Group {
-                if let session = selectedSession {
-                    ChatDetailView(
-                        session: session,
-                        onToggleSidebar: onToggleSidebar,
-                        onOpenSettings: onOpenSettings
-                    )
-                    .id(session.id)
-                } else {
-                    EmptyChatSelectionView()
-                    .toolbar {
-#if os(iOS)
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button(action: { onToggleSidebar?() }) {
-                                Image(systemName: "line.3.horizontal")
-                                    .foregroundStyle(.primary)
-                            }
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button(action: { onOpenSettings?() }) {
-                                AvatarImageView(image: avatarManager.cachedImage)
-                                .frame(width: 28, height: 28)
-                                .clipShape(Circle())
-                            }
-                        }
-#else
-                        ToolbarItem(placement: .primaryAction) {
-                            Button(action: { onOpenSettings?() }) {
-                                AvatarImageView(image: avatarManager.cachedImage)
-                                    .frame(width: 28, height: 28)
-                                    .clipShape(Circle())
-                            }
-                        }
-#endif
-                    }
-                }
-            }
-#if os(macOS)
-            .frame(minWidth: 520, minHeight: 420)
-#endif
-        }
-        .task {
-            _ = avatarManager.loadAsync()
-        }
-    }
-}
-
-private struct EmptyChatSelectionView: View {
-    var body: some View {
-        ContentUnavailableView(
-            "home.no_selected_chat.title",
-            systemImage: "message",
-            description: Text("home.no_selected_chat.description")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-#if os(macOS)
-        .background(Color(nsColor: .windowBackgroundColor))
-#endif
     }
 }
 

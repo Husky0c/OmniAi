@@ -79,8 +79,13 @@ struct MessageBubbleView: View {
                     TypingIndicatorView()
                         .padding(.horizontal, 12)
                         .padding(.vertical, 14)
+#if os(macOS)
+                        .background(isUser ? Color(nsColor: .controlAccentColor) : Color(nsColor: .controlBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+#else
                         .background(isUser ? Color.blue : Color.gray.opacity(0.2))
                         .clipShape(RoundedRectangle(cornerRadius: 16))
+#endif
                 } else if !(isUser || displayContent.isEmpty) || isUser {
                     HStack {
                         if isUser { Spacer() }
@@ -104,11 +109,24 @@ struct MessageBubbleView: View {
                                                     }
                                             }
 #else
-                                            Label(att.name, systemImage: "photo")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .padding(.horizontal, 12)
-                                                .padding(.top, 8)
+                                            if let displayData = att.thumbnailData ?? att.data, let nsImage = NSImage(data: displayData) {
+                                                Image(nsImage: nsImage)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(maxHeight: 200)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.top, 8)
+                                                    .onTapGesture {
+                                                        if let fullData = att.data { onTapImage?(fullData) }
+                                                    }
+                                            } else {
+                                                Label(att.name, systemImage: "photo")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.top, 8)
+                                            }
 #endif
                                         }
                                     }
@@ -122,7 +140,11 @@ struct MessageBubbleView: View {
                                             .textSelection(.enabled)
                                             .padding(12)
                                             .markdownTextStyle {
+#if os(macOS)
+                                                ForegroundColor(isUser ? .white : Color(nsColor: .labelColor))
+#else
                                                 ForegroundColor(isUser ? .white : .primary)
+#endif
                                             }
                                             .markdownTheme(
                                                 Theme.basic.bulletedListMarker { configuration in
@@ -136,17 +158,24 @@ struct MessageBubbleView: View {
                                 }
                             }
                         }
+#if os(macOS)
+                        .background(isUser ? Color(nsColor: .controlAccentColor) : Color(nsColor: .controlBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+#else
                         .background(isUser ? Color.blue : Color.gray.opacity(0.2))
                         .clipShape(RoundedRectangle(cornerRadius: 16))
+#endif
 
                         if !isUser { Spacer() }
                     }
+#if os(iOS)
                     .simultaneousGesture(
                         LongPressGesture(minimumDuration: 0.5)
                             .onEnded { _ in
                                 showActionMenu = true
                             }
                     )
+#endif
                 }
             }
 

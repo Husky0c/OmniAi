@@ -61,16 +61,17 @@ struct ChatInputBar: View{
                     .lineLimit(1...5)
 #endif
                 
-                HStack {
+                HStack(spacing: 8) {
+                    // Attachment menu
                     Menu {
                         Button(action: { showFileImporter = true }) {
                             Label("attachment.file", systemImage: "doc")
                         }
-                        
+
                         Button(action: { showPhotoPicker = true }) {
                             Label("attachment.photo", systemImage: "photo")
                         }
-                        
+
 #if canImport(UIKit)
                         Button(action: { showCamera = true }) {
                             Label("attachment.camera", systemImage: "camera")
@@ -79,14 +80,35 @@ struct ChatInputBar: View{
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 15))
-                            .foregroundStyle(.primary)
-                            .padding(8)
-                            .background(Circle().fill(Color.gray.opacity(0.1)))
+                            .foregroundStyle(.secondary)
                     }
-                    .compositingGroup()
-                    
+                    .buttonStyle(.plain)
+
+#if os(macOS)
+                    // Web search button (macOS only)
+                    Button(action: {
+                        logger.debug("Web search tapped")
+                    }) {
+                        Image(systemName: "globe")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    // More options button (macOS only)
+                    Button(action: {
+                        logger.debug("More options tapped")
+                    }) {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+#endif
+
                     Spacer()
-                    
+
+                    // Send/Stop/Mic button
                     Button(action: {
                         if isGenerating {
                             onStop?()
@@ -103,7 +125,11 @@ struct ChatInputBar: View{
                             .foregroundStyle(.white)
                             .frame(width: 16, height: 16)
                             .frame(width: 34, height: 34)
+#if os(macOS)
+                            .background(Circle().fill(isGenerating ? Color.orange : (canSend ? Color(nsColor: .controlAccentColor) : Color.gray)))
+#else
                             .background(Circle().fill(isGenerating ? Color.orange : (canSend ? Color.black : Color.gray)))
+#endif
                     }
                 }
                 .padding(.horizontal, 10)
@@ -113,6 +139,20 @@ struct ChatInputBar: View{
         .containerRelativeFrame(.horizontal) { length, _ in
             min(length * 0.92, 600)
         }
+#if os(macOS)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 0.5)
+                )
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+        .frame(maxWidth: 900)
+#else
         .background(
             RoundedRectangle(cornerRadius: 24)
                 .fill(.regularMaterial)
@@ -124,6 +164,7 @@ struct ChatInputBar: View{
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+#endif
         .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, matching: .any(of: [.images]))
         .onChange(of: selectedPhotos) { _, _ in
             Task { await handleSelectedPhotos() }

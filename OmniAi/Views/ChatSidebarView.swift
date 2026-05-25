@@ -199,9 +199,15 @@ private struct SessionSidebarRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
+#if os(macOS)
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(isSelected ? Color(nsColor: .controlAccentColor) : Color.clear)
+                    .frame(width: 2, height: 24)
+#else
                 RoundedRectangle(cornerRadius: 2)
                     .fill(isSelected ? Color.accentColor : Color.clear)
                     .frame(width: 3, height: 28)
+#endif
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.title)
@@ -215,7 +221,11 @@ private struct SessionSidebarRow: View {
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+#if os(macOS)
+            .padding(.vertical, 6)
+#else
             .padding(.vertical, 2)
+#endif
             .padding(.leading, 14)
             .contentShape(Rectangle())
         }
