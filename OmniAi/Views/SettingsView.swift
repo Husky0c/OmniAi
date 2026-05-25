@@ -12,38 +12,23 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section(header: Text("settings.account.section")) {
-                    HStack {
-                        PhotosPicker(selection: $photoItem, matching: .images) {
-                            AvatarImageView(image: avatarManager.cachedImage)
-                                .frame(width: 50, height: 50)
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            TextField("settings.nickname.placeholder", text: $userName)
-                                .font(.title3)
-                            if avatarManager.cachedImage != nil {
-                                Button("settings.remove_avatar", role: .destructive) {
-                                    photoItem = nil
-                                    avatarManager.remove()
-                                }
-                                .font(.caption)
-                            }
-                        }
-                        .padding(.leading, 8)
-                    }
+                    AccountSettingsRow(
+                        image: avatarManager.cachedImage,
+                        userName: $userName,
+                        photoItem: $photoItem,
+                        onRemoveAvatar: removeAvatar
+                    )
                     .padding(.vertical, 4)
                 }
                 .onChange(of: photoItem) { _, newItem in
                     Task {
                         guard let data = try? await newItem?.loadTransferable(type: Data.self) else { return }
-                        await avatarManager.save(data)
+                        avatarManager.save(data)
                     }
                 }
                 .onAppear {
                     Task {
-                        _ = await avatarManager.loadAsync()
+                        _ = avatarManager.loadAsync()
                     }
                 }
                 
@@ -81,6 +66,11 @@ struct SettingsView: View {
                     }
                 }
             }
+#if os(macOS)
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .background(Color(nsColor: .windowBackgroundColor))
+#endif
             .navigationTitle("settings.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -90,6 +80,41 @@ struct SettingsView: View {
                     Button("common.done") {
                         dismiss()
                     }
+                }
+            }
+        }
+#if os(macOS)
+        .frame(minWidth: 560, idealWidth: 640, minHeight: 520, idealHeight: 620)
+#endif
+    }
+
+    private func removeAvatar() {
+        photoItem = nil
+        avatarManager.remove()
+    }
+}
+
+private struct AccountSettingsRow: View {
+    let image: AvatarPlatformImage?
+    @Binding var userName: String
+    @Binding var photoItem: PhotosPickerItem?
+    let onRemoveAvatar: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                AvatarImageView(image: image)
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("settings.nickname.placeholder", text: $userName)
+                    .font(.title3)
+                if image != nil {
+                    Button("settings.remove_avatar", role: .destructive, action: onRemoveAvatar)
+                        .font(.caption)
                 }
             }
         }

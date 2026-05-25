@@ -41,6 +41,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+#if os(macOS)
+                .frame(minWidth: 560, idealWidth: 640, minHeight: 520, idealHeight: 620)
+#endif
         }
         .task {
             await appServices.toolServiceFactory.releaseServicesNotInModelContext(modelContext)
@@ -65,11 +68,7 @@ struct MainStageView: View {
                     )
                     .id(session.id)
                 } else {
-                    ContentUnavailableView(
-                        "home.no_selected_chat.title",
-                        systemImage: "message",
-                        description: Text("home.no_selected_chat.description")
-                    )
+                    EmptyChatSelectionView()
                     .toolbar {
 #if os(iOS)
                         ToolbarItem(placement: .topBarLeading) {
@@ -97,10 +96,27 @@ struct MainStageView: View {
                     }
                 }
             }
+#if os(macOS)
+            .frame(minWidth: 520, minHeight: 420)
+#endif
         }
         .task {
-            _ = await avatarManager.loadAsync()
+            _ = avatarManager.loadAsync()
         }
+    }
+}
+
+private struct EmptyChatSelectionView: View {
+    var body: some View {
+        ContentUnavailableView(
+            "home.no_selected_chat.title",
+            systemImage: "message",
+            description: Text("home.no_selected_chat.description")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+#if os(macOS)
+        .background(Color(nsColor: .windowBackgroundColor))
+#endif
     }
 }
 
