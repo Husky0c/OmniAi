@@ -237,34 +237,24 @@ private struct ChatDetailContentView: View {
             ToolbarItem(placement: .principal) {
                 Button(action: { viewModel.showModelProviderSheet = true }) {
                     HStack(spacing: 6) {
-                        // Breadcrumb: Assistant Name > Model Name
-                        Text(session.assistant?.name ?? "Unknown")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
 
-                        HStack(spacing: 4) {
-                            if let channel = effectiveChannel {
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(effectiveModelId)
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .lineLimit(1)
-                                    CapabilityRowView(capabilities: ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]))
-                                }
-                            } else {
-                                Text("model.select.title")
-                                    .font(.subheadline)
+                        if let channel = effectiveChannel {
+                            VStack(alignment: .center, spacing: 1) {
+                                Text("\(channel.name) / \(effectiveModelId)")
+                                    .font(.footnote)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                CapabilityRowView(capabilities: ModelCapability.effective(for: effectiveModelId, cached: effectiveChannel?.cachedCapabilities ?? [:]))
                             }
-
-                            Image(systemName: "chevron.down")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("model.select.title")
+                                .font(.headline)
                         }
                     }
+                    .foregroundStyle(.primary)
                 }
             }
 #if os(iOS)
