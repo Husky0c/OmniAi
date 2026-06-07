@@ -8,7 +8,7 @@
 import Foundation
 
 /// Global rate limiter for network tools to prevent abuse
-final class NetworkToolRateLimiter: @unchecked Sendable {
+nonisolated final class NetworkToolRateLimiter: @unchecked Sendable {
     private let lock = NSLock()
     private var lastRequestTime: Date?
     private let minimumInterval: TimeInterval

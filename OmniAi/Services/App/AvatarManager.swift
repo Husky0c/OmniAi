@@ -9,20 +9,22 @@ import AppKit
 typealias AvatarPlatformImage = NSImage
 #endif
 
+@MainActor
 @Observable final class AvatarManager {
     static let fileName = "user_avatar.jpg"
     static var avatarDirectoryProvider: () -> URL? = {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
     }
 
-    @MainActor private(set) var cachedImage: AvatarPlatformImage?
-    @MainActor private var hasLoadedCache = false
+    private(set) var cachedImage: AvatarPlatformImage?
+    private var hasLoadedCache = false
 
     static var avatarURL: URL? {
         avatarDirectoryProvider()?.appendingPathComponent(fileName)
     }
 
-    @MainActor
+    nonisolated deinit {}
+
     func save(_ data: Data) {
         guard let url = Self.avatarURL else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -31,7 +33,6 @@ typealias AvatarPlatformImage = NSImage
         hasLoadedCache = true
     }
 
-    @MainActor
     func loadAsync() -> AvatarPlatformImage? {
         if hasLoadedCache {
             return cachedImage
@@ -42,7 +43,6 @@ typealias AvatarPlatformImage = NSImage
         return cachedImage
     }
 
-    @MainActor
     func remove() {
         guard let url = Self.avatarURL else { return }
         try? FileManager.default.removeItem(at: url)
@@ -70,7 +70,6 @@ typealias AvatarPlatformImage = NSImage
 #endif
     }
 
-    @MainActor
     func resetCacheForTesting() {
         cachedImage = nil
         hasLoadedCache = false
