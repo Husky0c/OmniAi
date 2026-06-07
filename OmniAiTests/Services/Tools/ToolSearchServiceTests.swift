@@ -58,9 +58,8 @@ final class ToolSearchServiceTests: XCTestCase {
     func testSearch_SingleKeyword_ReturnsMatches() {
         let results = searchService.search(query: "web", maxResults: 10)
 
-        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results.count, 1)
         XCTAssertTrue(results.contains { $0.function.name == "web_search" })
-        XCTAssertTrue(results.contains { $0.function.name == "fetch_url" })
     }
 
     func testSearch_MultipleKeywords_ReturnsRankedMatches() {

@@ -3,8 +3,17 @@ import XCTest
 
 @MainActor
 final class ToolExecutionServiceTests: XCTestCase {
+    private func makeService(sessionId: UUID = UUID()) -> ToolExecutionService {
+        ToolExecutionService(
+            sessionId: sessionId,
+            localRegistry: LocalToolRegistry(),
+            mcpManager: MCPConnectionManager(),
+            searchService: ToolSearchService()
+        )
+    }
+
     func testUnknownToolReturnsErrorJSON() async {
-        let service = ToolExecutionService(sessionId: UUID())
+        let service = makeService()
 
         let result = await service.execute(name: "missing_tool", argumentsJSON: "{}")
 
@@ -13,7 +22,7 @@ final class ToolExecutionServiceTests: XCTestCase {
     }
 
     func testFailedLocalToolReturnsHandlerError() async {
-        let service = ToolExecutionService(sessionId: UUID())
+        let service = makeService()
         service.registerLocalTool(
             name: "failing_tool",
             handler: { _ in #"{"error":"failed intentionally"}"# },

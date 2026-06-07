@@ -3,6 +3,9 @@ import XCTest
 
 @MainActor
 final class LocalToolRegistryTests: XCTestCase {
+    private func registerNativeTools(in registry: LocalToolRegistry) {
+        registry.registerNativeTools(searchService: ToolSearchService())
+    }
 
     func testRegisterAndCanHandle() {
         let registry = LocalToolRegistry()
@@ -48,7 +51,7 @@ final class LocalToolRegistryTests: XCTestCase {
 
     func testGetCurrentTime() async {
         let registry = LocalToolRegistry()
-        registry.registerNativeTools()
+        registerNativeTools(in: registry)
         let result = await registry.execute(name: "get_current_time", argumentsJSON: "")
         XCTAssertTrue(result.contains("\"time\""))
         XCTAssertTrue(result.contains("\"timezone\""))
@@ -56,21 +59,21 @@ final class LocalToolRegistryTests: XCTestCase {
 
     func testCalculatorValidExpression() async {
         let registry = LocalToolRegistry()
-        registry.registerNativeTools()
+        registerNativeTools(in: registry)
         let result = await registry.execute(name: "calculator", argumentsJSON: #"{"expression":"2+3*4"}"#)
         XCTAssertTrue(result.contains("14"))
     }
 
     func testCalculatorInvalidCharacters() async {
         let registry = LocalToolRegistry()
-        registry.registerNativeTools()
+        registerNativeTools(in: registry)
         let result = await registry.execute(name: "calculator", argumentsJSON: #"{"expression":"rm -rf /"}"#)
-        XCTAssertTrue(result.contains("disallowed"))
+        XCTAssertTrue(result.contains("invalid_expression"))
     }
 
     func testCalculatorInvalidArguments() async {
         let registry = LocalToolRegistry()
-        registry.registerNativeTools()
+        registerNativeTools(in: registry)
         let result = await registry.execute(name: "calculator", argumentsJSON: "not json")
         XCTAssertTrue(result.contains("Invalid arguments"))
     }

@@ -24,7 +24,15 @@ class MockToolServiceFactory: ToolServiceFactory {
             if let cached = cachedServices[sessionId] {
                 return cached
             }
-            let service = ToolExecutionService(sessionId: sessionId)
+            let searchService = ToolSearchService()
+            let localRegistry = LocalToolRegistry()
+            localRegistry.registerNativeTools(searchService: searchService)
+            let service = ToolExecutionService(
+                sessionId: sessionId,
+                localRegistry: localRegistry,
+                mcpManager: MCPConnectionManager(),
+                searchService: searchService
+            )
             cachedServices[sessionId] = service
             return service
         }
