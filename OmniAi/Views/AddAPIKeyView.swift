@@ -131,14 +131,7 @@ struct AddAPIKeyView: View {
                 }
 
                 if editingKey != nil {
-                    Section(header: Text("api.selected_models.section")) {
-                        Button(action: {
-                            fetchModels()
-                        }) {
-                            Label("model.refresh", systemImage: "arrow.clockwise")
-                        }
-                        .disabled(isFetchingModels)
-
+                    Section {
                         if isFetchingModels {
                             HStack {
                                 ProgressView()
@@ -151,9 +144,6 @@ struct AddAPIKeyView: View {
                                     Label(errorMessage, systemImage: "exclamationmark.triangle")
                                         .foregroundStyle(.red)
                                         .font(.subheadline)
-                                    Button("model.refresh") {
-                                        fetchModels()
-                                    }
                                 }
                             } else {
                                 Text("model.none")
@@ -178,6 +168,20 @@ struct AddAPIKeyView: View {
                                     }
                                 }
                             }
+                        }
+                    } header: {
+                        HStack {
+                            Text("api.selected_models.section")
+                            Spacer()
+                            Button(action: {
+                                fetchModels()
+                            }) {
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundStyle(.blue)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isFetchingModels)
+                            .accessibilityLabel(Text("model.refresh"))
                         }
                     }
                 }
