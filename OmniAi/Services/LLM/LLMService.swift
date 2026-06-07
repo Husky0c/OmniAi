@@ -148,51 +148,20 @@ class LLMService: LLMServiceProtocol {
 
                     logger.info("Response status: \(httpResponse.statusCode), \(streamContext.logDescription)")
 
-                    // Handle rate limiting
-                    if httpResponse.statusCode == 429 {
-                        let retryAfter = httpResponse.value(forHTTPHeaderField: "retry-after").flatMap { Int($0) }
-                        throw AppError.serverFailure(
-                            statusCode: httpResponse.statusCode,
-                            message: LLMServiceError.rateLimitExceeded(retryAfter: retryAfter).localizedDescription,
-                            context: streamContext
-                        )
-                    }
-
-                    // Handle auth errors
-                    if httpResponse.statusCode == 401 {
-                        throw AppError.serverFailure(
-                            statusCode: httpResponse.statusCode,
-                            message: LLMServiceError.authenticationFailed.localizedDescription,
-                            context: streamContext
-                        )
-                    }
-
                     guard httpResponse.statusCode == 200 else {
                         var errorBody = ""
                         for try await line in result {
                             errorBody += line + "\n"
                         }
 
-                        if let data = errorBody.data(using: .utf8),
-                           let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                            let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: errorResponse.error.message, context: streamContext)
-                            logger.error("\(appError.logDescription)")
-                            throw appError
-                        } else {
-                            // Try Anthropic error format
-                            if let data = errorBody.data(using: .utf8),
-                               let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                               let err = parsed["error"] as? [String: Any],
-                               let message = err["message"] as? String {
-                                let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: message, context: streamContext)
-                                logger.error("\(appError.logDescription)")
-                                throw appError
-                            }
-                            let fallbackMessage = errorBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "HTTP error: \(httpResponse.statusCode)" : errorBody
-                            let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: fallbackMessage, context: streamContext)
-                            logger.error("\(appError.logDescription)")
-                            throw appError
-                        }
+                        let info = ProviderErrorParser.parse(
+                            statusCode: httpResponse.statusCode,
+                            body: errorBody,
+                            response: httpResponse
+                        )
+                        let appError = AppError.serverFailure(info: info, context: streamContext)
+                        logger.error("\(appError.logDescription)")
+                        throw appError
                     }
 
                     // Parse stream based on adapter type

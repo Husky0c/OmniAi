@@ -52,6 +52,7 @@ enum ChatEngineError: LocalizedError {
     case toolExecutionFailure(String)
     case autoTitleFailure(String)
     case serverFailure(String)
+    case providerFailure(String)
     case transportFailure(String)
     case invalidResponse(String)
     case unknown(String)
@@ -73,6 +74,8 @@ enum ChatEngineError: LocalizedError {
         case .autoTitleFailure(let message):
             return message
         case .serverFailure(let message):
+            return message
+        case .providerFailure(let message):
             return message
         case .transportFailure(let message):
             return message
@@ -103,6 +106,8 @@ enum ChatEngineError: LocalizedError {
                 return .autoTitleFailure(appError.localizedDescription)
             case .serverFailure:
                 return .serverFailure(appError.localizedDescription)
+            case .providerFailure:
+                return .providerFailure(appError.localizedDescription)
             case .transportFailure:
                 return .transportFailure(appError.localizedDescription)
             case .invalidResponse:

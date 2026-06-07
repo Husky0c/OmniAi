@@ -283,7 +283,7 @@ struct AddAPIKeyView: View {
                 }
             } catch {
                 await MainActor.run {
-                    presentError(title: L10n.string("common.fetch_failed"), message: error.localizedDescription)
+                    presentError(title: L10n.string("common.fetch_failed"), error: error)
                     isFetchingModels = false
                 }
             }
@@ -336,13 +336,20 @@ struct AddAPIKeyView: View {
             }
             dismiss()
         } catch {
-            presentError(title: L10n.string("common.save_failed"), message: error.localizedDescription)
+            presentError(title: L10n.string("common.save_failed"), error: error)
         }
     }
 
     private func presentError(title: String, message: String) {
         errorTitle = title
         errorMessage = message
+        showError = true
+    }
+
+    private func presentError(title: String, error: Error) {
+        let display = UserFacingErrorFormatter.make(from: error)
+        errorTitle = title
+        errorMessage = display.rendered(style: .alert)
         showError = true
     }
 

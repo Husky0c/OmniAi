@@ -134,6 +134,7 @@
 "keystore.keychain_failure_format" = "Keychain operation failed (%d).";
 
 "llm.authentication_failed" = "Authentication failed. Check the API Key.";
+"llm.http_error_format" = "Provider request failed (HTTP %d): %@";
 "llm.invalid_response" = "Invalid response";
 "llm.invalid_response_request_id_format" = "Invalid response (request-id: %@)";
 "llm.invalid_url_format" = "Invalid URL: %@";

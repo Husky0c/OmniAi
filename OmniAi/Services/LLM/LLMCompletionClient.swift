@@ -79,13 +79,12 @@ final class LLMCompletionClient {
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                let appError = AppError.serverFailure(statusCode: statusCode, message: errorResponse.error.message, context: requestContext)
-                logger.error("\(appError.logDescription)")
-                throw appError
-            }
-            let raw = String(data: data, encoding: .utf8) ?? "Empty response"
-            let appError = AppError.serverFailure(statusCode: statusCode, message: raw, context: requestContext)
+            let info = ProviderErrorParser.parse(
+                statusCode: statusCode,
+                data: data,
+                response: response as? HTTPURLResponse
+            )
+            let appError = AppError.serverFailure(info: info, context: requestContext)
             logger.error("\(appError.logDescription)")
             throw appError
         }
@@ -145,12 +144,14 @@ final class LLMCompletionClient {
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let err = parsed["error"] as? [String: Any],
-               let message = err["message"] as? String {
-                throw AppError.serverFailure(statusCode: statusCode, message: message, context: requestContext)
-            }
-            throw AppError.serverFailure(statusCode: statusCode, message: L10n.string("llm.invalid_response"), context: requestContext)
+            let info = ProviderErrorParser.parse(
+                statusCode: statusCode,
+                data: data,
+                response: response as? HTTPURLResponse
+            )
+            let appError = AppError.serverFailure(info: info, context: requestContext)
+            logger.error("\(appError.logDescription)")
+            throw appError
         }
 
         do {

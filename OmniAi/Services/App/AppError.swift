@@ -31,6 +31,7 @@ enum AppError: LocalizedError {
     case toolExecutionFailure(toolName: String, underlying: Error)
     case autoTitleFailure(context: LLMRequestContext, underlying: Error)
     case serverFailure(statusCode: Int, message: String, context: LLMRequestContext)
+    case providerFailure(message: String, context: LLMRequestContext)
     case transportFailure(context: LLMRequestContext, underlying: Error)
     case invalidResponse(context: LLMRequestContext, message: String)
 
@@ -51,6 +52,8 @@ enum AppError: LocalizedError {
         case .autoTitleFailure:
             return L10n.string("error.auto_title_failure")
         case .serverFailure(_, let message, _):
+            return message
+        case .providerFailure(let message, _):
             return message
         case .transportFailure(_, let underlying):
             return underlying.localizedDescription
@@ -77,10 +80,16 @@ enum AppError: LocalizedError {
             return "\(context.logDescription) error=\(underlying.localizedDescription)"
         case .serverFailure(let statusCode, let message, let context):
             return "\(context.logDescription) status=\(statusCode) message=\(message)"
+        case .providerFailure(let message, let context):
+            return "\(context.logDescription) providerMessage=\(message)"
         case .transportFailure(let context, let underlying):
             return "\(context.logDescription) error=\(underlying.localizedDescription)"
         case .invalidResponse(let context, let message):
             return "\(context.logDescription) message=\(message)"
         }
+    }
+
+    static func serverFailure(info: ProviderErrorInfo, context: LLMRequestContext) -> AppError {
+        .serverFailure(statusCode: info.statusCode, message: info.message, context: context)
     }
 }

@@ -15,6 +15,7 @@ enum LLMServiceError: LocalizedError {
     case authenticationFailed
     case invalidURL(String)
     case streamParseFailure(snippet: String)
+    case providerError(message: String)
 
     var errorDescription: String? {
         switch self {
@@ -38,6 +39,8 @@ enum LLMServiceError: LocalizedError {
             return L10n.format("llm.invalid_url_format", url)
         case .streamParseFailure:
             return L10n.string("error.stream_parse_failure")
+        case .providerError(let message):
+            return message
         }
     }
 }

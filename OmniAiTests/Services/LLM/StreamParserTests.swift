@@ -108,7 +108,8 @@ final class StreamParserTests: XCTestCase {
             )
             XCTFail("Expected parse failure")
         } catch let error as AppError {
-            XCTAssertEqual(error.localizedDescription, "响应解析失败，请检查当前服务商是否兼容所选端点。")
+            XCTAssertEqual(error.localizedDescription, "bad request")
+            XCTAssertTrue(error.logDescription.contains("providerMessage=bad request"))
         } catch {
             XCTFail("Expected AppError, got \(error)")
         }

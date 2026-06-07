@@ -131,7 +131,7 @@ final class LLMServiceTests: XCTestCase {
             for try await _ in stream { }
             XCTFail("Expected error")
         } catch let error as AppError {
-            XCTAssertEqual(error.localizedDescription, "认证失败，请检查 API Key")
+            XCTAssertEqual(error.localizedDescription, "Invalid API key")
             XCTAssertTrue(error.logDescription.contains("status=401"))
             XCTAssertTrue(error.logDescription.contains("phase=stream"))
         } catch {
@@ -243,6 +243,7 @@ final class LLMServiceTests: XCTestCase {
             XCTAssertTrue(error.localizedDescription.contains("403"))
             XCTAssertTrue(error.localizedDescription.contains("连接已被拒绝"))
             XCTAssertTrue(error.localizedDescription.contains("当前 IP 已被封锁"))
+            XCTAssertTrue(error.localizedDescription.contains("服务商请求失败"))
             XCTAssertFalse(error.localizedDescription.contains("<html"))
             XCTAssertFalse(error.localizedDescription.contains("@font-face"))
             XCTAssertLessThan(error.localizedDescription.count, 400)

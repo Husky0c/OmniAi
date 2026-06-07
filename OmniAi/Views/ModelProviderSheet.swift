@@ -172,7 +172,7 @@ struct ModelProviderSheet: View {
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
+                    errorMessage = UserFacingErrorFormatter.make(from: error).rendered(style: .alert)
                     showError = true
                     isFetchingModels = false
                 }

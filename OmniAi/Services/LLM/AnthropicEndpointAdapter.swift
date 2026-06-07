@@ -245,9 +245,9 @@ struct AnthropicEndpointAdapter: EndpointAdapter {
                let error = parsed["error"] as? [String: Any],
                let message = error["message"] as? String {
                 logger.error("Anthropic stream error: \(message)")
-                throw LLMServiceError.streamParseFailure(snippet: message)
+                throw LLMServiceError.providerError(message: message)
             }
-            throw LLMServiceError.streamParseFailure(snippet: String(data.prefix(200)))
+            throw LLMServiceError.providerError(message: String(data.prefix(200)))
         }
 
         return events

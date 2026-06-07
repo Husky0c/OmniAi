@@ -134,6 +134,7 @@
 "keystore.keychain_failure_format" = "Keychain 操作失败（%d）。";
 
 "llm.authentication_failed" = "认证失败，请检查 API Key";
+"llm.http_error_format" = "服务商请求失败（HTTP %d）：%@";
 "llm.invalid_response" = "无效响应";
 "llm.invalid_response_request_id_format" = "无效响应 (request-id: %@)";
 "llm.invalid_url_format" = "无效的 URL: %@";

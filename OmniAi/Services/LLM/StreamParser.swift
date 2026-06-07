@@ -35,6 +35,15 @@ struct StreamParser {
                 )
             } catch let error as AppError {
                 throw error
+            } catch let error as LLMServiceError {
+                if case .providerError(let message) = error {
+                    throw AppError.providerFailure(message: message, context: requestContext)
+                }
+                throw AppError.streamParseFailure(
+                    context: requestContext,
+                    snippet: String(jsonStr.prefix(200)),
+                    underlying: error
+                )
             } catch {
                 throw AppError.streamParseFailure(
                     context: requestContext,
@@ -100,6 +109,15 @@ struct StreamParser {
                     )
                 } catch let error as AppError {
                     throw error
+                } catch let error as LLMServiceError {
+                    if case .providerError(let message) = error {
+                        throw AppError.providerFailure(message: message, context: requestContext)
+                    }
+                    throw AppError.streamParseFailure(
+                        context: requestContext,
+                        snippet: String(dataStr.prefix(200)),
+                        underlying: error
+                    )
                 } catch {
                     throw AppError.streamParseFailure(
                         context: requestContext,

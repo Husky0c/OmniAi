@@ -144,6 +144,7 @@ final class ChatEngineTests: XCTestCase {
         let request = ChatErrorFormatter.render(.requestBuildFailure("请求构建失败"), existingContent: "")
         let parse = ChatErrorFormatter.render(.streamParseFailure("响应解析失败"), existingContent: "")
         let server = ChatErrorFormatter.render(.serverFailure("上游 500"), existingContent: "")
+        let provider = ChatErrorFormatter.render(.providerFailure("服务商拒绝请求"), existingContent: "")
         let transport = ChatErrorFormatter.render(.transportFailure("网络断开"), existingContent: "")
         let invalid = ChatErrorFormatter.render(.invalidResponse("格式错误"), existingContent: "")
         let unknown = ChatErrorFormatter.render(.unknown("未知原因"), existingContent: "")
@@ -151,6 +152,7 @@ final class ChatEngineTests: XCTestCase {
         XCTAssertEqual(request, "⚠️ 请求错误：无法构建请求。请求构建失败")
         XCTAssertEqual(parse, "⚠️ 响应错误：无法解析服务商返回内容。响应解析失败")
         XCTAssertEqual(server, "⚠️ 服务商错误：服务商返回错误。上游 500")
+        XCTAssertEqual(provider, "⚠️ 服务商错误：服务商返回错误。服务商拒绝请求")
         XCTAssertEqual(transport, "⚠️ 网络连接错误：请求未能完成。网络断开")
         XCTAssertEqual(invalid, "⚠️ 响应错误：服务商返回了无法识别的响应。格式错误")
         XCTAssertEqual(unknown, "⚠️ 未知错误：发生未分类错误。未知原因")
@@ -170,6 +172,7 @@ final class ChatEngineTests: XCTestCase {
             (.toolExecutionFailure(toolName: "calculator", underlying: underlying), { if case .toolExecutionFailure = $0 { true } else { false } }),
             (.autoTitleFailure(context: context, underlying: underlying), { if case .autoTitleFailure = $0 { true } else { false } }),
             (.serverFailure(statusCode: 500, message: "server failed", context: context), { if case .serverFailure = $0 { true } else { false } }),
+            (.providerFailure(message: "provider failed", context: context), { if case .providerFailure = $0 { true } else { false } }),
             (.transportFailure(context: context, underlying: underlying), { if case .transportFailure = $0 { true } else { false } }),
             (.invalidResponse(context: context, message: "bad response"), { if case .invalidResponse = $0 { true } else { false } })
         ]
