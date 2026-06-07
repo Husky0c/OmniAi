@@ -7,12 +7,13 @@ nonisolated final class ToolExecutionService: @unchecked Sendable {
     let sessionId: UUID
     let localRegistry: LocalToolRegistry
     let mcpManager: MCPConnectionManager
+    let searchService: ToolSearchService
 
-    init(sessionId: UUID) {
+    init(sessionId: UUID, localRegistry: LocalToolRegistry, mcpManager: MCPConnectionManager, searchService: ToolSearchService) {
         self.sessionId = sessionId
-        self.localRegistry = LocalToolRegistry()
-        self.mcpManager = MCPConnectionManager()
-        localRegistry.registerNativeTools()
+        self.localRegistry = localRegistry
+        self.mcpManager = mcpManager
+        self.searchService = searchService
     }
 
     deinit {
@@ -21,6 +22,21 @@ nonisolated final class ToolExecutionService: @unchecked Sendable {
 
     func getDefinitions() -> [ToolDefinition] {
         localRegistry.allDefinitions() + mcpManager.discoveredDefinitions()
+    }
+
+    /// Get all tool definitions as a dictionary (for ChatEngine)
+    func getAllDefinitions() -> [String: ToolDefinition] {
+        var all = localRegistry.getDefinitions()
+        let mcpDefs = mcpManager.discoveredDefinitions()
+        for def in mcpDefs {
+            all[def.function.name] = def
+        }
+        return all
+    }
+
+    /// Get a specific tool definition by name
+    func getToolDefinition(name: String) -> ToolDefinition? {
+        searchService.getToolDefinition(name: name)
     }
 
     func canHandle(name: String) -> Bool {

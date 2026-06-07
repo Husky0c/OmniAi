@@ -63,6 +63,17 @@ struct ModelProviderSheet: View {
                             Text("model.fetching")
                                 .foregroundStyle(.secondary)
                         }
+                    } else if let errorMessage {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.red)
+                                .font(.subheadline)
+                            if let channel = activeChannel {
+                                Button("model.refresh") {
+                                    fetchModels(for: channel)
+                                }
+                            }
+                        }
                     } else if availableModels.isEmpty {
                         Text("model.switch_channel_hint")
                             .foregroundStyle(.secondary)
@@ -134,9 +145,12 @@ struct ModelProviderSheet: View {
     private func fetchModels(for channel: APIKeys) {
         guard let keyString = appServices.keyStore.apiKeyString(for: channel), !keyString.isEmpty else {
             availableModels = []
+            errorMessage = L10n.string("error.missing_api_key")
+            showError = true
             return
         }
 
+        errorMessage = nil
         if !channel.selectedModelIDs.isEmpty {
             let models = channel.selectedModelIDs.compactMap { id -> ModelInfo? in
                 let caps = channel.cachedCapabilities[id] ?? ModelCapability()
@@ -154,6 +168,7 @@ struct ModelProviderSheet: View {
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
+                    errorMessage = nil
                 }
             } catch {
                 await MainActor.run {

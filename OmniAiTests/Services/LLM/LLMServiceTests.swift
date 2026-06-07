@@ -219,6 +219,38 @@ final class LLMServiceTests: XCTestCase {
         }
     }
 
+    func testFetchModelsHTMLHTTPErrorIsReadable() async throws {
+        let errorHTML = """
+        <html lang="zh">
+        <head>
+            <title>连接已被拒绝</title>
+            <style>@font-face { font-family: Montserrat; } body { margin: 0; }</style>
+        </head>
+        <body>
+            <script>window.noise = true;</script>
+            <div>当前 IP 已被封锁</div>
+            <p>暂时无法访问本站内容。</p>
+        </body>
+        </html>
+        """
+        mockSession.mockData = errorHTML.data(using: .utf8)
+        mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/models")!, statusCode: 403, httpVersion: nil, headerFields: nil)
+
+        do {
+            _ = try await service.fetchAvailableModels(apiKey: "blocked-key", baseURL: "https://test.com/v1")
+            XCTFail("Expected error")
+        } catch let error as AppError {
+            XCTAssertTrue(error.localizedDescription.contains("403"))
+            XCTAssertTrue(error.localizedDescription.contains("连接已被拒绝"))
+            XCTAssertTrue(error.localizedDescription.contains("当前 IP 已被封锁"))
+            XCTAssertFalse(error.localizedDescription.contains("<html"))
+            XCTAssertFalse(error.localizedDescription.contains("@font-face"))
+            XCTAssertLessThan(error.localizedDescription.count, 400)
+        } catch {
+            XCTFail("Expected AppError, got \(error)")
+        }
+    }
+
     func testFetchModelsForAnthropicEndpointPrefersUserBaseURL() async throws {
         let registry = MockProviderRegistry()
         registry.contracts = [Self.makeDualEndpointContract()]

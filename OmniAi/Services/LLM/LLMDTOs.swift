@@ -41,6 +41,31 @@ struct ToolFunction: Codable {
 struct ToolDefinition: Codable {
     var type: String = "function"
     let function: ToolFunction
+
+    // Tool search metadata (not sent to LLM API)
+    var category: ToolCategory = .core
+    var keywords: [String] = []
+    var isAlwaysAvailable: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case function
+        // Exclude metadata from API encoding
+    }
+
+    init(
+        type: String = "function",
+        function: ToolFunction,
+        category: ToolCategory = .core,
+        keywords: [String] = [],
+        isAlwaysAvailable: Bool = false
+    ) {
+        self.type = type
+        self.function = function
+        self.category = category
+        self.keywords = keywords
+        self.isAlwaysAvailable = isAlwaysAvailable
+    }
 }
 
 struct JSONSchema: Codable {
@@ -48,6 +73,30 @@ struct JSONSchema: Codable {
     var properties: [String: PropertySchema]?
     var required: [String]?
     var additionalProperties: Bool?
+
+    /// Convert to dictionary for tool search results
+    func toDictionary() -> [String: Any] {
+        var dict: [String: Any] = ["type": type]
+        if let properties = properties {
+            dict["properties"] = properties.mapValues { prop in
+                var propDict: [String: Any] = ["type": prop.type]
+                if let desc = prop.description {
+                    propDict["description"] = desc
+                }
+                if let enumValues = prop.enum {
+                    propDict["enum"] = enumValues
+                }
+                return propDict
+            }
+        }
+        if let required = required {
+            dict["required"] = required
+        }
+        if let additionalProperties = additionalProperties {
+            dict["additionalProperties"] = additionalProperties
+        }
+        return dict
+    }
 }
 
 struct PropertySchema: Codable {

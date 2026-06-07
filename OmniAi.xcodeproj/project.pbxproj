@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		FD27A7932FA49D7E00F49F78 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 442fd66f0a03446bb662daaf /* MarkdownUI */; };
+		FD7E3D7D2FCB0F60008B7F51 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = FD7E3D7C2FCB0F60008B7F51 /* SwiftSoup */; };
 		FDD795A02FAD86C100368A7A /* SVGView in Frameworks */ = {isa = PBXBuildFile; productRef = e7cdec4e44bc487995b5e80e /* SVGView */; };
 /* End PBXBuildFile section */
 
@@ -53,18 +54,27 @@
 			files = (
 				FDD795A02FAD86C100368A7A /* SVGView in Frameworks */,
 				FD27A7932FA49D7E00F49F78 /* MarkdownUI in Frameworks */,
+				FD7E3D7D2FCB0F60008B7F51 /* SwiftSoup in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		FD7E3D7B2FCB0F60008B7F51 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		FD8B3C8F2F90CF4D00026802 = {
 			isa = PBXGroup;
 			children = (
 				FD8B3C9A2F90CF4D00026802 /* OmniAi */,
 				FD8B3C992F90CF4D00026802 /* Products */,
 				FDD7AB232FAF068600368A7A /* Recovered References */,
+				FD7E3D7B2FCB0F60008B7F51 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -129,6 +139,7 @@
 			packageProductDependencies = (
 				442fd66f0a03446bb662daaf /* MarkdownUI */,
 				e7cdec4e44bc487995b5e80e /* SVGView */,
+				FD7E3D7C2FCB0F60008B7F51 /* SwiftSoup */,
 			);
 			productName = OmniAi;
 			productReference = FD8B3C982F90CF4D00026802 /* OmniAi.app */;
@@ -166,6 +177,7 @@
 			packageReferences = (
 				947dc67e75544f81b5b3f890 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				1090046e6a93455fad4f7f18 /* XCRemoteSwiftPackageReference "SVGView" */,
+				FD7E3D6C2FCB0925008B7F51 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FD8B3C992F90CF4D00026802 /* Products */;
@@ -519,6 +531,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		FD7E3D6C2FCB0925008B7F51 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/scinfu/SwiftSoup";
+			requirement = {
+				kind = exactVersion;
+				version = 2.13.5;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -526,6 +546,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 947dc67e75544f81b5b3f890 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		FD7E3D7C2FCB0F60008B7F51 /* SwiftSoup */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FD7E3D6C2FCB0925008B7F51 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
+			productName = SwiftSoup;
 		};
 		e7cdec4e44bc487995b5e80e /* SVGView */ = {
 			isa = XCSwiftPackageProductDependency;

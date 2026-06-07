@@ -22,6 +22,7 @@ struct AddAPIKeyView: View {
     @State private var showCapEdit = false
     @State private var capEditModelId = ""
     @State private var errorMessage: String? = nil
+    @State private var errorTitle: String = L10n.string("common.save_failed")
     @State private var showError = false
 
     /// Track whether we just switched providers (to avoid re-applying defaults incorrectly)
@@ -131,6 +132,13 @@ struct AddAPIKeyView: View {
 
                 if editingKey != nil {
                     Section(header: Text("api.selected_models.section")) {
+                        Button(action: {
+                            fetchModels()
+                        }) {
+                            Label("model.refresh", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(isFetchingModels)
+
                         if isFetchingModels {
                             HStack {
                                 ProgressView()
@@ -138,8 +146,18 @@ struct AddAPIKeyView: View {
                                     .foregroundStyle(.secondary)
                             }
                         } else if availableModels.isEmpty {
-                            Button("model.refresh") {
-                                fetchModels()
+                            if let errorMessage {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                        .foregroundStyle(.red)
+                                        .font(.subheadline)
+                                    Button("model.refresh") {
+                                        fetchModels()
+                                    }
+                                }
+                            } else {
+                                Text("model.none")
+                                    .foregroundStyle(.secondary)
                             }
                         } else {
                             ForEach(availableModels) { model in
@@ -223,7 +241,7 @@ struct AddAPIKeyView: View {
 
                 fetchModels()
             }
-            .alert("common.save_failed", isPresented: $showError) {
+            .alert(errorTitle, isPresented: $showError) {
                 Button("common.ok", role: .cancel) { }
             } message: {
                 Text(errorMessage ?? L10n.string("common.unknown_error"))
@@ -240,18 +258,28 @@ struct AddAPIKeyView: View {
     }
 
     private func fetchModels() {
-        guard isValidBaseURL(trimmedRequestURL), !key.isEmpty else { return }
+        guard isValidBaseURL(trimmedRequestURL) else {
+            presentError(title: L10n.string("common.fetch_failed"), message: L10n.string("api.base_url_required"))
+            return
+        }
+        guard !key.isEmpty else {
+            presentError(title: L10n.string("common.fetch_failed"), message: L10n.string("error.missing_api_key"))
+            return
+        }
         isFetchingModels = true
         availableModels = []
+        errorMessage = nil
         Task {
             do {
                 let models = try await appServices.llmService.fetchAvailableModels(apiKey: key, baseURL: trimmedRequestURL, apiType: apiType, providerId: selectedProviderID, endpointType: endpointType)
                 await MainActor.run {
                     availableModels = models
                     isFetchingModels = false
+                    errorMessage = nil
                 }
             } catch {
                 await MainActor.run {
+                    presentError(title: L10n.string("common.fetch_failed"), message: error.localizedDescription)
                     isFetchingModels = false
                 }
             }
@@ -272,8 +300,7 @@ struct AddAPIKeyView: View {
                 ? cleanEndpointURL(trimmedRequestURL)
                 : selectedPreset.baseURL(for: endpointType)
             guard !selectedPreset.isCustom || isValidBaseURL(normalizedRequestURL) else {
-                errorMessage = L10n.string("api.base_url_required")
-                showError = true
+                presentError(title: L10n.string("common.save_failed"), message: L10n.string("api.base_url_required"))
                 return
             }
 
@@ -305,9 +332,14 @@ struct AddAPIKeyView: View {
             }
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
-            showError = true
+            presentError(title: L10n.string("common.save_failed"), message: error.localizedDescription)
         }
+    }
+
+    private func presentError(title: String, message: String) {
+        errorTitle = title
+        errorMessage = message
+        showError = true
     }
 
     /// Strip known endpoint-specific suffixes from a base URL

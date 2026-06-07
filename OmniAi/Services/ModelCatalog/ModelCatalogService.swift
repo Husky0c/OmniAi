@@ -108,7 +108,8 @@ final class ModelCatalogService {
                 throw appError
             } else {
                 let raw = String(data: data, encoding: .utf8) ?? "Unable to read response"
-                let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: raw, context: context)
+                let message = Self.readableServerErrorMessage(statusCode: httpResponse.statusCode, body: raw)
+                let appError = AppError.serverFailure(statusCode: httpResponse.statusCode, message: message, context: context)
                 logger.error("\(appError.logDescription)")
                 throw appError
             }
@@ -149,6 +150,30 @@ final class ModelCatalogService {
         case .none:
             return ModelCapability()
         }
+    }
+
+    private static func readableServerErrorMessage(statusCode: Int, body: String) -> String {
+        let cleaned = sanitizedErrorBody(body)
+        let detail = cleaned.isEmpty ? L10n.string("common.unknown_error") : cleaned
+        return L10n.format("model_catalog.http_error_format", statusCode, detail)
+    }
+
+    private static func sanitizedErrorBody(_ body: String) -> String {
+        let withoutScriptAndStyle = body
+            .replacingOccurrences(of: #"(?is)<script\b[^>]*>.*?</script>"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"(?is)<style\b[^>]*>.*?</style>"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"(?is)<[^>]+>"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+        let collapsed = withoutScriptAndStyle
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return String(collapsed.prefix(300))
     }
 
     private func catalogBaseURLForProviderOpenAIEndpoint(_ contract: ProviderContract) -> String? {

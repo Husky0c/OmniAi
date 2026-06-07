@@ -177,6 +177,7 @@
 "model.select.title" = "Select Model";
 "model.switch.title" = "Switch Model";
 "model.switch_channel_hint" = "Switch from the channel control to fetch the model list.";
+"model_catalog.http_error_format" = "Failed to fetch model list (HTTP %d): %@";
 "model_catalog.invalid_format_format" = "Model list has an invalid format: %@";
 
 "provider_config.duplicate_provider_id_format" = "Duplicate provider ID: %@";

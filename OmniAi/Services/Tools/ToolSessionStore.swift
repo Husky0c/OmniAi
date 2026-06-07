@@ -9,12 +9,27 @@ nonisolated final class ToolSessionStore: ToolServiceFactory, @unchecked Sendabl
     private var services: [UUID: ToolExecutionService] = [:]
     private let lock = NSLock()
 
+    // Shared instances
+    private let localRegistry = LocalToolRegistry()
+    private let mcpManager = MCPConnectionManager()
+    private let searchService = ToolSearchService()
+
+    private init() {
+        // Register native tools once
+        localRegistry.registerNativeTools(searchService: searchService)
+    }
+
     func toolService(for sessionId: UUID) -> ToolExecutionService {
         lock.withLock {
             if let existing = services[sessionId] {
                 return existing
             }
-            let service = ToolExecutionService(sessionId: sessionId)
+            let service = ToolExecutionService(
+                sessionId: sessionId,
+                localRegistry: localRegistry,
+                mcpManager: mcpManager,
+                searchService: searchService
+            )
             services[sessionId] = service
             return service
         }

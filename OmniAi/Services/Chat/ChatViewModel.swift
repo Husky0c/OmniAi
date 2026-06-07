@@ -19,6 +19,9 @@ final class ChatViewModel {
     private var lastStreamPublishDates: [UUID: Date] = [:]
     private var pendingStreamPublishTasks: [UUID: Task<Void, Never>] = [:]
 
+    // Tool search: session-level cache of sent tool definitions
+    private var sentToolDefinitions: Set<String> = []
+
     var editingMessage: ChatMessage?
     var editingText: String = ""
     var showModelProviderSheet: Bool = false
@@ -313,7 +316,13 @@ final class ChatViewModel {
 
         let caps = ModelCapability.effective(for: effectiveModelId, cached: channelSnapshot.cachedCapabilities)
         let toolService = appServices.toolServiceFactory.toolService(for: session.id)
-        let toolDefinitions: [ToolDefinition]? = caps.toolCalling ? toolService.getDefinitions() : nil
+
+        // Tool search: two-stage tool sending
+        let toolDefinitions: [ToolDefinition]? = if caps.toolCalling {
+            getToolDefinitionsForRound(toolRound: toolRound, toolService: toolService)
+        } else {
+            nil
+        }
 
         return StreamRequestContext(
             assistantMessage: assistantMessage,
@@ -329,6 +338,24 @@ final class ChatViewModel {
             activeKey: activeKey,
             apiKeyString: apiKeyString
         )
+    }
+
+    /// Get tool definitions for the current round (pure on-demand loading)
+    private func getToolDefinitionsForRound(toolRound: Int, toolService: ToolExecutionService) -> [ToolDefinition] {
+        if toolRound == 0 {
+            // First round: only send search_tools
+            if let searchTool = toolService.getToolDefinition(name: "search_tools") {
+                sentToolDefinitions.insert("search_tools")
+                return [searchTool]
+            }
+            return []
+        } else {
+            // Subsequent rounds: send new tools discovered via search_tools
+            let allToolsDict = toolService.getAllDefinitions()
+            let newTools = allToolsDict.filter { !sentToolDefinitions.contains($0.key) }
+            sentToolDefinitions.formUnion(newTools.keys)
+            return Array(newTools.values)
+        }
     }
 
     private func handleToolCallLimitExceeded(_ message: ChatMessage, _ maxRounds: Int) {
@@ -526,6 +553,20 @@ final class ChatViewModel {
                 continue
             }
             let result = await appServices.toolServiceFactory.toolService(for: session.id).execute(name: name, argumentsJSON: args)
+
+            // Handle search_tools: update cache with discovered tools
+            if name == "search_tools" {
+                if let data = result.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let tools = json["tools"] as? [[String: Any]] {
+                    for tool in tools {
+                        if let toolName = tool["name"] as? String {
+                            sentToolDefinitions.insert(toolName)
+                        }
+                    }
+                }
+            }
+
             let toolMessage = ChatMessage(content: result, role: .tool, session: session, modelId: context.effectiveModelId)
             toolMessage.toolCallId = toolCall.id
             session.messages.append(toolMessage)

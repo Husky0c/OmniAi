@@ -177,6 +177,7 @@
 "model.select.title" = "选择模型";
 "model.switch.title" = "切换模型";
 "model.switch_channel_hint" = "点击渠道右侧切换后可获取模型列表";
+"model_catalog.http_error_format" = "模型列表获取失败（HTTP %d）：%@";
 "model_catalog.invalid_format_format" = "模型列表格式错误：%@";
 
 "provider_config.duplicate_provider_id_format" = "重复的提供商 ID: %@";
