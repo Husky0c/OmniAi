@@ -67,6 +67,8 @@ private struct ChatDetailContentView: View {
     @State private var viewModel: ChatViewModel
     @State private var previewImageData: Data?
     @State private var messageContextCache: [UUID: (showHeader: Bool, isIntermediateTool: Bool)] = [:]
+    @State private var isUserScrolling: Bool = false
+    @State private var shouldAutoScroll: Bool = true
 
     init(
         session: ChatSession,
@@ -171,39 +173,70 @@ private struct ChatDetailContentView: View {
 
     var body: some View {
         ScrollViewReader { scrollProxy in
-            ScrollView {
-                LazyVStack(spacing: platformSpacing) {
-                    ForEach(Array(viewModel.sortedMessages.enumerated()), id: \.element.id) { index, message in
-                        let ctx = messageContext(for: message, at: index)
-                        bubbleView(for: message, showHeader: ctx.showHeader, isIntermediateToolMessage: ctx.isIntermediateTool)
-                            .id(message.id)
+            GeometryReader { geometry in
+                ScrollView {
+                    LazyVStack(spacing: platformSpacing) {
+                        ForEach(Array(viewModel.sortedMessages.enumerated()), id: \.element.id) { index, message in
+                            let ctx = messageContext(for: message, at: index)
+                            bubbleView(for: message, showHeader: ctx.showHeader, isIntermediateToolMessage: ctx.isIntermediateTool)
+                                .id(message.id)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .background(
+                        GeometryReader { contentGeometry in
+                            Color.clear.preference(
+                                key: ScrollOffsetPreferenceKey.self,
+                                value: contentGeometry.frame(in: .named("scrollView")).minY
+                            )
+                        }
+                    )
+                }
+                .coordinateSpace(name: "scrollView")
+                .contentShape(Rectangle())
+                .onTapGesture {
+#if canImport(UIKit)
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+#endif
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                    // Detect user scroll: if offset moves up significantly, user is scrolling
+                    // Only enable auto-scroll when user is near bottom
+                    let contentHeight = geometry.size.height
+                    let isNearBottom = offset >= -100 // Within 100pt of bottom
+
+                    if !isNearBottom && viewModel.isGenerating {
+                        shouldAutoScroll = false
+                    } else if isNearBottom {
+                        shouldAutoScroll = true
                     }
                 }
-                .padding(.horizontal)
-            }
-            .defaultScrollAnchor(.bottom)
-            .contentShape(Rectangle())
-            .onTapGesture {
-#if canImport(UIKit)
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-#endif
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .onAppear {
-                invalidateContextCache()
-                viewModel.refreshSortedMessages()
-                if let lastID = viewModel.sortedMessages.last?.id {
-                    scrollProxy.scrollTo(lastID, anchor: .bottom)
+                .onAppear {
+                    invalidateContextCache()
+                    viewModel.refreshSortedMessages()
+                    shouldAutoScroll = true
+                    if let lastID = viewModel.sortedMessages.last?.id {
+                        scrollProxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                    Task {
+                        await viewModel.connectMCPServers(enabledConfigs: config.mcpServers)
+                    }
                 }
-                Task {
-                    await viewModel.connectMCPServers(enabledConfigs: config.mcpServers)
+                .onChange(of: session.messages.count) { _, _ in
+                    invalidateContextCache()
+                    viewModel.refreshSortedMessages()
+                    shouldAutoScroll = true
+                    if let lastID = viewModel.sortedMessages.last?.id {
+                        withAnimation {
+                            scrollProxy.scrollTo(lastID, anchor: .bottom)
+                        }
+                    }
                 }
-            }
-            .onChange(of: session.messages.count) { _, _ in
-                invalidateContextCache()
-                viewModel.refreshSortedMessages()
-                if let lastID = viewModel.sortedMessages.last?.id {
-                    withAnimation {
+                .onChange(of: viewModel.streamingMessageStates) { _, _ in
+                    // Only auto-scroll during streaming if user hasn't manually scrolled up
+                    guard shouldAutoScroll, viewModel.isGenerating else { return }
+                    if let lastID = viewModel.sortedMessages.last?.id {
                         scrollProxy.scrollTo(lastID, anchor: .bottom)
                     }
                 }

@@ -9,7 +9,7 @@ final class ChatViewModel {
     private let modelContext: ModelContext
     private let appServices: AppServices
     private let titleService: ChatTitleService
-    private let streamPublishInterval: TimeInterval = 0.075
+    private let baseStreamPublishInterval: TimeInterval = 0.075
 
     private(set) var sortedMessages: [ChatMessage] = []
     private(set) var isGenerating: Bool = false
@@ -18,6 +18,7 @@ final class ChatViewModel {
     private var streamBuffers: [UUID: StreamingMessageState] = [:]
     private var lastStreamPublishDates: [UUID: Date] = [:]
     private var pendingStreamPublishTasks: [UUID: Task<Void, Never>] = [:]
+    private var isUIUpdateThrottled: Bool = false
 
     // Tool search: session-level cache of sent tool definitions
     private var sentToolDefinitions: Set<String> = []
@@ -429,13 +430,29 @@ final class ChatViewModel {
         persistStreamingState(for: message)
     }
 
+    /// Dynamic publish interval based on content length to reduce layout thrashing
+    private func dynamicPublishInterval(for messageID: UUID) -> TimeInterval {
+        guard let state = streamBuffers[messageID] else { return baseStreamPublishInterval }
+        let length = state.content.count
+
+        if length < 500 {
+            return baseStreamPublishInterval // 75ms for short content
+        } else if length < 1500 {
+            return 0.15 // 150ms for medium content
+        } else {
+            return 0.25 // 250ms for long content (reduces CPU load significantly)
+        }
+    }
+
     private func scheduleStreamingStatePublish(for messageID: UUID) {
         let now = Date()
+        let publishInterval = dynamicPublishInterval(for: messageID)
+
         if let lastPublish = lastStreamPublishDates[messageID],
-           now.timeIntervalSince(lastPublish) < streamPublishInterval {
+           now.timeIntervalSince(lastPublish) < publishInterval {
             guard pendingStreamPublishTasks[messageID] == nil else { return }
 
-            let delay = streamPublishInterval - now.timeIntervalSince(lastPublish)
+            let delay = publishInterval - now.timeIntervalSince(lastPublish)
             pendingStreamPublishTasks[messageID] = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 guard !Task.isCancelled else { return }
@@ -452,8 +469,23 @@ final class ChatViewModel {
         pendingStreamPublishTasks[messageID] = nil
 
         guard let state = streamBuffers[messageID] else { return }
+
+        // Skip publishing if we're already throttled and content is very long
+        if isUIUpdateThrottled && state.content.count > 2000 {
+            return
+        }
+
         if streamingMessageStates[messageID] != state {
             streamingMessageStates[messageID] = state
+
+            // Throttle UI updates for very long content
+            if state.content.count > 2000 && !isUIUpdateThrottled {
+                isUIUpdateThrottled = true
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 500ms cooldown
+                    self?.isUIUpdateThrottled = false
+                }
+            }
         }
         lastStreamPublishDates[messageID] = Date()
     }

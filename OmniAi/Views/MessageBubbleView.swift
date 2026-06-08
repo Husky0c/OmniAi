@@ -37,7 +37,16 @@ struct MessageBubbleView: View {
     }
 
     private var displayContent: String {
-        streamingState?.content ?? message.content
+        let fullContent = streamingState?.content ?? message.content
+
+        // During streaming with long content, only show tail to reduce layout cost
+        if usesStreamingTextRendering && fullContent.count > 800 {
+            let tailLength = min(600, fullContent.count)
+            let startIndex = fullContent.index(fullContent.endIndex, offsetBy: -tailLength)
+            return "...\n\n" + fullContent[startIndex...]
+        }
+
+        return fullContent
     }
 
     private var displayThinkingContent: String? {
