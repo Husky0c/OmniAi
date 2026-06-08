@@ -87,7 +87,7 @@ struct ModelProviderSheet: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(model.id)
                                             .foregroundStyle(.primary)
-                                        CapabilityRowView(capabilities: ModelCapability.effective(for: model.id, cached: cached))
+                                        CapabilityRowView(capabilities: displayedCapabilities(for: model))
                                     }
                                     Spacer()
                                     if model.id == defaultModelId {
@@ -153,7 +153,7 @@ struct ModelProviderSheet: View {
         errorMessage = nil
         if !channel.selectedModelIDs.isEmpty {
             let models = channel.selectedModelIDs.compactMap { id -> ModelInfo? in
-                let caps = channel.cachedCapabilities[id] ?? ModelCapability()
+                let caps = ModelCapability.effective(for: id, cached: channel.cachedCapabilities)
                 return id.isEmpty ? nil : ModelInfo(id: id, capabilities: caps)
             }
             availableModels = models
@@ -167,6 +167,7 @@ struct ModelProviderSheet: View {
                 let models = try await appServices.llmService.fetchAvailableModels(apiKey: keyString, baseURL: channel.requestURL, apiType: channel.apiType, providerId: channel.providerID, endpointType: channel.endpointType)
                 await MainActor.run {
                     availableModels = models
+                    cacheFetchedCapabilities(models, for: channel)
                     isFetchingModels = false
                     errorMessage = nil
                 }
@@ -178,5 +179,21 @@ struct ModelProviderSheet: View {
                 }
             }
         }
+    }
+
+    private func displayedCapabilities(for model: ModelInfo) -> ModelCapability {
+        cached[model.id] ?? model.capabilities
+    }
+
+    private func cacheFetchedCapabilities(_ models: [ModelInfo], for channel: APIKeys) {
+        guard channel.autoCapabilityProbe else { return }
+        var capabilities = channel.cachedCapabilities
+        for model in models {
+            if let existing = capabilities[model.id], !ModelCapability.shouldReplaceCached(existing, with: model.capabilities) {
+                continue
+            }
+            capabilities[model.id] = model.capabilities
+        }
+        channel.cachedCapabilities = capabilities
     }
 }

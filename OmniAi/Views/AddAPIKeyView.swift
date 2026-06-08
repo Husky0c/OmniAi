@@ -158,7 +158,7 @@ struct AddAPIKeyView: View {
                                         Text(model.id)
                                             .foregroundStyle(.primary)
                                         Spacer()
-                                        CapabilityRowView(capabilities: ModelCapability.effective(for: model.id, cached: editingKey?.cachedCapabilities ?? [:]))
+                                        CapabilityRowView(capabilities: displayedCapabilities(for: model))
                                     }
                                 }
                                  .contextMenu {
@@ -217,12 +217,6 @@ struct AddAPIKeyView: View {
                 // so onChange(of: selectedProviderID) can make the correct decision
                 endpointType = existing.endpointType
 
-                // Auto-migrate: if Anthropic provider but using OpenAI endpoint, switch
-                if existing.apiType == .anthropic && existing.endpointType == .openai {
-                    endpointType = .anthropic
-                    existing.endpointType = .anthropic
-                }
-
                 let matched = ProviderPreset.matching(existing.apiType,
                     requestURL: existing.requestURL ?? "",
                     providerId: existing.providerID,
@@ -278,6 +272,7 @@ struct AddAPIKeyView: View {
                 let models = try await appServices.llmService.fetchAvailableModels(apiKey: key, baseURL: trimmedRequestURL, apiType: apiType, providerId: selectedProviderID, endpointType: endpointType)
                 await MainActor.run {
                     availableModels = models
+                    cacheFetchedCapabilities(models)
                     isFetchingModels = false
                     errorMessage = nil
                 }
@@ -296,6 +291,22 @@ struct AddAPIKeyView: View {
         } else {
             selectedModelIDs.append(modelID)
         }
+    }
+
+    private func displayedCapabilities(for model: ModelInfo) -> ModelCapability {
+        editingKey?.cachedCapabilities[model.id] ?? model.capabilities
+    }
+
+    private func cacheFetchedCapabilities(_ models: [ModelInfo]) {
+        guard autoCapabilityProbe, let editingKey else { return }
+        var cached = editingKey.cachedCapabilities
+        for model in models {
+            if let existing = cached[model.id], !ModelCapability.shouldReplaceCached(existing, with: model.capabilities) {
+                continue
+            }
+            cached[model.id] = model.capabilities
+        }
+        editingKey.cachedCapabilities = cached
     }
 
     private func saveAPIKey() {

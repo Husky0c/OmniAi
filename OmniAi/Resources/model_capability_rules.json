@@ -1,14 +1,14 @@
 {
   "reasoning": [
-    "o1|o3|o4|reasoning|thinks|thinking|r1|qwq|grok-3-mini|deep-think|deepseek-r1|claude-3\\.5-haiku|minimax|deepseek|glm"
+    "o1|o3|o4|gpt[-_]?5|gpt-oss|reasoning|thinks|thinking|r1|qwq|grok-3-mini|deep-think|deepseek-r1|deepseek[-_ ]?v4|claude-(3[.-]7|4)|gemini-2\\.5|qwen3|glm-4\\.5|minimax-m1|magistral"
   ],
   "vision": [
-    "vision|gpt-4o|claude-3[.-]|gemini.*(flash|pro|vision)|qwen-vl|pixtral|llava|cogvlm|phi-*vision|mistral.*vision|glm.*v"
+    "vision|gpt-4o|gpt-4\\.1|gpt[-_]?5|claude-3[.-]|claude-4|gemini.*(flash|pro|vision)|qwen.*vl|qwen-vl|pixtral|llava|cogvlm|phi[-\\w]*vision|mistral.*vision|glm.*v"
   ],
   "toolCalling": [
-    "gpt|claude|qwen|gemini|deepseek|mistral|llama|command|yi-|glm|ministral|phi|grok|ernie|hunyuan|moonshot|step-|abab|minimax"
+    "gpt|claude|qwen|gemini|deepseek|mistral|llama|command|yi-|glm|ministral|phi|grok|ernie|hunyuan|moonshot|kimi|step-|abab|minimax|doubao|nova|command-r"
   ],
   "webSearch": [
-    "search-preview|gemini|sonar|perplexity|search"
+    "search-preview|sonar|perplexity|search|online"
   ]
 }

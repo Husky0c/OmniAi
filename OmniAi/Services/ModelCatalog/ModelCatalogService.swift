@@ -25,32 +25,6 @@ final class ModelCatalogService {
         endpointType: EndpointType = .openai
     ) async throws -> [ModelInfo] {
         let contract = providerRegistry.getContract(for: providerId)
-        if endpointType == .anthropic {
-            if let baseURL, !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if let models = try? await fetchModelsWithOpenAI(
-                    apiKey: apiKey,
-                    openAIBaseURL: baseURL,
-                    apiType: apiType,
-                    providerId: providerId,
-                    capabilityStrategy: contract.capability.strategy
-                ) {
-                    return models
-                }
-            }
-            if let openAIBase = catalogBaseURLForProviderOpenAIEndpoint(contract) {
-                if let models = try? await fetchModelsWithOpenAI(
-                    apiKey: apiKey,
-                    openAIBaseURL: openAIBase,
-                    apiType: apiType,
-                    providerId: providerId,
-                    capabilityStrategy: contract.capability.strategy
-                ) {
-                    return models
-                }
-            }
-            return Self.anthropicKnownModels()
-        }
-
         return try await fetchModelsWithOpenAI(
             apiKey: apiKey,
             openAIBaseURL: baseURL ?? "",
@@ -137,10 +111,7 @@ final class ModelCatalogService {
     ) -> ModelCapability {
         switch strategy {
         case .apiDeclaredThenRules:
-            let parsed = ModelCapability.parse(
-                capabilities: item.capabilities,
-                endpointTypes: item.supported_endpoint_types
-            )
+            let parsed = ModelCapability.parse(item: item)
             return parsed.hasAny ? parsed : ModelCapability.infer(from: item.id)
         case .rulesOnly:
             return ModelCapability.infer(from: item.id)
@@ -149,41 +120,4 @@ final class ModelCatalogService {
         }
     }
 
-    private func catalogBaseURLForProviderOpenAIEndpoint(_ contract: ProviderContract) -> String? {
-        guard contract.supportsEndpointType(.openai), !contract.isCustom else {
-            return nil
-        }
-
-        let openAIBase = contract.endpoint(.openai).defaultBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !openAIBase.isEmpty else {
-            return nil
-        }
-
-        let selectedEndpointBase = contract.endpoint(contract.defaultEndpointType).defaultBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if contract.defaultEndpointType == .anthropic, openAIBase == selectedEndpointBase {
-            return nil
-        }
-
-        return openAIBase
-    }
-
-    static func anthropicKnownModels() -> [ModelInfo] {
-        let modelIDs = [
-            "claude-opus-4-7-20250624",
-            "claude-sonnet-4-6-20251113",
-            "claude-sonnet-4-5-20250929",
-            "claude-haiku-4-5-20251001",
-            "claude-opus-4-5-20251101",
-            "claude-opus-4-1-20250805",
-            "claude-sonnet-4-20250514",
-            "claude-3-7-sonnet-20250219",
-            "claude-3-5-haiku-20241022",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-opus-20240229",
-            "claude-3-haiku-20240307",
-        ]
-        return modelIDs.map { id in
-            ModelInfo(id: id, capabilities: ModelCapability.infer(from: id))
-        }
-    }
 }

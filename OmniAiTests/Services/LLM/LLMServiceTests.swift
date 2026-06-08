@@ -202,6 +202,59 @@ final class LLMServiceTests: XCTestCase {
         XCTAssertEqual(modelIds[1], "gpt-4o")
     }
 
+    func testFetchModelsParsesOpenRouterStyleCapabilityMetadata() async throws {
+        let modelsJSON = """
+        {
+          "data": [
+            {
+              "id": "anthropic/claude-3.7-sonnet",
+              "architecture": {
+                "input_modalities": ["text", "image"],
+                "output_modalities": ["text"]
+              },
+              "supported_parameters": ["tools", "tool_choice", "reasoning"]
+            },
+            {
+              "id": "perplexity/sonar",
+              "capabilities": { "web_search": true, "vision": false },
+              "supported_parameters": "tools"
+            }
+          ]
+        }
+        """
+        mockSession.mockData = modelsJSON.data(using: .utf8)
+        mockSession.mockResponse = HTTPURLResponse(url: URL(string: "https://test.com/v1/models")!, statusCode: 200, httpVersion: nil, headerFields: nil)
+
+        let models = try await service.fetchAvailableModels(apiKey: "test-key", baseURL: "https://test.com/v1")
+
+        let claude = try XCTUnwrap(models.first { $0.id == "anthropic/claude-3.7-sonnet" })
+        XCTAssertTrue(claude.capabilities.vision)
+        XCTAssertTrue(claude.capabilities.toolCalling)
+        XCTAssertTrue(claude.capabilities.reasoning)
+        XCTAssertFalse(claude.capabilities.webSearch)
+
+        let sonar = try XCTUnwrap(models.first { $0.id == "perplexity/sonar" })
+        XCTAssertTrue(sonar.capabilities.webSearch)
+        XCTAssertTrue(sonar.capabilities.toolCalling)
+        XCTAssertFalse(sonar.capabilities.vision)
+
+        let gpt55 = ModelCapability.effective(
+            for: "gpt-5.5",
+            cached: ["gpt-5.5": ModelCapability(webSearch: false, reasoning: false, toolCalling: true, vision: false)]
+        )
+        XCTAssertTrue(gpt55.reasoning)
+        XCTAssertTrue(gpt55.vision)
+        XCTAssertTrue(gpt55.toolCalling)
+
+        let deepseekV4Pro = ModelCapability.effective(
+            for: "deepseek-v4-pro",
+            cached: ["deepseek-v4-pro": ModelCapability(webSearch: false, reasoning: false, toolCalling: true, vision: false)]
+        )
+        XCTAssertTrue(deepseekV4Pro.reasoning)
+        XCTAssertTrue(deepseekV4Pro.toolCalling)
+        XCTAssertFalse(deepseekV4Pro.vision)
+    }
+
     func testFetchModelsHTTPError() async throws {
         let errorJSON = #"{"error":{"message":"Unauthorized","type":"auth_error","code":null}}"#
         mockSession.mockData = errorJSON.data(using: .utf8)
@@ -302,14 +355,21 @@ final class LLMServiceTests: XCTestCase {
         let session = MockURLSession()
         let service = LLMService(providerRegistry: registry, session: session)
 
-        let models = try await service.fetchAvailableModels(
-            apiKey: "test-key",
-            baseURL: nil,
-            providerId: "newapi",
-            endpointType: .anthropic
-        )
+        do {
+            _ = try await service.fetchAvailableModels(
+                apiKey: "test-key",
+                baseURL: nil,
+                providerId: "newapi",
+                endpointType: .anthropic
+            )
+            XCTFail("Expected request build failure")
+        } catch let error as AppError {
+            XCTAssertTrue(error.logDescription.contains("provider=newapi"))
+            XCTAssertTrue(error.logDescription.contains("phase=modelCatalog"))
+        } catch {
+            XCTFail("Expected AppError, got \(error)")
+        }
 
-        XCTAssertTrue(models.contains { $0.id.hasPrefix("claude-") })
         XCTAssertTrue(session.requests.isEmpty)
     }
 

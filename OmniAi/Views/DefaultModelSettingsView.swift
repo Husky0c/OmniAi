@@ -116,6 +116,7 @@ struct DefaultModelSettingsView: View {
                     providerId: channel.providerID,
                     endpointType: channel.endpointType,
                     selectedModel: $defaultModelId,
+                    channel: channel,
                     cachedCapabilities: channel.cachedCapabilities,
                     onSaveCap: { modelId, newCap in
                         var caps = channel.cachedCapabilities
@@ -135,6 +136,7 @@ struct DefaultModelSettingsView: View {
                     providerId: channel.providerID,
                     endpointType: channel.endpointType,
                     selectedModel: $autoRenameModelId,
+                    channel: channel,
                     cachedCapabilities: channel.cachedCapabilities,
                     onSaveCap: { modelId, newCap in
                         var caps = channel.cachedCapabilities
@@ -157,6 +159,7 @@ struct ModelSelectionSheetFromChannel: View {
     let providerId: String?
     let endpointType: EndpointType
     @Binding var selectedModel: String
+    let channel: APIKeys?
     let cachedCapabilities: [String: ModelCapability]
     var onSaveCap: ((String, ModelCapability) -> Void)? = nil
     
@@ -188,7 +191,7 @@ struct ModelSelectionSheetFromChannel: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(model.id)
                                         .foregroundStyle(.primary)
-                                    CapabilityRowView(capabilities: ModelCapability.effective(for: model.id, cached: cachedCapabilities))
+                                    CapabilityRowView(capabilities: displayedCapabilities(for: model))
                                 }
                                 Spacer()
                                 if model.id == selectedModel {
@@ -219,6 +222,7 @@ struct ModelSelectionSheetFromChannel: View {
                     let fetched = try await appServices.llmService.fetchAvailableModels(apiKey: apiKey, baseURL: baseURL, apiType: apiType, providerId: providerId, endpointType: endpointType)
                     await MainActor.run {
                         models = fetched
+                        cacheFetchedCapabilities(fetched)
                         isFetching = false
                     }
                 } catch {
@@ -226,6 +230,22 @@ struct ModelSelectionSheetFromChannel: View {
                 }
             }
         }
+    }
+
+    private func displayedCapabilities(for model: ModelInfo) -> ModelCapability {
+        cachedCapabilities[model.id] ?? model.capabilities
+    }
+
+    private func cacheFetchedCapabilities(_ fetched: [ModelInfo]) {
+        guard let channel, channel.autoCapabilityProbe else { return }
+        var capabilities = channel.cachedCapabilities
+        for model in fetched {
+            if let existing = capabilities[model.id], !ModelCapability.shouldReplaceCached(existing, with: model.capabilities) {
+                continue
+            }
+            capabilities[model.id] = model.capabilities
+        }
+        channel.cachedCapabilities = capabilities
     }
 }
 

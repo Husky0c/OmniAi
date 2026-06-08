@@ -312,6 +312,105 @@ struct OpenAIModelItem: Decodable {
     let id: String
     let capabilities: [String]?
     let supported_endpoint_types: [String]?
+    let supported_parameters: [String]?
+    let architecture: ModelArchitecture?
+    let input_modalities: [String]?
+    let output_modalities: [String]?
+    let modalities: [String]?
+    let features: [String]?
+    let context_length: Int?
+    let max_context_length: Int?
+    let max_completion_tokens: Int?
+    let max_output_tokens: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case capabilities
+        case supported_endpoint_types
+        case supported_parameters
+        case architecture
+        case input_modalities
+        case output_modalities
+        case modalities
+        case features
+        case context_length
+        case max_context_length
+        case max_completion_tokens
+        case max_output_tokens
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        capabilities = try container.decodeFlexibleStringArrayIfPresent(forKey: .capabilities)
+        supported_endpoint_types = try container.decodeFlexibleStringArrayIfPresent(forKey: .supported_endpoint_types)
+        supported_parameters = try container.decodeFlexibleStringArrayIfPresent(forKey: .supported_parameters)
+        architecture = try container.decodeIfPresent(ModelArchitecture.self, forKey: .architecture)
+        input_modalities = try container.decodeFlexibleStringArrayIfPresent(forKey: .input_modalities)
+        output_modalities = try container.decodeFlexibleStringArrayIfPresent(forKey: .output_modalities)
+        modalities = try container.decodeFlexibleStringArrayIfPresent(forKey: .modalities)
+        features = try container.decodeFlexibleStringArrayIfPresent(forKey: .features)
+        context_length = try container.decodeFlexibleIntIfPresent(forKey: .context_length)
+        max_context_length = try container.decodeFlexibleIntIfPresent(forKey: .max_context_length)
+        max_completion_tokens = try container.decodeFlexibleIntIfPresent(forKey: .max_completion_tokens)
+        max_output_tokens = try container.decodeFlexibleIntIfPresent(forKey: .max_output_tokens)
+    }
+}
+
+struct ModelArchitecture: Decodable {
+    let input_modalities: [String]?
+    let output_modalities: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case input_modalities
+        case output_modalities
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        input_modalities = try container.decodeFlexibleStringArrayIfPresent(forKey: .input_modalities)
+        output_modalities = try container.decodeFlexibleStringArrayIfPresent(forKey: .output_modalities)
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeFlexibleStringArrayIfPresent(forKey key: Key) throws -> [String]? {
+        guard contains(key) else {
+            return nil
+        }
+        if try decodeNil(forKey: key) {
+            return nil
+        }
+        if let values = try? decode([String].self, forKey: key) {
+            return values
+        }
+        if let value = try? decode(String.self, forKey: key) {
+            return [value]
+        }
+        if let dictionary = try? decode([String: Bool].self, forKey: key) {
+            return dictionary.compactMap { $0.value ? $0.key : nil }
+        }
+        if let dictionary = try? decode([String: String].self, forKey: key) {
+            return dictionary.flatMap { [$0.key, $0.value] }
+        }
+        return nil
+    }
+
+    func decodeFlexibleIntIfPresent(forKey key: Key) throws -> Int? {
+        guard contains(key) else {
+            return nil
+        }
+        if try decodeNil(forKey: key) {
+            return nil
+        }
+        if let value = try? decode(Int.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(String.self, forKey: key) {
+            return Int(value)
+        }
+        return nil
+    }
 }
 
 struct OpenAIChatResponse: Decodable {
